@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Lumo",
+    "slug": "lumo",
+    "scheme": "lumo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lumo.habits"
+    },
+    "android": {
+      "package": "com.lumo.habits"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-notifications",
+      "expo-asset"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
