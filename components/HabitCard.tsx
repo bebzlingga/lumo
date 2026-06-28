@@ -41,23 +41,26 @@ export function HabitCard({
     transform: [{ scale: holdScale.value }]
   }));
 
-  const streak = currentStreak(habit);
+  const streak = React.useMemo(() => currentStreak(habit), [habit]);
   const target = dailyTarget(habit);
   const reminderLabel = !habit.reminderEnabled
     ? "No reminder"
     : habit.reminderMode === "interval"
       ? `Every ${habit.reminderIntervalValue} ${habit.reminderIntervalUnit === "hours" ? "hr" : "min"}`
       : habit.reminderTime;
-  const goalLabel =
-    habit.goal.type === "weekly"
-      ? `${weeklyCompletionCount(habit, dateKey)}/${habit.goal.target} this week`
-      : habit.goal.type === "monthly"
-        ? `${monthlyCompletionCount(habit, dateKey)}/${habit.goal.target} this month`
-        : habit.goal.type === "multiple"
-          ? `${count}/${target} this day`
-          : todayDone
-          ? "Done"
-          : "Open";
+  const goalLabel = React.useMemo(
+    () =>
+      habit.goal.type === "weekly"
+        ? `${weeklyCompletionCount(habit, dateKey)}/${habit.goal.target} this week`
+        : habit.goal.type === "monthly"
+          ? `${monthlyCompletionCount(habit, dateKey)}/${habit.goal.target} this month`
+          : habit.goal.type === "multiple"
+            ? `${count}/${target} this day`
+            : todayDone
+              ? "Done"
+              : "Open",
+    [habit, dateKey, count, target, todayDone]
+  );
   const iconBackgroundColor = isDark ? palette.greenSoft : palette.greenDark;
   const iconColor = isDark ? palette.greenDark : palette.white;
   const canUndoCompletion = !disabledActions && habit.status === "active" && count > 0;

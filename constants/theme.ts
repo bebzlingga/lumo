@@ -395,6 +395,17 @@ export const radius = {
   pill: 9999
 };
 
+/**
+ * Shared sizing for form controls (inputs, dropdown triggers, buttons) so they
+ * stay visually consistent across every page — one height, one radius, one
+ * border weight. Border/focus colors come from the active palette at use sites.
+ */
+export const control = {
+  height: 48,
+  radius: radius.lg,
+  borderWidth: 1
+};
+
 export const fontFamilies = {
   lexend: "Lexend-Regular",
   lexendMedium: "Lexend-Medium",

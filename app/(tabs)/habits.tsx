@@ -6,6 +6,7 @@ import { Icon } from "@/components/Icon";
 import { AppText, Button, LoadingState, Screen } from "@/components/ui";
 import { fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
+import { habitCategories } from "@/types/habit";
 
 export default function HabitsScreen() {
   const router = useRouter();
@@ -21,7 +22,14 @@ export default function HabitsScreen() {
       groups.set(category, [...(groups.get(category) ?? []), habit]);
     });
 
-    return Array.from(groups, ([category, items]) => ({ category, items }));
+    const categoryOrder = (category: string) => {
+      const index = habitCategories.indexOf(category as (typeof habitCategories)[number]);
+      return index === -1 ? habitCategories.length : index;
+    };
+
+    return Array.from(groups, ([category, items]) => ({ category, items })).sort(
+      (a, b) => categoryOrder(a.category) - categoryOrder(b.category)
+    );
   }, [visibleHabits]);
 
   if (!isReady) {
@@ -47,6 +55,7 @@ export default function HabitsScreen() {
           shape="pill"
           onPress={() => router.push("/habit/new")}
           className="min-h-[40px] min-w-[92px] flex-row items-center justify-center gap-1.5 rounded-[22px] px-3 py-1"
+          style={{ backgroundColor: palette.greenDark, borderWidth: 0 }}
         />
       </View>
 

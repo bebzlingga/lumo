@@ -1,9 +1,10 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { FloatingDropdown } from "@/components/FloatingDropdown";
 import { OnboardingIllustration } from "@/components/OnboardingIllustrations";
-import { AppText, LoadingState, LumoInput, Screen, Select } from "@/components/ui";
-import { fontFamilies, habitColors, radius, spacing } from "@/constants/theme";
+import { AppText, LoadingState, LumoInput, Screen } from "@/components/ui";
+import { control, fontFamilies, habitColors, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { toDateKey } from "@/lib/date";
 import { habitCategories, type HabitCategory, type HabitDraft, type RepeatSchedule } from "@/types/habit";
@@ -248,10 +249,11 @@ export default function OnboardingScreen() {
               <AppText variant="caption" color={palette.subtle}>
                 Category
               </AppText>
-              <Select
+              <FloatingDropdown
+                variant="input"
                 options={categoryOptions}
                 value={firstHabitCategory}
-                onChange={(category) => setFirstHabitCategory(category as HabitCategory)}
+                onChange={setFirstHabitCategory}
                 accessibilityLabel="First habit category"
               />
             </View>
@@ -260,10 +262,11 @@ export default function OnboardingScreen() {
               <AppText variant="caption" color={palette.subtle}>
                 Frequency
               </AppText>
-              <Select
+              <FloatingDropdown
+                variant="input"
                 options={frequencyOptions}
                 value={firstHabitFrequency}
-                onChange={(frequency) => setFirstHabitFrequency(frequency as BasicFrequency)}
+                onChange={setFirstHabitFrequency}
                 accessibilityLabel="First habit frequency"
               />
             </View>
@@ -414,7 +417,7 @@ const styles = StyleSheet.create({
   onboardingButton: {
     alignItems: "center",
     alignSelf: "stretch",
-    borderRadius: radius.nav,
+    borderRadius: control.radius,
     borderWidth: StyleSheet.hairlineWidth,
     justifyContent: "center",
     minHeight: 56,

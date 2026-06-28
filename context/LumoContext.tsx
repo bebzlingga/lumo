@@ -12,7 +12,7 @@ import {
   requestNotificationPermissions,
   scheduleHabitReminder
 } from "@/lib/notifications";
-import { AppSettings, BackupFrequency, CompletionEntry, Habit, HabitDraft } from "@/types/habit";
+import { AppSettings, BackupFrequency, CompletionEntry, Habit, HabitCategory, habitCategories, HabitDraft } from "@/types/habit";
 
 const STORAGE_KEY = "@lumo/state/v1";
 const BACKUP_DIRECTORY_NAME = "Lumo/Backup/";
@@ -90,10 +90,24 @@ function createId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+const legacyCategoryMap: Record<string, HabitCategory> = {
+  Wellness: "Health",
+  Movement: "Fitness"
+};
+
+function normalizeCategory(category?: string): HabitCategory {
+  if (!category) {
+    return "General";
+  }
+
+  const mapped = legacyCategoryMap[category] ?? category;
+  return (habitCategories as readonly string[]).includes(mapped) ? (mapped as HabitCategory) : "General";
+}
+
 function normalizeHabit(habit: Habit): Habit {
   return {
     ...habit,
-    category: habit.category ?? "General",
+    category: normalizeCategory(habit.category),
     reminderMode: habit.reminderMode ?? "time",
     reminderTime: habit.reminderTime ?? "09:00",
     reminderIntervalValue: habit.reminderIntervalValue ?? 1,
@@ -261,6 +275,8 @@ export function LumoProvider({ children }: { children: ReactNode }) {
   const [lastMessage, setLastMessage] = useState("");
   const [backupTick, setBackupTick] = useState(0);
   const backupInFlightRef = useRef(false);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const isDark = state.settings.themeMode === "dark" || (state.settings.themeMode === "system" && systemScheme === "dark");
   const colorScheme = state.settings.colorScheme ?? "green";
@@ -301,13 +317,17 @@ export function LumoProvider({ children }: { children: ReactNode }) {
   }, [isReady, state.settings.autoBackupEnabled]);
 
   useEffect(() => {
-    if (!isReady || !shouldRunScheduledBackup(state.settings) || backupInFlightRef.current) {
+    // Driven by the minute `backupTick`, not by `state`, so routine habit edits
+    // don't re-run the backup check. The latest state is read through stateRef.
+    const snapshot = stateRef.current;
+
+    if (!isReady || !shouldRunScheduledBackup(snapshot.settings) || backupInFlightRef.current) {
       return;
     }
 
     backupInFlightRef.current = true;
 
-    writeStateBackup(state)
+    writeStateBackup(snapshot)
       .then(({ createdAt }) => {
         setState((current) => ({
           ...current,
@@ -318,7 +338,7 @@ export function LumoProvider({ children }: { children: ReactNode }) {
       .finally(() => {
         backupInFlightRef.current = false;
       });
-  }, [backupTick, isReady, state]);
+  }, [backupTick, isReady]);
 
   useEffect(() => {
     if (!isReady) {

@@ -21,7 +21,18 @@ export type ReminderIntervalUnit = "minutes" | "hours";
 
 export type HabitStatus = "active" | "paused" | "archived";
 
-export const habitCategories = ["General", "Wellness", "Mind", "Movement", "Home", "Money", "Creative"] as const;
+export const habitCategories = [
+  "General",
+  "Health",
+  "Fitness",
+  "Mind",
+  "Focus",
+  "Learning",
+  "Social",
+  "Home",
+  "Money",
+  "Creative"
+] as const;
 
 export type HabitCategory = (typeof habitCategories)[number];
 

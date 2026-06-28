@@ -1,10 +1,13 @@
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { AppState, StyleSheet, View } from "react-native";
+import { AppState, Image, Pressable, StyleSheet, View } from "react-native";
 import { fontFamilies, layout, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
+import { currentBadge } from "@/lib/badges";
 import { addDays, parseDateKey, toDateKey } from "@/lib/date";
-import { isDoneOnDate, isScheduledOnDate } from "@/lib/habitMath";
+import { bestStreakAcrossHabits, isDoneOnDate, isScheduledOnDate } from "@/lib/habitMath";
 import { Habit } from "@/types/habit";
+import { DailyProgressCard } from "@/components/DailyProgressCard";
 import { DateStrip } from "@/components/DateStrip";
 import { QuickDoneWidgets } from "@/components/QuickDoneWidgets";
 import { AppText, LoadingState, Screen } from "@/components/ui";
@@ -108,10 +111,13 @@ function monthlyHeaderMessage(dateKey: string, habits: Habit[], todayKey: string
 }
 
 export default function TodayScreen() {
+  const router = useRouter();
   const { habits, isReady, nickname, palette } = useLumo();
   const todayKey = toDateKey();
   const [selectedDateKey, setSelectedDateKey] = useState(todayKey);
   const activeHabits = habits.filter((habit) => habit.status === "active");
+  const bestStreak = bestStreakAcrossHabits(habits);
+  const badge = currentBadge(bestStreak);
   const headerMessage = monthlyHeaderMessage(todayKey, activeHabits, todayKey);
   const selectedHabits = activeHabits.filter((habit) => isScheduledOnDate(habit, selectedDateKey));
 
@@ -143,10 +149,20 @@ export default function TodayScreen() {
               {headerMessage}
             </AppText>
           </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={badge.earned ? `Current badge: ${badge.threshold} day streak. View all badges.` : "No badge unlocked yet. View all badges."}
+            onPress={() => router.push("/badges")}
+            style={({ pressed }) => [styles.badgeButton, { opacity: pressed ? 0.75 : 1 }]}
+          >
+            <Image source={badge.source} style={styles.badgeImage} resizeMode="contain" />
+          </Pressable>
         </View>
 
         <DateStrip selectedDateKey={selectedDateKey} habits={activeHabits} onSelectDate={setSelectedDateKey} />
       </View>
+
+      <DailyProgressCard habits={selectedHabits} dateKey={selectedDateKey} streak={bestStreak} style={styles.progressCard} />
 
       <QuickDoneWidgets habits={selectedHabits} dateKey={selectedDateKey} />
     </Screen>
@@ -160,11 +176,28 @@ const styles = StyleSheet.create({
   checkInPanel: {
     gap: spacing.md
   },
+  progressCard: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.md
+  },
   header: {
-    gap: spacing.xs
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md
   },
   headerCopy: {
     flex: 1
+  },
+  badgeButton: {
+    width: 60,
+    height: 60,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  badgeImage: {
+    width: 60,
+    height: 60
   },
   greetingTitle: {
     fontFamily: fontFamilies.lexendMedium,

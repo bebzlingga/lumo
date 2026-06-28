@@ -27,7 +27,12 @@ function weekdaysForSchedule(schedule: RepeatSchedule): Weekday[] | null {
       return [0, 6];
     case "specific":
       return schedule.days;
-    default:
+    case "daily":
+    case "interval":
+      // `daily` reminds every day, as intended. `interval` ("every N days")
+      // cannot be expressed by Expo's repeating calendar trigger, and one-off
+      // dated notifications would not self-renew, so it also falls back to a
+      // daily time reminder — the user is nudged each day and completes on due days.
       return null;
   }
 }

@@ -3,6 +3,7 @@ import React from "react";
 import { type DimensionValue, type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { fontFamilies, habitColors, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
+import { alpha } from "@/lib/color";
 import { addDays, dateRange, dayLabels, daysBetween, parseDateKey, toDateKey } from "@/lib/date";
 import { completionCount, currentStreak, dailyTarget, isDoneOnDate, isScheduledOnDate, totalCompletions } from "@/lib/habitMath";
 import { Habit } from "@/types/habit";
@@ -34,10 +35,6 @@ const ringPositions = [
   { top: 44, left: 22, width: 58, height: 34, rotate: "18deg" },
   { top: 106, left: 220, width: 68, height: 34, rotate: "-18deg" }
 ];
-
-function alpha(color: string, value: string) {
-  return color.startsWith("#") && color.length === 7 ? `${color}${value}` : color;
-}
 
 function activeHabits(habits: Habit[]) {
   return habits.filter((habit) => habit.status === "active");
@@ -764,18 +761,21 @@ function WeeklyHabitCard({ habit }: { habit: Habit }) {
 }
 
 export function OverallStatsView({ habits }: { habits: Habit[] }) {
-  const currentHabits = activeHabits(habits);
+  const currentHabits = React.useMemo(() => activeHabits(habits), [habits]);
+  const { completedDays, best, successRate, completed } = React.useMemo(() => {
+    return {
+      completedDays: completedHabitDays(currentHabits),
+      best: currentHabits.reduce((max, habit) => Math.max(max, allTimeBestStreak(habit)), 0),
+      successRate: currentHabits.length
+        ? Math.round(currentHabits.reduce((sum, habit) => sum + allTimeCompletionRate(habit), 0) / currentHabits.length)
+        : 0,
+      completed: currentHabits.reduce((sum, habit) => sum + totalCompletions(habit), 0)
+    };
+  }, [currentHabits]);
 
   if (!currentHabits.length) {
     return <EmptyStats message="Overall progress will build as you track habits." />;
   }
-
-  const completedDays = completedHabitDays(currentHabits);
-  const best = currentHabits.reduce((max, habit) => Math.max(max, allTimeBestStreak(habit)), 0);
-  const successRate = currentHabits.length
-    ? Math.round(currentHabits.reduce((sum, habit) => sum + allTimeCompletionRate(habit), 0) / currentHabits.length)
-    : 0;
-  const completed = currentHabits.reduce((sum, habit) => sum + totalCompletions(habit), 0);
 
   return (
     <View style={styles.viewStack}>
@@ -795,9 +795,13 @@ export function OverallStatsView({ habits }: { habits: Habit[] }) {
 function OverallHabitBarChart({ habits }: { habits: Habit[] }) {
   const { palette, isDark } = useLumo();
   const { width } = useWindowDimensions();
-  const chartHabits = [...habits]
-    .sort((a, b) => totalCompletions(b) - totalCompletions(a))
-    .map((habit) => ({ habit, total: totalCompletions(habit) }));
+  const chartHabits = React.useMemo(
+    () =>
+      [...habits]
+        .sort((a, b) => totalCompletions(b) - totalCompletions(a))
+        .map((habit) => ({ habit, total: totalCompletions(habit) })),
+    [habits]
+  );
   const maxTotal = Math.max(1, ...chartHabits.map((item) => item.total));
   const cardHorizontalPadding = spacing.md * 2;
   const screenHorizontalPadding = spacing.lg * 2;
@@ -878,7 +882,7 @@ function OverallHabitBarChart({ habits }: { habits: Habit[] }) {
 
 function OverallMissPatternCard({ habits }: { habits: Habit[] }) {
   const { palette, isDark } = useLumo();
-  const pattern = missedPatternByWeekday(habits);
+  const pattern = React.useMemo(() => missedPatternByWeekday(habits), [habits]);
   const orderedPattern = weekdayHeatOrder.map((day) => pattern[day]);
   const daysWithData = orderedPattern.filter((item) => item.scheduled > 0);
   const peakDay = daysWithData.reduce<(typeof orderedPattern)[number] | null>((peak, item) => {

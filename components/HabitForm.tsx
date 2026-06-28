@@ -1,27 +1,26 @@
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 import { fontFamilies, habitColors, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
-import { dayLabels, parseDateKey, toDateKey } from "@/lib/date";
+import { alpha } from "@/lib/color";
+import { dayLabels, dayNames, parseDateKey, toDateKey } from "@/lib/date";
 import { Habit, HabitDraft, GoalType, RepeatSchedule, Weekday, habitCategories } from "@/types/habit";
+import { FloatingDropdown } from "./FloatingDropdown";
 import { HabitIcon } from "./HabitIcon";
-import { IconName, isIconName } from "./Icon";
+import { Icon, IconName, isIconName } from "./Icon";
 import {
   AppText,
   Button,
   Card,
-  ChoiceChip,
   Field,
   FieldLabel,
   IconButton,
   LumoInput,
-  Pill,
-  Screen,
-  Select
+  Screen
 } from "./ui";
 
-const DEFAULT_HABIT_ICON: IconName = "star";
+const DEFAULT_HABIT_ICON: IconName = "sparkle";
 const ICON_PICKER_BOX_SIZE = 24;
 const ICON_PICKER_SIZE = 22;
 
@@ -50,34 +49,54 @@ const repeatScheduleOptions: { label: string; value: RepeatSchedule["type"] }[] 
   { label: "Custom interval", value: "interval" }
 ];
 
-const categoryOptions = habitCategories.map((category) => ({ label: category, value: category }));
+const categoryIcons: Record<(typeof habitCategories)[number], IconName> = {
+  General: "sparkle",
+  Health: "heart",
+  Fitness: "weight",
+  Mind: "smiley",
+  Focus: "eye",
+  Learning: "book",
+  Social: "emojiHappy",
+  Home: "home",
+  Money: "money",
+  Creative: "brush"
+};
 
-const habitIconOptions: IconName[] = [
-  "star",
-  "sparkle",
-  "drop",
-  "milk",
-  "activity",
-  "weight",
-  "health",
-  "heart",
-  "moon",
-  "sun",
-  "book",
-  "note",
-  "taskSquare",
-  "timer",
-  "headphone",
-  "broom",
-  "tree",
-  "money",
-  "brush",
-  "coffee",
-  "trophy"
+const categoryNamePlaceholders: Record<(typeof habitCategories)[number], string> = {
+  General: "Drink water",
+  Health: "Take vitamins",
+  Fitness: "Go for a run",
+  Mind: "Meditate 10 minutes",
+  Focus: "Deep work session",
+  Learning: "Read 10 pages",
+  Social: "Call a friend",
+  Home: "Tidy up the space",
+  Money: "Track today's spending",
+  Creative: "Sketch for 15 minutes"
+};
+
+const goalOptions: { label: string; value: GoalType["type"] }[] = [
+  { label: "Once per day", value: "once" },
+  { label: "Multiple times", value: "multiple" },
+  { label: "Weekly target", value: "weekly" },
+  { label: "Monthly target", value: "monthly" }
 ];
 
-function FormSection({ children }: { children: React.ReactNode }) {
-  return <Card style={styles.formCard}>{children}</Card>;
+const categoryIconOptions: Record<(typeof habitCategories)[number], IconName[]> = {
+  General: ["sparkle", "star", "taskSquare", "note", "calendar", "checkCircle", "grid", "elementPlus"],
+  Health: ["health", "heart", "drop", "milk", "glass", "moon", "sun", "weight"],
+  Fitness: ["weight", "activity", "fire", "zap", "trophy", "heart", "timer", "award"],
+  Mind: ["moon", "smiley", "emojiHappy", "sun", "sparkle", "tree", "heart", "star"],
+  Focus: ["eye", "timer", "clock", "taskSquare", "chart", "zap", "note", "book"],
+  Learning: ["book", "note", "edit", "award", "headphone", "chart", "taskSquare", "star"],
+  Social: ["emojiHappy", "heart", "smiley", "coffee", "headphone", "facebook", "star", "sparkle"],
+  Home: ["home", "broom", "tree", "coffee", "milk", "drop", "note", "sun"],
+  Money: ["money", "chart", "trophy", "award", "star", "calendar", "taskSquare", "archive"],
+  Creative: ["brush", "edit", "sparkle", "note", "headphone", "star", "drop", "coffee"]
+};
+
+function FormSection({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  return <Card style={[styles.formCard, style]}>{children}</Card>;
 }
 
 function isValidDateKey(dateKey: string) {
@@ -86,6 +105,86 @@ function isValidDateKey(dateKey: string) {
   }
 
   return toDateKey(parseDateKey(dateKey)) === dateKey;
+}
+
+// Progressive "MM / DD / YYYY" mask. Month is clamped to 01-12 and day to
+// 01-31; a leading digit too large to start a 2-digit segment is auto-padded
+// (e.g. month "2" -> "02 / ", day "4" -> "04 / ") and the " / " is appended as
+// soon as a segment completes so the next digit lands in the right place.
+function maskDateInput(value: string) {
+  const digits = value.replace(/\D/g, "");
+  let index = 0;
+
+  let month = "";
+  let monthDone = false;
+  if (index < digits.length) {
+    if (Number(digits[index]) >= 2) {
+      month = `0${digits[index]}`;
+      monthDone = true;
+      index += 1;
+    } else if (index + 1 < digits.length) {
+      month = String(Math.min(12, Math.max(1, Number(digits.slice(index, index + 2))))).padStart(2, "0");
+      monthDone = true;
+      index += 2;
+    } else {
+      month = digits[index];
+      index += 1;
+    }
+  }
+
+  let day = "";
+  let dayDone = false;
+  if (monthDone && index < digits.length) {
+    if (Number(digits[index]) >= 4) {
+      day = `0${digits[index]}`;
+      dayDone = true;
+      index += 1;
+    } else if (index + 1 < digits.length) {
+      day = String(Math.min(31, Math.max(1, Number(digits.slice(index, index + 2))))).padStart(2, "0");
+      dayDone = true;
+      index += 2;
+    } else {
+      day = digits[index];
+      index += 1;
+    }
+  }
+
+  const year = dayDone ? digits.slice(index, index + 4) : "";
+
+  let masked = month;
+  if (monthDone) {
+    masked += " / ";
+  }
+  masked += day;
+  if (dayDone) {
+    masked += " / ";
+  }
+  masked += year;
+
+  return masked;
+}
+
+// "MM / DD / YYYY" -> "YYYY-MM-DD" date key (empty until 8 digits are present).
+function maskedDateToKey(masked: string) {
+  const digits = masked.replace(/\D/g, "");
+
+  if (digits.length !== 8) {
+    return "";
+  }
+
+  return `${digits.slice(4, 8)}-${digits.slice(0, 2)}-${digits.slice(2, 4)}`;
+}
+
+// "YYYY-MM-DD" date key -> "MM / DD / YYYY" display string.
+function dateKeyToMasked(dateKey: string) {
+  const match = dateKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!match) {
+    return "";
+  }
+
+  const [, year, month, day] = match;
+  return `${month} / ${day} / ${year}`;
 }
 
 function draftFromHabit(habit?: Habit): HabitDraft {
@@ -133,7 +232,26 @@ export function HabitForm({
     }
     return "3";
   });
+  const [startDateInput, setStartDateInput] = useState(() => dateKeyToMasked(draft.createdAt));
   const selectedIconName = isIconName(draft.emoji) ? draft.emoji : DEFAULT_HABIT_ICON;
+  // Resting bottom-border for inputs and selects — a tinted green that reads
+  // more clearly than the faint cream hairline.
+  const fieldBorderColor = alpha(palette.greenDark, "33");
+
+  function handleStartDateChange(text: string) {
+    let nextDigits = text.replace(/\D/g, "");
+
+    // If a backspace only removed an auto-inserted " / " (the digits are
+    // unchanged but the string got shorter), drop the last digit too so
+    // deletion isn't stuck on the separator.
+    if (text.length < startDateInput.length && nextDigits === startDateInput.replace(/\D/g, "")) {
+      nextDigits = nextDigits.slice(0, -1);
+    }
+
+    const masked = maskDateInput(nextDigits);
+    setStartDateInput(masked);
+    setDraft((current) => ({ ...current, createdAt: maskedDateToKey(masked) }));
+  }
   const selectedDays = useMemo(() => {
     return draft.repeatSchedule.type === "specific" ? draft.repeatSchedule.days : ([1, 2, 3, 4, 5] as Weekday[]);
   }, [draft.repeatSchedule]);
@@ -177,7 +295,12 @@ export function HabitForm({
     const cleanStartDate = draft.createdAt.trim();
 
     if (!isValidDateKey(cleanStartDate)) {
-      Alert.alert("Start date needed", "Use the format YYYY-MM-DD, like 2026-06-25.");
+      Alert.alert("Start date needed", "Enter a real date as MM / DD / YYYY, like 06 / 25 / 2026.");
+      return;
+    }
+
+    if (cleanStartDate > toDateKey()) {
+      Alert.alert("Start date in the future", "Pick today or an earlier date.");
       return;
     }
 
@@ -225,36 +348,80 @@ export function HabitForm({
         />
       </View>
 
+      <FormSection style={styles.categoryCard}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.categoryScroll}
+          contentContainerStyle={styles.categoryRow}
+        >
+          {habitCategories.map((category) => {
+              const isSelected = draft.category === category;
+
+              return (
+                <Pressable
+                  key={category}
+                  accessibilityRole="button"
+                  accessibilityLabel={category}
+                  accessibilityState={{ selected: isSelected }}
+                  onPress={() =>
+                    setDraft((current) => {
+                      const options = categoryIconOptions[category];
+                      const emoji = options.includes(current.emoji as IconName) ? current.emoji : options[0];
+                      return { ...current, category, emoji };
+                    })
+                  }
+                  style={[styles.categoryChip, { backgroundColor: isSelected ? alpha(palette.greenDark, "1F") : "transparent" }]}
+                >
+                  <View style={styles.categoryGlyph}>
+                    <Icon
+                      name={categoryIcons[category]}
+                      size={22}
+                      color={isSelected ? palette.greenDark : palette.subtle}
+                      weight="bulk"
+                    />
+                  </View>
+                  <AppText
+                    variant="caption"
+                    color={isSelected ? palette.greenDark : palette.subtle}
+                    numberOfLines={1}
+                    style={styles.categoryLabel}
+                  >
+                    {category}
+                  </AppText>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+      </FormSection>
+
       <FormSection>
         <Field>
           <FieldLabel>Habit name</FieldLabel>
-          <LumoInput value={draft.name} onChangeText={(name) => setDraft((current) => ({ ...current, name }))} placeholder="Drink water" />
-        </Field>
-
-        <Field>
-          <FieldLabel>Category</FieldLabel>
-          <Select
-            options={categoryOptions}
-            value={draft.category}
-            onChange={(category) => setDraft((current) => ({ ...current, category: category as HabitDraft["category"] }))}
-            accessibilityLabel="Habit category"
+          <LumoInput
+            value={draft.name}
+            onChangeText={(name) => setDraft((current) => ({ ...current, name }))}
+            placeholder={categoryNamePlaceholders[draft.category]}
+            style={[styles.flatInput, { borderColor: fieldBorderColor }]}
           />
         </Field>
 
         <Field>
           <FieldLabel>Start date</FieldLabel>
           <LumoInput
-            value={draft.createdAt}
-            onChangeText={(createdAt) => setDraft((current) => ({ ...current, createdAt }))}
-            placeholder={toDateKey()}
-            keyboardType="numbers-and-punctuation"
+            value={startDateInput}
+            onChangeText={handleStartDateChange}
+            placeholder="MM / DD / YYYY"
+            keyboardType="number-pad"
+            maxLength={14}
+            style={[styles.flatInput, { borderColor: fieldBorderColor }]}
           />
         </Field>
 
         <Field>
           <FieldLabel>Icon</FieldLabel>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.iconChipRow}>
-            {habitIconOptions.map((iconName) => {
+            {categoryIconOptions[draft.category].map((iconName) => {
               const isSelected = selectedIconName === iconName;
 
               return (
@@ -263,15 +430,7 @@ export function HabitForm({
                   accessibilityRole="button"
                   accessibilityState={{ selected: isSelected }}
                   onPress={() => setDraft((current) => ({ ...current, emoji: iconName }))}
-                  style={({ pressed }) => [
-                    styles.iconChip,
-                    {
-                      backgroundColor: isSelected ? palette.surfaceStrong : palette.surface,
-                      borderColor: isSelected ? palette.greenDark : palette.hairline,
-                      borderWidth: 2,
-                      opacity: pressed ? 0.75 : 1
-                    }
-                  ]}
+                  style={[styles.iconChip, { backgroundColor: isSelected ? alpha(palette.greenDark, "1F") : "transparent" }]}
                 >
                   <View style={styles.iconGlyph}>
                     <HabitIcon value={iconName} color={palette.greenDark} size={ICON_PICKER_SIZE} />
@@ -282,66 +441,88 @@ export function HabitForm({
           </ScrollView>
         </Field>
 
-        <Field>
-          <FieldLabel>Color theme</FieldLabel>
-          <View style={styles.swatchRow}>
-            {habitColors.map((color) => (
-              <Button
-                key={color}
-                label={draft.color === color ? "✓" : ""}
-                onPress={() => setDraft((current) => ({ ...current, color }))}
-                style={[styles.swatch, { backgroundColor: color, borderColor: draft.color === color ? palette.ink : "transparent" }]}
-              />
-            ))}
-          </View>
-        </Field>
       </FormSection>
 
       <FormSection>
+        <View style={styles.cardHeader}>
+          <AppText variant="titleSmall" color={palette.ink}>
+            Frequency & goal
+          </AppText>
+          <AppText variant="bodySmall" color={palette.subtle}>
+            Choose how often this habit repeats and how many check-ins count as done.
+          </AppText>
+        </View>
+        <View style={[styles.sectionDivider, { backgroundColor: palette.hairline }]} />
+
         <Field>
           <FieldLabel>Frequency</FieldLabel>
-          <Select
+          <FloatingDropdown
+            variant="input"
             options={repeatScheduleOptions}
             value={draft.repeatSchedule.type}
-            onChange={(value) => setSchedule(value as RepeatSchedule["type"])}
+            onChange={setSchedule}
             accessibilityLabel="Repeat schedule"
+            borderColor={fieldBorderColor}
           />
         </Field>
 
         {draft.repeatSchedule.type === "specific" ? (
           <Field>
             <FieldLabel>Days</FieldLabel>
-            <View style={styles.dayGrid}>
-              {dayLabels.map((label, index) => (
-                <ChoiceChip
-                  key={label}
-                  label={label}
-                  selected={selectedDays.includes(index as Weekday)}
-                  onPress={() => toggleSpecificDay(index as Weekday)}
-                  className="min-h-[38px] min-w-[48px] items-center justify-center rounded-[22px] px-3"
-                />
-              ))}
-            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayList}>
+              {dayNames.map((name, index) => {
+                const checked = selectedDays.includes(index as Weekday);
+
+                return (
+                  <Pressable
+                    key={name}
+                    accessibilityRole="checkbox"
+                    accessibilityLabel={name}
+                    accessibilityState={{ checked }}
+                    onPress={() => toggleSpecificDay(index as Weekday)}
+                    style={styles.dayItem}
+                  >
+                    {checked ? (
+                      <Icon name="checkCircle" size={20} color={palette.greenDark} weight="bulk" />
+                    ) : (
+                      <View style={[styles.dayCircle, { borderColor: palette.hairline, backgroundColor: palette.surface }]} />
+                    )}
+                    <AppText
+                      variant="body"
+                      color={checked ? palette.ink : palette.subtle}
+                      style={[styles.dayName, checked ? styles.dayNameSelected : null]}
+                    >
+                      {dayLabels[index]}
+                    </AppText>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           </Field>
         ) : null}
 
         {draft.repeatSchedule.type === "interval" ? (
           <Field>
             <FieldLabel>Every how many days?</FieldLabel>
-            <LumoInput value={customInterval} onChangeText={setCustomInterval} keyboardType="number-pad" />
+            <LumoInput
+              value={customInterval}
+              onChangeText={setCustomInterval}
+              keyboardType="number-pad"
+              style={[styles.flatInput, { borderColor: fieldBorderColor }]}
+            />
           </Field>
         ) : null}
 
-        <View style={[styles.sectionDivider, { backgroundColor: palette.hairline }]} />
-
         <Field>
           <FieldLabel>Target</FieldLabel>
-          <View style={styles.pillGrid}>
-            <Pill label="Once per day" selected={draft.goal.type === "once"} onPress={() => setGoal("once")} />
-            <Pill label="Multiple times" selected={draft.goal.type === "multiple"} onPress={() => setGoal("multiple")} />
-            <Pill label="Weekly target" selected={draft.goal.type === "weekly"} onPress={() => setGoal("weekly")} />
-            <Pill label="Monthly target" selected={draft.goal.type === "monthly"} onPress={() => setGoal("monthly")} />
-          </View>
+          <FloatingDropdown
+            variant="input"
+            options={goalOptions}
+            value={draft.goal.type}
+            onChange={setGoal}
+            accessibilityLabel="Habit target"
+            borderColor={fieldBorderColor}
+          />
         </Field>
 
         {draft.goal.type !== "once" ? (
@@ -349,12 +530,36 @@ export function HabitForm({
             <FieldLabel>
               {draft.goal.type === "multiple" ? "Times per day" : draft.goal.type === "weekly" ? "Times per week" : "Times per month"}
             </FieldLabel>
-            <LumoInput value={goalAmount} onChangeText={setGoalAmount} keyboardType="number-pad" />
+            <LumoInput
+              value={goalAmount}
+              onChangeText={setGoalAmount}
+              keyboardType="number-pad"
+              style={[styles.flatInput, { borderColor: fieldBorderColor }]}
+            />
           </Field>
         ) : null}
       </FormSection>
 
-      <Button label={habit ? "Save changes" : "Create habit"} icon="checkCircle" shape="pill" onPress={save} style={styles.saveButton} />
+      <View
+        style={{
+          marginTop: spacing.xs,
+          borderRadius: 18,
+          backgroundColor: palette.greenDark,
+          shadowColor: palette.greenDark,
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.28,
+          shadowRadius: 16,
+          elevation: 8
+        }}
+      >
+        <Button
+          label={habit ? "Save changes" : "Create habit"}
+          variant="primary"
+          onPress={save}
+          className="min-h-[48px] w-full flex-row items-center justify-center rounded-[18px] px-4 py-2"
+          style={{ backgroundColor: palette.greenDark, borderRadius: 18, borderWidth: 0 }}
+        />
+      </View>
     </Screen>
   );
 }
@@ -378,7 +583,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxs
   },
   formCard: {
-    gap: spacing.lg
+    gap: spacing.md,
+    padding: spacing.xl
+  },
+  cardHeader: {
+    gap: spacing.xxs
   },
   sectionDivider: {
     height: StyleSheet.hairlineWidth
@@ -392,15 +601,42 @@ const styles = StyleSheet.create({
   },
   iconChipRow: {
     alignItems: "center",
-    gap: spacing.sm,
     paddingRight: spacing.lg
+  },
+  categoryCard: {
+    paddingVertical: spacing.md + 4
+  },
+  categoryScroll: {
+    marginHorizontal: -spacing.xl
+  },
+  categoryRow: {
+    alignItems: "flex-start",
+    paddingHorizontal: spacing.xl
+  },
+  categoryChip: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    width: 80,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.xl
+  },
+  categoryGlyph: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: ICON_PICKER_BOX_SIZE,
+    height: ICON_PICKER_BOX_SIZE
+  },
+  categoryLabel: {
+    textAlign: "center"
   },
   iconChip: {
     alignItems: "center",
     justifyContent: "center",
     width: 48,
     height: 48,
-    borderRadius: radius.pill
+    borderRadius: radius.xl
   },
   iconGlyph: {
     alignItems: "center",
@@ -408,30 +644,39 @@ const styles = StyleSheet.create({
     width: ICON_PICKER_BOX_SIZE,
     height: ICON_PICKER_BOX_SIZE
   },
-  swatchRow: {
+  dayList: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm
+    alignItems: "flex-start",
+    gap: spacing.md,
+    paddingRight: spacing.lg
   },
-  swatch: {
-    width: 42,
-    height: 42,
-    minHeight: 42,
-    minWidth: 42,
+  dayItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.xxs
+  },
+  dayCircle: {
+    width: 20,
+    height: 20,
     borderRadius: radius.pill,
-    paddingHorizontal: 0
+    borderWidth: 1.5
   },
-  pillGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm
+  dayName: {
+    fontSize: 16
   },
-  dayGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.xs
+  dayNameSelected: {
+    fontFamily: fontFamilies.lexendSemiBold
   },
-  saveButton: {
-    minHeight: 54
+  flatInput: {
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    borderBottomWidth: 1,
+    borderRadius: 0,
+    minHeight: 0,
+    paddingHorizontal: 0,
+    paddingTop: spacing.xxs,
+    paddingBottom: spacing.sm,
+    fontFamily: fontFamilies.lexendBold
   }
 });

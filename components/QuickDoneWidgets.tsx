@@ -54,7 +54,10 @@ function WidgetHabitRow({
   const isMultiple = habit.goal.type === "multiple";
   const showProgressRing = isMultiple && !done;
   const progress = target > 0 ? Math.min(count, target) / target : 0;
-  const progressLabel = habit.goal.type === "multiple" ? `${Math.min(count, target)}/${target} today` : `${currentStreak(habit)} day streak`;
+  const progressLabel = React.useMemo(
+    () => (habit.goal.type === "multiple" ? `${Math.min(count, target)}/${target} today` : `${currentStreak(habit)} day streak`),
+    [habit, count, target]
+  );
   const iconBackgroundColor = isDark ? palette.greenSoft : palette.greenDark;
   const habitIconColor = isDark ? palette.greenDark : palette.white;
   const progressTrackColor = isDark ? `${palette.greenSoft}4D` : `${palette.greenSoft}66`;

@@ -13,8 +13,9 @@ import {
   ViewStyle
 } from "react-native";
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
-import { fontFamilies, radius, spacing, type } from "@/constants/theme";
+import { control, fontFamilies, radius, spacing, type } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
+import { alpha } from "@/lib/color";
 import { Icon, IconName, IconWeight } from "./Icon";
 
 type TextVariant = keyof typeof type;
@@ -22,10 +23,6 @@ type ChipOption = {
   label: string;
   value: string;
 };
-
-function alpha(color: string, value: string) {
-  return color.startsWith("#") && color.length === 7 ? `${color}${value}` : color;
-}
 
 export function Screen({
   children,
@@ -45,6 +42,8 @@ export function Screen({
       {scroll ? (
         <ScrollView
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.screenContent, contentStyle]}
         >
@@ -169,7 +168,7 @@ export function Button({
           : palette.hairline;
   const surfaceBackgroundColor = customStyle?.backgroundColor ?? backgroundColor;
   const surfaceBorderColor = customStyle?.borderColor ?? borderColor;
-  const surfaceBorderRadius = customStyle?.borderRadius ?? (shape === "pill" ? radius.pill : radius.md);
+  const surfaceBorderRadius = customStyle?.borderRadius ?? (shape === "pill" ? radius.pill : control.radius);
   const surfaceBorderWidth = customStyle?.borderWidth ?? StyleSheet.hairlineWidth;
   const color =
     variant === "primary" || variant === "danger"
@@ -302,113 +301,40 @@ export function FieldDescription({ children }: { children: ReactNode }) {
   );
 }
 
+export function controlBorderColor(palette: ReturnType<typeof useLumo>["palette"], isDark: boolean, active = false) {
+  if (active) {
+    return palette.greenDark;
+  }
+
+  return isDark ? alpha(palette.greenDark, "5C") : alpha(palette.greenDark, "47");
+}
+
 export function LumoInput(props: TextInputProps) {
   const { palette, isDark } = useLumo();
+  const [focused, setFocused] = React.useState(false);
 
   return (
     <TextInput
-      placeholderTextColor={`${palette.body}B3`}
+      placeholderTextColor={`${palette.body}99`}
       {...props}
+      onFocus={(event) => {
+        setFocused(true);
+        props.onFocus?.(event);
+      }}
+      onBlur={(event) => {
+        setFocused(false);
+        props.onBlur?.(event);
+      }}
       style={[
         styles.input,
         {
           backgroundColor: palette.surface,
-          borderColor: isDark ? alpha(palette.greenDark, "73") : palette.hairline,
+          borderColor: controlBorderColor(palette, isDark, focused),
           color: palette.ink
         },
         props.style
       ]}
     />
-  );
-}
-
-export function Select({
-  options,
-  value,
-  onChange,
-  placeholder = "Select option",
-  accessibilityLabel
-}: {
-  options: ChipOption[];
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  accessibilityLabel?: string;
-}) {
-  const { palette, isDark } = useLumo();
-  const [isOpen, setIsOpen] = React.useState(false);
-  const selectedOption = options.find((option) => option.value === value);
-  const inputBorderColor = isDark ? alpha(palette.greenDark, "73") : palette.hairline;
-
-  return (
-    <View style={[styles.selectRoot, isOpen ? styles.selectRootOpen : null]}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel}
-        accessibilityState={{ expanded: isOpen }}
-        onPress={() => setIsOpen((current) => !current)}
-        style={({ pressed }) => [
-          styles.selectTrigger,
-          {
-            backgroundColor: palette.surface,
-            borderColor: isOpen ? palette.greenDark : inputBorderColor,
-            opacity: pressed ? 0.78 : 1
-          }
-        ]}
-      >
-        <View style={styles.selectTriggerContent}>
-          <AppText variant="titleSmall" color={palette.ink} numberOfLines={1} style={styles.selectTriggerText}>
-            {selectedOption?.label ?? placeholder}
-          </AppText>
-          <Icon name="chevronDown" size={18} color={palette.greenDark} weight="bulk" />
-        </View>
-      </Pressable>
-
-      {isOpen ? (
-        <View
-          style={[
-            styles.selectMenu,
-            {
-              backgroundColor: palette.card,
-              borderColor: isDark ? alpha(palette.greenDark, "2E") : alpha(palette.hairline, "D9"),
-              shadowColor: isDark ? "transparent" : palette.shadow
-            }
-          ]}
-        >
-          {options.map((option) => {
-            const isSelected = option.value === value;
-
-            return (
-              <Pressable
-                key={option.value}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isSelected }}
-                onPress={() => {
-                  onChange(option.value);
-                  setIsOpen(false);
-                }}
-                style={({ pressed }) => [
-                  styles.selectOption,
-                  {
-                    backgroundColor: pressed ? palette.surface : "transparent",
-                    opacity: pressed ? 0.78 : 1
-                  }
-                ]}
-              >
-                <AppText variant="titleSmall" color={isSelected ? palette.greenDark : palette.ink} numberOfLines={1} style={styles.selectOptionText}>
-                  {option.label}
-                </AppText>
-                {isSelected ? (
-                  <View style={[styles.selectCheck, { backgroundColor: palette.greenSoft }]}>
-                    <Icon name="check" size={14} color={palette.greenDark} weight="bold" />
-                  </View>
-                ) : null}
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
-    </View>
   );
 }
 
@@ -431,7 +357,7 @@ export function Pill({
       style={({ pressed }) => [
         styles.pill,
         {
-          backgroundColor: selected ? palette.greenSoft : palette.card,
+          backgroundColor: selected ? palette.greenSoft : palette.surface,
           borderColor: selected ? palette.greenDark : palette.hairline,
           opacity: pressed ? 0.75 : 1
         }
@@ -457,19 +383,20 @@ export function ChoiceChip({
   className?: string;
   style?: StyleProp<ViewStyle>;
 }) {
-  const { palette } = useLumo();
+  const { palette, isDark } = useLumo();
+  const unselectedBorder = isDark ? alpha(palette.greenDark, "73") : palette.hairline;
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
-      className={className ?? "min-h-[40px] items-center justify-center rounded-[22px] px-4"}
+      className={className ?? "min-h-[48px] items-center justify-center rounded-[16px] px-4"}
       style={({ pressed }) => [
         {
           backgroundColor: selected ? palette.greenSoft : palette.surface,
-          borderColor: selected ? palette.green : palette.hairline,
-          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: selected ? palette.greenDark : unselectedBorder,
+          borderWidth: 2,
           opacity: pressed ? 0.75 : 1
         },
         style
@@ -503,7 +430,7 @@ export function ChipGroup({
           label={option.label}
           selected={option.value === value}
           onPress={() => onChange(option.value)}
-          className={isGrid ? "min-h-[46px] items-center justify-center rounded-[22px] px-3" : undefined}
+          className={isGrid ? "min-h-[48px] items-center justify-center rounded-[16px] px-3" : undefined}
           style={isGrid ? [styles.chipGridItem, options.length % 2 === 1 && index === options.length - 1 ? styles.chipGridItemFull : null] : undefined}
         />
       ))}
@@ -580,8 +507,8 @@ const styles = StyleSheet.create({
     position: "relative"
   },
   buttonDefaultSize: {
-    minHeight: 44,
-    borderRadius: radius.nav,
+    minHeight: control.height,
+    borderRadius: control.radius,
     paddingHorizontal: spacing.md
   },
   buttonPill: {
@@ -624,76 +551,12 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.lexend
   },
   input: {
-    minHeight: 48,
-    borderRadius: radius.xl,
-    borderWidth: 2,
+    minHeight: control.height,
+    borderRadius: control.radius,
+    borderWidth: control.borderWidth,
     paddingHorizontal: spacing.md,
     fontFamily: fontFamilies.lexend,
     fontSize: 16
-  },
-  selectRoot: {
-    position: "relative",
-    zIndex: 10
-  },
-  selectRootOpen: {
-    zIndex: 1000,
-    elevation: 12
-  },
-  selectTrigger: {
-    minHeight: 52,
-    width: "100%",
-    alignSelf: "stretch",
-    borderRadius: radius.xl,
-    borderWidth: 2,
-    paddingHorizontal: spacing.md,
-    justifyContent: "center"
-  },
-  selectTriggerContent: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm
-  },
-  selectTriggerText: {
-    flex: 1,
-    fontFamily: fontFamilies.lexendSemiBold,
-    fontSize: 18,
-    lineHeight: 23
-  },
-  selectMenu: {
-    position: "absolute",
-    top: 60,
-    left: 0,
-    right: 0,
-    borderRadius: radius.nav,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.14,
-    shadowRadius: 28,
-    elevation: 14,
-    zIndex: 1001
-  },
-  selectOption: {
-    minHeight: 44,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.xs,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm
-  },
-  selectOptionText: {
-    flex: 1
-  },
-  selectCheck: {
-    width: 24,
-    height: 24,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center"
   },
   pill: {
     minHeight: 40,

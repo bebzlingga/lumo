@@ -1,4 +1,5 @@
 export const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+export const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 
 export function toDateKey(date = new Date()) {
   const year = date.getFullYear();

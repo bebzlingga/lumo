@@ -3,8 +3,9 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import React, { useState } from "react";
-import { Alert, Linking, Pressable, Share, StyleSheet, StyleProp, TextStyle, View, ViewStyle } from "react-native";
+import { Alert, Linking, Modal, Pressable, Share, StyleSheet, StyleProp, TextStyle, View, ViewStyle } from "react-native";
 import { ActionTile } from "@/components/ActionTile";
+import { FloatingDropdown } from "@/components/FloatingDropdown";
 import { Icon, IconName } from "@/components/Icon";
 import { AppText, Card, LoadingState, LumoInput, Screen } from "@/components/ui";
 import { fontFamilies, layout, radius, spacing, themeColorOptions } from "@/constants/theme";
@@ -120,11 +121,16 @@ export default function SettingsScreen() {
   } = useLumo();
   const [isDataBusy, setIsDataBusy] = useState(false);
   const [isColorMenuOpen, setIsColorMenuOpen] = useState(false);
-  const [isBackupFrequencyMenuOpen, setIsBackupFrequencyMenuOpen] = useState(false);
+  const [colorTriggerRect, setColorTriggerRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const colorTriggerRef = React.useRef<View>(null);
+  const openColorMenu = () => {
+    colorTriggerRef.current?.measureInWindow((x, y, width, height) => {
+      setColorTriggerRect({ x, y, width, height });
+      setIsColorMenuOpen(true);
+    });
+  };
   const activeColorScheme = settings.colorScheme ?? "green";
   const activeColorOption = themeColorOptions.find((option) => option.key === activeColorScheme) ?? themeColorOptions[themeColorOptions.length - 1];
-  const activeBackupFrequencyOption =
-    backupFrequencyOptions.find((option) => option.value === settings.backupFrequency) ?? backupFrequencyOptions[1];
   const notificationsAllowed = settings.notificationStatus === "granted";
   const notificationsEnabled = notificationsAllowed && settings.notificationsEnabled;
   const notificationDescription = notificationsEnabled
@@ -227,7 +233,6 @@ export default function SettingsScreen() {
 
     try {
       await setAutoBackupEnabled(enabled);
-      setIsBackupFrequencyMenuOpen(false);
     } catch {
       Alert.alert("Backup failed", "Lumo could not create the Lumo/Backup folder.");
     } finally {
@@ -303,10 +308,12 @@ export default function SettingsScreen() {
               style={styles.rowText}
             />
             <Pressable
+              ref={colorTriggerRef}
+              collapsable={false}
               accessibilityRole="button"
               accessibilityState={{ expanded: isColorMenuOpen }}
               accessibilityLabel="Color theme"
-              onPress={() => setIsColorMenuOpen((current) => !current)}
+              onPress={() => (isColorMenuOpen ? setIsColorMenuOpen(false) : openColorMenu())}
               style={({ pressed }) => [
                 styles.colorTrigger,
                 {
@@ -319,10 +326,20 @@ export default function SettingsScreen() {
               <View style={[styles.colorTriggerSwatch, { backgroundColor: activeColorOption.swatch, borderColor: `${activeColorOption.swatch}66` }]} />
             </Pressable>
           </View>
-          {isColorMenuOpen ? (
-            <>
-              <Pressable accessibilityLabel="Close color theme menu" onPress={() => setIsColorMenuOpen(false)} style={styles.colorDropdownBackdrop} />
-              <View style={[styles.colorDropdown, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
+          <Modal visible={isColorMenuOpen} transparent animationType="none" onRequestClose={() => setIsColorMenuOpen(false)}>
+            <Pressable accessibilityLabel="Close color theme menu" onPress={() => setIsColorMenuOpen(false)} style={styles.colorDropdownBackdrop} />
+            {colorTriggerRect ? (
+              <View
+                style={[
+                  styles.colorDropdown,
+                  {
+                    top: colorTriggerRect.y + colorTriggerRect.height + 10,
+                    left: colorTriggerRect.x + colorTriggerRect.width - 240,
+                    backgroundColor: palette.card,
+                    shadowColor: isDark ? "transparent" : palette.shadow
+                  }
+                ]}
+              >
                 {themeColorOptions.map((option) => {
                   const selected = activeColorScheme === option.key;
 
@@ -352,8 +369,8 @@ export default function SettingsScreen() {
                   );
                 })}
               </View>
-            </>
-          ) : null}
+            ) : null}
+          </Modal>
         </View>
       </Card>
 
@@ -391,77 +408,19 @@ export default function SettingsScreen() {
           />
         </View>
         {settings.autoBackupEnabled ? (
-          <View style={styles.backupFrequencyMenuRoot}>
-            <View style={[styles.row, styles.preferenceRow]}>
-              <SettingsCopy
-                title="Backup frequency"
-                description="Choose how often Lumo saves a copy."
-                titleStyle={[styles.rowTitle, styles.darkModeTitle]}
-                style={styles.rowText}
-              />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ expanded: isBackupFrequencyMenuOpen }}
-                accessibilityLabel="Backup frequency"
-                onPress={() => setIsBackupFrequencyMenuOpen((current) => !current)}
-                style={({ pressed }) => [
-                  styles.backupFrequencyTrigger,
-                  {
-                    backgroundColor: palette.surface,
-                    borderColor: isBackupFrequencyMenuOpen ? palette.greenDark : palette.hairline,
-                    opacity: pressed ? 0.76 : 1
-                  }
-                ]}
-              >
-                <AppText variant="caption" color={palette.greenDark} numberOfLines={1} style={styles.backupFrequencyTriggerText}>
-                  {activeBackupFrequencyOption.label}
-                </AppText>
-              </Pressable>
-            </View>
-            {isBackupFrequencyMenuOpen ? (
-              <>
-                <Pressable
-                  accessibilityLabel="Close backup frequency menu"
-                  onPress={() => setIsBackupFrequencyMenuOpen(false)}
-                  style={styles.colorDropdownBackdrop}
-                />
-                <View style={[styles.backupFrequencyDropdown, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
-                  {backupFrequencyOptions.map((option) => {
-                    const selected = settings.backupFrequency === option.value;
-
-                    return (
-                      <Pressable
-                        key={option.value}
-                        accessibilityRole="button"
-                        accessibilityLabel={option.label}
-                        accessibilityState={{ selected }}
-                        onPress={() => {
-                          setBackupFrequency(option.value);
-                          setIsBackupFrequencyMenuOpen(false);
-                        }}
-                        style={({ pressed }) => [
-                          styles.backupFrequencyOption,
-                          {
-                            backgroundColor: selected ? `${palette.greenDark}14` : "transparent",
-                            borderColor: selected ? `${palette.greenDark}33` : "transparent",
-                            opacity: pressed ? 0.76 : 1
-                          }
-                        ]}
-                      >
-                        <View style={styles.backupFrequencyOptionContent}>
-                          <AppText variant="bodySmall" color={selected ? palette.greenDark : palette.body} numberOfLines={1} style={styles.backupFrequencyOptionText}>
-                            {option.label}
-                          </AppText>
-                          <View style={styles.backupFrequencyCheckSlot}>
-                            {selected ? <Icon name="checkCircle" size={18} color={palette.greenDark} weight="bulk" /> : null}
-                          </View>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </>
-            ) : null}
+          <View style={[styles.row, styles.preferenceRow]}>
+            <SettingsCopy
+              title="Backup frequency"
+              description="Choose how often Lumo saves a copy."
+              titleStyle={[styles.rowTitle, styles.darkModeTitle]}
+              style={styles.rowText}
+            />
+            <FloatingDropdown
+              options={backupFrequencyOptions}
+              value={settings.backupFrequency}
+              onChange={setBackupFrequency}
+              accessibilityLabel="Backup frequency"
+            />
           </View>
         ) : null}
         <View style={[styles.optionDivider, { backgroundColor: palette.hairline }]} />
@@ -680,18 +639,10 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth
   },
   colorDropdownBackdrop: {
-    position: "absolute",
-    top: -500,
-    left: -400,
-    right: -400,
-    height: 1400,
-    zIndex: 25,
-    elevation: 12
+    ...StyleSheet.absoluteFillObject
   },
   colorDropdown: {
     position: "absolute",
-    top: 44,
-    right: 0,
     width: 240,
     flexDirection: "row",
     flexWrap: "wrap",
@@ -761,69 +712,6 @@ const styles = StyleSheet.create({
   communityTitle: {
     fontFamily: fontFamilies.lexendSemiBold,
     lineHeight: 18
-  },
-  backupFrequencyMenuRoot: {
-    position: "relative",
-    zIndex: 20
-  },
-  backupFrequencyTrigger: {
-    minWidth: 104,
-    minHeight: 34,
-    flexShrink: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 1,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: spacing.sm
-  },
-  backupFrequencyTriggerText: {
-    fontFamily: fontFamilies.lexendSemiBold,
-    fontSize: 14,
-    lineHeight: 16
-  },
-  backupFrequencyDropdown: {
-    position: "absolute",
-    top: 44,
-    right: 0,
-    width: 200,
-    gap: 0,
-    borderRadius: radius.nav,
-    borderWidth: 0,
-    padding: spacing.md,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.16,
-    shadowRadius: 28,
-    elevation: 16,
-    zIndex: 30
-  },
-  backupFrequencyOption: {
-    minHeight: 28,
-    width: "100%",
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: spacing.sm
-  },
-  backupFrequencyOptionContent: {
-    width: "100%",
-    minHeight: 28,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm
-  },
-  backupFrequencyOptionText: {
-    flex: 1,
-    fontFamily: fontFamilies.lexendSemiBold,
-    lineHeight: 18
-  },
-  backupFrequencyCheckSlot: {
-    width: 20,
-    height: 20,
-    flexShrink: 0,
-    alignItems: "center",
-    justifyContent: "center"
   },
   actionGrid: {
     flexDirection: "row",

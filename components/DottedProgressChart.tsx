@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
+import { alpha } from "@/lib/color";
 import { addDays, dateRange, daysBetween, monthRange, startOfWeek, toDateKey } from "@/lib/date";
 import { completionCount, isScheduledOnDate } from "@/lib/habitMath";
 import { Habit } from "@/types/habit";
@@ -14,10 +15,6 @@ type Props = {
   layout?: "weekly" | "monthly";
   tone?: "default" | "hero";
 };
-
-function alpha(color: string, value: string) {
-  return color.startsWith("#") && color.length === 7 ? `${color}${value}` : color;
-}
 
 function Dot({
   status,

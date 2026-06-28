@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { fontFamilies, radius, spacing } from '@/constants/theme'
 import { useLumo } from '@/context/LumoContext'
+import { alpha } from '@/lib/color'
 import { monthRange, parseDateKey, toDateKey } from '@/lib/date'
 import { completionCount, isDoneOnDate, isScheduledOnDate } from '@/lib/habitMath'
 import { Habit } from '@/types/habit'
@@ -50,10 +51,6 @@ const statusLabel: Record<DateProgressStatus, string> = {
 	incomplete: 'Incomplete',
 }
 
-function alpha(color: string, value: string) {
-	return color.startsWith('#') && color.length === 7 ? `${color}${value}` : color
-}
-
 export function DateStrip({
 	habits,
 	selectedDateKey,
@@ -70,7 +67,7 @@ export function DateStrip({
 	const selectedBorder = isDark ? palette.greenSoft : palette.greenDark
 	const statusGreen = isDark ? palette.greenDark : palette.greenDark
 	const noStatusColor = isDark ? palette.surfaceStrong : palette.subtle
-	const disabledText = alpha(palette.subtle, isDark ? '8A' : 'A8')
+	const disabledText = alpha(palette.subtle, isDark ? '5C' : '66')
 	const selectedText = isDark ? palette.onAccent : palette.white
 	const statusColors: Record<DateProgressStatus, string> = {
 		none: 'transparent',
@@ -118,11 +115,13 @@ export function DateStrip({
 				contentContainerStyle={styles.content}
 				onLayout={(event) => setScrollerWidth(event.nativeEvent.layout.width)}
 			>
-				{dates.map(({ dateKey, disabled }) => {
+				{dates.map(({ dateKey, disabled: isFutureDate }) => {
 					const date = parseDateKey(dateKey)
 					const isSelected = dateKey === selectedDateKey
 					const isToday = dateKey === todayKey
 					const progressStatus = getDateProgressStatus(habits, dateKey, todayKey)
+					// Future dates and past dates with no scheduled habits are inactive.
+					const disabled = isFutureDate || (dateKey < todayKey && progressStatus === 'none')
 					const progressColor = statusColors[progressStatus]
 					const displayProgressColor = isToday ? statusGreen : progressColor
 					const selectedCardColor = isToday || (isDark && progressStatus === 'complete')
@@ -133,10 +132,10 @@ export function DateStrip({
 					const dateTextColor = isSelected ? selectedText : disabled ? disabledText : progressStatus === 'none' ? (isToday ? statusGreen : disabledText) : displayProgressColor
 					const selectedFillColor = isDark ? palette.greenDark : selectedCardColor
 					const cardBorderColor = isSelected ? selectedFillColor : dateTextColor
-					const lightBorderColor = alpha(cardBorderColor, isDark ? 'A3' : '5C')
+					const lightBorderColor = cardBorderColor
 					const completedBackgroundColor = isDark ? alpha(statusGreen, '14') : alpha(palette.greenSoft, '45')
 					const missedBackgroundColor = alpha(palette.danger, isDark ? '14' : '0D')
-					const accessibilityStatusLabel = disabled ? 'Future date' : statusLabel[progressStatus]
+					const accessibilityStatusLabel = isFutureDate ? 'Future date' : disabled ? 'No scheduled habits' : statusLabel[progressStatus]
 					const dayLabel = date.toLocaleDateString(undefined, { weekday: 'short' })
 					const dayNumber = String(date.getDate()).padStart(2, '0')
 
@@ -159,6 +158,7 @@ export function DateStrip({
 								style={[
 									styles.dateCard,
 									isSelected ? styles.selectedDateCard : null,
+										disabled ? styles.disabledDateCard : null,
 									{
 										backgroundColor: isSelected
 											? selectedFillColor
@@ -238,6 +238,9 @@ const styles = StyleSheet.create({
 		shadowOpacity: 0.06,
 		shadowRadius: 8,
 		elevation: 2,
+	},
+	disabledDateCard: {
+		opacity: 0.6,
 	},
 	dayLabel: {
 		width: '100%',

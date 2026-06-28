@@ -1,6 +1,13 @@
 import { Habit, Weekday } from "@/types/habit";
 import { addDays, dateRange, daysBetween, monthRange, toDateKey, weekRange } from "./date";
 
+/**
+ * Upper bound on how far back streak and completion-rate calculations look.
+ * Just over a year so a "perfect year" still resolves; habits with history
+ * beyond this window report stats truncated to the most recent MAX_HISTORY_DAYS.
+ */
+export const MAX_HISTORY_DAYS = 370;
+
 export function dailyTarget(habit: Habit) {
   return habit.goal.type === "multiple" ? habit.goal.count : 1;
 }
@@ -66,7 +73,7 @@ export function currentStreak(habit: Habit, todayKey = toDateKey()) {
     cursor = addDays(cursor, -1);
   }
 
-  for (let index = 0; index < 370; index += 1) {
+  for (let index = 0; index < MAX_HISTORY_DAYS; index += 1) {
     if (daysBetween(habit.createdAt, cursor) < 0) {
       break;
     }
@@ -88,7 +95,7 @@ export function currentStreak(habit: Habit, todayKey = toDateKey()) {
 }
 
 export function bestStreak(habit: Habit, todayKey = toDateKey()) {
-  const days = Math.min(370, Math.max(1, daysBetween(habit.createdAt, todayKey) + 1));
+  const days = Math.min(MAX_HISTORY_DAYS, Math.max(1, daysBetween(habit.createdAt, todayKey) + 1));
   let best = 0;
   let run = 0;
 
@@ -108,8 +115,16 @@ export function bestStreak(habit: Habit, todayKey = toDateKey()) {
   return best;
 }
 
+/**
+ * Best day-streak ever reached across every habit. Status is forced active so a
+ * paused or archived habit still counts toward earned streak achievements.
+ */
+export function bestStreakAcrossHabits(habits: Habit[], todayKey = toDateKey()) {
+  return habits.reduce((max, habit) => Math.max(max, bestStreak({ ...habit, status: "active" }, todayKey)), 0);
+}
+
 export function completionRate(habit: Habit, todayKey = toDateKey()) {
-  const days = Math.min(370, Math.max(1, daysBetween(habit.createdAt, todayKey) + 1));
+  const days = Math.min(MAX_HISTORY_DAYS, Math.max(1, daysBetween(habit.createdAt, todayKey) + 1));
   const scheduled = dateRange(days, todayKey).filter((dateKey) => isScheduledOnDate(habit, dateKey));
 
   if (scheduled.length === 0) {

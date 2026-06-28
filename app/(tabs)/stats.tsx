@@ -212,10 +212,16 @@ const styles = StyleSheet.create({
   },
   swipeContent: {
     minHeight: 360,
-    overflow: "hidden"
+    overflow: "hidden",
+    // Extend the clip box out to the screen edges (and below) so card shadows
+    // aren't cut off. The horizontal inset is moved onto slidePane instead.
+    marginHorizontal: -spacing.lg,
+    marginBottom: -spacing.lg,
+    paddingBottom: spacing.lg
   },
   slidePane: {
-    width: "100%"
+    width: "100%",
+    paddingHorizontal: spacing.lg
   },
   outgoingSlidePane: {
     position: "absolute",

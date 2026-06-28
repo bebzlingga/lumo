@@ -9,6 +9,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Button, Card, LoadingState, Screen, StatTile } from "@/components/ui";
 import { fontFamilies, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
+import { alpha } from "@/lib/color";
 import { dateRange, formatHistoryDateParts, monthRange, toDateKey } from "@/lib/date";
 import { completionCount, habitSummary, isDoneOnDate, isScheduledOnDate } from "@/lib/habitMath";
 
@@ -45,10 +46,6 @@ function targetLabelForHabit(habit: NonNullable<ReturnType<typeof useLumo>["habi
     default:
       return null;
   }
-}
-
-function alpha(color: string, value: string) {
-  return color.startsWith("#") && color.length === 7 ? `${color}${value}` : color;
 }
 
 export default function HabitDetailScreen() {
