@@ -205,7 +205,7 @@ export default function HabitDetailScreen() {
       </Card>
 
       <View style={styles.statsRow}>
-        <StatTile label="Current streak" value={`${summary.currentStreak}`} icon={summary.currentStreak >= 3 ? "fire" : "activity"} />
+        <StatTile label="Current streak" value={`${summary.currentStreak}`} icon={summary.currentStreak >= 3 ? "streakFire" : "activity"} />
         <StatTile label="Best streak" value={`${summary.bestStreak}`} icon="trophy" />
         <StatTile label="Completion rate" value={`${summary.completionRate}%`} icon="chart" />
         <StatTile label="Total completions" value={`${summary.totalCompletions}`} icon="checkCircle" />

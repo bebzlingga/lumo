@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
 		fontFamily: fontFamilies.lexendBold,
 		fontSize: 22,
 		lineHeight: 28,
-		transform: [{ translateY: -7 }],
+		transform: [{ translateY: -9 }],
 	},
 	intro: {
 		fontSize: 15,

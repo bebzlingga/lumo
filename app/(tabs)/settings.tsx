@@ -82,8 +82,11 @@ function SettingsSwitch({
   trackColor: string;
   inactiveTrackColor?: string;
 }) {
-  const { palette } = useLumo();
-  const switchTrackColor = checked ? trackColor : inactiveTrackColor ?? palette.chartTrack;
+  const { palette, isDark } = useLumo();
+  // In dark mode chartTrack blends into the card background, so the off state
+  // uses a translucent tint of the subtle color to stay visible.
+  const offTrackColor = isDark ? alpha(palette.subtle, "2E") : inactiveTrackColor ?? palette.chartTrack;
+  const switchTrackColor = checked ? trackColor : offTrackColor;
 
   return (
     <Pressable

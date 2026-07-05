@@ -1,18 +1,13 @@
-import type { ImageSourcePropType } from "react-native";
-
 /**
- * Streak badges are unlocked by a habit's best day-streak. Each milestone
- * ships a full-color art (earned) and a greyscale art (locked). Milestones are
- * grouped into rising tiers, from Bronze up to Diamond.
- * Asset requires must be static string literals so Metro can bundle them.
+ * Streak badges are unlocked by a habit's best day-streak. Badge art is drawn
+ * in code (components/BadgeArt) so it follows the active theme; each milestone
+ * belongs to a rising tier, from Bronze up to Diamond.
  */
 export type BadgeTierKey = "bronze" | "silver" | "gold" | "platinum" | "diamond";
 
 export type Badge = {
   threshold: number;
   tier: BadgeTierKey;
-  color: ImageSourcePropType;
-  locked: ImageSourcePropType;
 };
 
 export type BadgeTierMeta = {
@@ -31,33 +26,29 @@ export const badgeTierMeta: Record<BadgeTierKey, BadgeTierMeta> = {
 };
 
 export const badges: Badge[] = [
-  { threshold: 3, tier: "bronze", color: require("../assets/badges/badge-3-color.png"), locked: require("../assets/badges/badge-3-locked.png") },
-  { threshold: 10, tier: "bronze", color: require("../assets/badges/badge-10-color.png"), locked: require("../assets/badges/badge-10-locked.png") },
-  { threshold: 15, tier: "bronze", color: require("../assets/badges/badge-15-color.png"), locked: require("../assets/badges/badge-15-locked.png") },
-  { threshold: 20, tier: "silver", color: require("../assets/badges/badge-20-color.png"), locked: require("../assets/badges/badge-20-locked.png") },
-  { threshold: 30, tier: "silver", color: require("../assets/badges/badge-30-color.png"), locked: require("../assets/badges/badge-30-locked.png") },
-  { threshold: 50, tier: "silver", color: require("../assets/badges/badge-50-color.png"), locked: require("../assets/badges/badge-50-locked.png") },
-  { threshold: 100, tier: "gold", color: require("../assets/badges/badge-100-color.png"), locked: require("../assets/badges/badge-100-locked.png") },
-  { threshold: 150, tier: "gold", color: require("../assets/badges/badge-150-color.png"), locked: require("../assets/badges/badge-150-locked.png") },
-  { threshold: 200, tier: "gold", color: require("../assets/badges/badge-200-color.png"), locked: require("../assets/badges/badge-200-locked.png") },
-  { threshold: 250, tier: "platinum", color: require("../assets/badges/badge-250-color.png"), locked: require("../assets/badges/badge-250-locked.png") },
-  { threshold: 300, tier: "platinum", color: require("../assets/badges/badge-300-color.png"), locked: require("../assets/badges/badge-300-locked.png") },
-  { threshold: 500, tier: "platinum", color: require("../assets/badges/badge-500-color.png"), locked: require("../assets/badges/badge-500-locked.png") },
-  { threshold: 650, tier: "diamond", color: require("../assets/badges/badge-650-color.png"), locked: require("../assets/badges/badge-650-locked.png") },
-  { threshold: 850, tier: "diamond", color: require("../assets/badges/badge-850-color.png"), locked: require("../assets/badges/badge-850-locked.png") },
-  { threshold: 1000, tier: "diamond", color: require("../assets/badges/badge-1000-color.png"), locked: require("../assets/badges/badge-1000-locked.png") }
+  { threshold: 3, tier: "bronze" },
+  { threshold: 10, tier: "bronze" },
+  { threshold: 15, tier: "bronze" },
+  { threshold: 20, tier: "silver" },
+  { threshold: 30, tier: "silver" },
+  { threshold: 50, tier: "silver" },
+  { threshold: 100, tier: "gold" },
+  { threshold: 150, tier: "gold" },
+  { threshold: 200, tier: "gold" },
+  { threshold: 250, tier: "platinum" },
+  { threshold: 300, tier: "platinum" },
+  { threshold: 500, tier: "platinum" },
+  { threshold: 650, tier: "diamond" },
+  { threshold: 850, tier: "diamond" },
+  { threshold: 1000, tier: "diamond" }
 ];
 
 export type BadgeProgress = Badge & {
   earned: boolean;
-  source: ImageSourcePropType;
 };
 
 export function habitBadges(streak: number): BadgeProgress[] {
-  return badges.map((badge) => {
-    const earned = streak >= badge.threshold;
-    return { ...badge, earned, source: earned ? badge.color : badge.locked };
-  });
+  return badges.map((badge) => ({ ...badge, earned: streak >= badge.threshold }));
 }
 
 export type BadgeTierGroup = BadgeTierMeta & { badges: BadgeProgress[] };
@@ -81,10 +72,9 @@ export function nextBadge(streak: number): Badge | null {
 
 /**
  * The badge to surface as a user's "current" achievement: the highest earned
- * milestone in full color, or the first milestone (still locked) when none are
- * earned.
+ * milestone, or the first milestone (still locked) when none are earned.
  */
-export function currentBadge(streak: number): { threshold: number; earned: boolean; source: ImageSourcePropType } {
+export function currentBadge(streak: number): BadgeProgress {
   let earnedBadge: Badge | null = null;
 
   for (const badge of badges) {
@@ -94,8 +84,8 @@ export function currentBadge(streak: number): { threshold: number; earned: boole
   }
 
   if (earnedBadge) {
-    return { threshold: earnedBadge.threshold, earned: true, source: earnedBadge.color };
+    return { ...earnedBadge, earned: true };
   }
 
-  return { threshold: badges[0].threshold, earned: false, source: badges[0].locked };
+  return { ...badges[0], earned: false };
 }

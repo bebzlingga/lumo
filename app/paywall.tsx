@@ -1,9 +1,9 @@
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Alert, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Icon, type IconName } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { AppText, Button, Screen } from "@/components/ui";
+import { AppText, Screen } from "@/components/ui";
 import { fontFamilies, radius, spacing } from "@/constants/theme";
 import { FREE_HABIT_LIMIT, FREE_JOURNAL_LIMIT, useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
@@ -23,6 +23,7 @@ export default function PaywallScreen() {
   const router = useRouter();
   const { palette, isPro, purchasePro } = useLumo();
   const [busy, setBusy] = useState(false);
+  const [ctaPressed, setCtaPressed] = useState(false);
 
   async function handlePurchase() {
     if (busy) {
@@ -54,7 +55,7 @@ export default function PaywallScreen() {
             <Icon name="sparkle" size={30} color={palette.greenDark} weight="bulk" />
           </View>
           <AppText color={palette.ink} style={styles.title}>
-            Unlock unlimited habits
+            Unlock unlimited habits and journal
           </AppText>
           <AppText variant="bodySmall" color={palette.subtle} style={styles.subtitle}>
             {isPro
@@ -84,26 +85,25 @@ export default function PaywallScreen() {
 
       <View style={styles.footer}>
         <View style={[styles.ctaShell, { backgroundColor: palette.green, shadowColor: palette.green }]}>
-          <Button
-            label={isPro ? "Purchased" : busy ? "Please wait…" : `Unlock for ${PRICE_LABEL}`}
-            variant="primary"
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={isPro ? "Purchased" : `Unlock for ${PRICE_LABEL}. One-time payment.`}
             disabled={isPro || busy}
             onPress={handlePurchase}
-            className="min-h-[54px] w-full flex-row items-center justify-center rounded-[18px] px-4 py-2"
-            style={{ backgroundColor: palette.green, borderRadius: 18, borderWidth: 0 }}
-            labelStyle={{ fontSize: 17 }}
-          />
+            onPressIn={() => setCtaPressed(true)}
+            onPressOut={() => setCtaPressed(false)}
+            style={[styles.ctaButton, { backgroundColor: palette.green, opacity: ctaPressed ? 0.88 : 1 }]}
+          >
+            <AppText variant="button" color={palette.white} style={styles.ctaLabel}>
+              {isPro ? "Purchased" : busy ? "Please wait…" : `Unlock for ${PRICE_LABEL}`}
+            </AppText>
+            {!isPro ? (
+              <AppText variant="caption" color="rgba(255,255,255,0.85)" style={styles.ctaSub}>
+                One-time payment
+              </AppText>
+            ) : null}
+          </Pressable>
         </View>
-
-        {!isPro ? (
-          <AppText variant="caption" color={palette.subtle} style={styles.oneTime}>
-            One-time payment
-          </AppText>
-        ) : null}
-
-        <AppText variant="caption" color={palette.muted} style={styles.legal}>
-          Payment is charged to your App Store account. This is a one-time purchase, not a subscription.
-        </AppText>
       </View>
     </Screen>
   );
@@ -117,12 +117,13 @@ const styles = StyleSheet.create({
   topSection: {
     flex: 1,
     // Bleed the scroll bounds to the screen edges so card shadows aren't clipped.
-    marginHorizontal: -spacing.lg
+    marginHorizontal: -spacing.lg,
+    // Pulls the content up against the screen container's built-in child gap.
+    marginTop: -spacing.xs
   },
   topContent: {
     gap: spacing.lg,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
     paddingBottom: spacing.lg
   },
   hero: {
@@ -138,7 +139,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs
   },
   title: {
-    fontFamily: fontFamilies.lexendBold,
+    fontFamily: "Lexend-Black",
     fontSize: 26,
     lineHeight: 32,
     textAlign: "center"
@@ -186,11 +187,22 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8
   },
-  oneTime: {
-    textAlign: "center"
+  ctaButton: {
+    minHeight: 58,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+    borderRadius: 18,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs
   },
-  legal: {
-    textAlign: "center",
-    lineHeight: 16
+  ctaLabel: {
+    fontSize: 17,
+    lineHeight: 22
+  },
+  ctaSub: {
+    fontFamily: fontFamilies.lexendMedium,
+    fontSize: 11,
+    lineHeight: 14
   }
 });

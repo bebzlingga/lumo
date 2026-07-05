@@ -557,7 +557,7 @@ function TodayInsightCard({
         ) : (
           <View style={styles.todayInsightRow}>
             <View style={styles.habitTitle}>
-              <Icon name="fire" size={18} color={palette.glow} weight="bulk" />
+              <Icon name="streakFire" size={18} color={palette.glow} weight="bulk" />
               <AppText variant="bodySmall" color={palette.subtle} numberOfLines={2} style={styles.todayEmptyText}>
                 Finish one habit to start a streak.
               </AppText>
@@ -751,7 +751,7 @@ function WeeklyHabitCard({ habit }: { habit: Habit }) {
                   }
                 ]}
               >
-                {done ? <Icon name="emojiHappy" size={19} color={palette.white} weight="bulk" /> : null}
+                {done ? <Icon name="emojiHappy" size={19} color={isDark ? palette.canvas : palette.white} weight="bulk" /> : null}
                 {partial ? <Icon name="emojiNormal" size={19} color={palette.white} weight="bulk" /> : null}
                 {missed ? <Icon name="emojiSad" size={19} color={palette.danger} weight="bulk" /> : null}
               </View>

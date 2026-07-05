@@ -4,6 +4,9 @@ import { StatusBar } from "expo-status-bar";
 import React from "react";
 import { ActivityIndicator, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+// Badge feature hidden for now — restore this import alongside the
+// <BadgeUnlockCelebration /> mount below when it ships.
+// import { BadgeUnlockCelebration } from "@/components/BadgeUnlockCelebration";
 import { LumoProvider, useLumo } from "@/context/LumoContext";
 import "../global.css";
 
@@ -20,6 +23,7 @@ function RootStack() {
           contentStyle: { backgroundColor: palette.canvas }
         }}
       />
+      {/* <BadgeUnlockCelebration /> */}
     </>
   );
 }

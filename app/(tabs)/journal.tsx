@@ -20,7 +20,10 @@ type ListItem =
 
 export default function JournalScreen() {
   const router = useRouter();
-  const { journals, isReady, palette, canCreateJournal } = useLumo();
+  const { journals, isReady, isDark, palette, canCreateJournal } = useLumo();
+  const todayCardBackground = isDark ? palette.surfaceStrong : palette.greenDark;
+  const todayCardText = isDark ? palette.ink : palette.white;
+  const todayCardMuted = isDark ? palette.muted : "rgba(255,255,255,0.82)";
   const todayKey = toDateKey();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
@@ -94,19 +97,19 @@ export default function JournalScreen() {
               onPress={() => openEntry(todayKey)}
               style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
             >
-              <Card tone="dark" style={[styles.todayCard, { backgroundColor: palette.greenDark }]}>
-                <View style={[styles.todayIcon, { backgroundColor: "rgba(255,255,255,0.16)" }]}>
-                  <Icon name={todayEntry ? "edit" : "messageEdit"} size={22} color={palette.white} weight="bulk" />
+              <Card tone="dark" style={[styles.todayCard, { backgroundColor: todayCardBackground }]}>
+                <View style={[styles.todayIcon, { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.16)" }]}>
+                  <Icon name={todayEntry ? "edit" : "messageEdit"} size={22} color={todayCardText} weight="bulk" />
                 </View>
                 <View style={styles.todayCopy}>
-                  <AppText variant="titleSmall" color={palette.white} style={styles.todayTitle}>
+                  <AppText variant="titleSmall" color={todayCardText} style={styles.todayTitle}>
                     {todayEntry ? "Today's journal" : "Add your journal"}
                   </AppText>
-                  <AppText variant="bodySmall" color="rgba(255,255,255,0.82)" numberOfLines={1}>
+                  <AppText variant="bodySmall" color={todayCardMuted} numberOfLines={1}>
                     {todayEntry ? markdownToPlainText(todayEntry.content) || "Tap to continue writing." : "Tap to write about today."}
                   </AppText>
                 </View>
-                <Icon name="chevronDown" size={20} color="rgba(255,255,255,0.7)" weight="bulk" style={styles.todayChevron} />
+                <Icon name="chevronDown" size={20} color={todayCardMuted} weight="bulk" style={styles.todayChevron} />
               </Card>
             </Pressable>
 

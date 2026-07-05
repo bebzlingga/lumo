@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.lexendSemiBold,
     fontSize: 16,
     lineHeight: 20,
-    transform: [{ translateY: -7 }]
+    transform: [{ translateY: -8 }]
   },
   editContent: {
     paddingHorizontal: spacing.xs,

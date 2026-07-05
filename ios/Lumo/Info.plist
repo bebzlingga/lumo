@@ -42,6 +42,8 @@
     <string>Lumo needs the microphone to dictate your journal.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Lumo needs photo access to attach images to your journal.</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>Lumo saves your badge cards to your photo library when you download them.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>Lumo uses speech recognition to turn your voice into text.</string>
     <key>NSAppTransportSecurity</key>

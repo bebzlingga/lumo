@@ -138,6 +138,7 @@ export type IconName =
   | "smiley"
   | "sparkle"
   | "star"
+  | "streakFire"
   | "sun"
   | "taskSquare"
   | "timer"
@@ -209,6 +210,9 @@ const iconMap: Record<IconName, IconsaxIcon> = {
   sparkle: MagicStar,
   messageEdit: MessageEdit,
   star: Star,
+  // Placeholder mapping — "streakFire" short-circuits to the FireIcon SVG in
+  // the Icon component and never reaches the iconsax map.
+  streakFire: Flashy,
   sun: Sun,
   taskSquare: TaskSquare,
   timer: Timer,
@@ -246,7 +250,7 @@ export function Icon({
   name: IconName;
   weight?: IconWeight;
 }) {
-  if (name === "fire") {
+  if (name === "streakFire") {
     return <FireIcon size={typeof size === "number" ? size : 20} />;
   }
 

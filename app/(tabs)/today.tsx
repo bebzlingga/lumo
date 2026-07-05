@@ -1,7 +1,8 @@
 import { useRouter } from 'expo-router'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { AppState, FlatList, NativeScrollEvent, NativeSyntheticEvent, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native'
+import { AppState, FlatList, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native'
 import ConfettiCannon from 'react-native-confetti-cannon'
+import Svg, { Circle as SvgCircle, Path as SvgPath } from 'react-native-svg'
 import { fontFamilies, layout, radius, spacing } from '@/constants/theme'
 import { useLumo } from '@/context/LumoContext'
 import { alpha } from '@/lib/color'
@@ -122,9 +123,84 @@ const CARD_GAP = 10
 const CARD_PEEK = 12
 const CARD_SIDE = CARD_GAP + CARD_PEEK
 
+type ResourceMotif = 'journey' | 'faqs' | 'next'
+
+function sparklePath(cx: number, cy: number, size: number) {
+	const waist = size * 0.28
+
+	return `M${cx} ${cy - size} L${cx + waist} ${cy - waist} L${cx + size} ${cy} L${cx + waist} ${cy + waist} L${cx} ${cy + size} L${cx - waist} ${cy + waist} L${cx - size} ${cy} L${cx - waist} ${cy - waist} Z`
+}
+
+/** Soft decorative shapes anchored to the card's right edge, tinted from the
+ * active palette so they follow theme and dark mode. */
+function ResourceCardBackdrop({ motif }: { motif: ResourceMotif }) {
+	const { palette } = useLumo()
+	const soft = alpha(palette.greenSoft, '4D')
+	const softer = alpha(palette.greenSoft, '2E')
+	const glowTint = alpha(palette.glow, '59')
+
+	return (
+		<View
+			style={[StyleSheet.absoluteFill, styles.resourceBackdrop]}
+			pointerEvents='none'
+		>
+			<Svg
+				width={160}
+				height={150}
+			>
+				{motif === 'journey' ? (
+					<>
+						<SvgCircle cx={165} cy={150} r={72} fill={softer} />
+						<SvgCircle cx={165} cy={150} r={46} fill={soft} />
+						<SvgPath
+							d='M18 118 C 58 100, 74 58, 128 34'
+							stroke={glowTint}
+							strokeWidth={3}
+							strokeDasharray='1 11'
+							strokeLinecap='round'
+							fill='none'
+						/>
+						<SvgPath d={sparklePath(136, 28, 9)} fill={palette.glow} opacity={0.75} />
+					</>
+				) : null}
+				{motif === 'faqs' ? (
+					<>
+						<SvgCircle cx={148} cy={6} r={58} fill={alpha(palette.glowSoft, '66')} />
+						<SvgCircle cx={104} cy={104} r={34} fill={softer} />
+						<SvgCircle cx={64} cy={34} r={9} fill={glowTint} />
+						<SvgCircle cx={148} cy={116} r={14} fill={soft} />
+					</>
+				) : null}
+				{motif === 'next' ? (
+					<>
+						<SvgCircle cx={168} cy={140} r={54} fill={softer} />
+						<SvgPath d={sparklePath(122, 40, 15)} fill={glowTint} />
+						<SvgPath d={sparklePath(88, 96, 9)} fill={soft} />
+						<SvgPath d={sparklePath(146, 92, 6)} fill={palette.glow} opacity={0.55} />
+					</>
+				) : null}
+			</Svg>
+		</View>
+	)
+}
+
 // NativeWind's css-interop drops function-valued `style` props on Pressable,
 // so pressed state is tracked manually and the style is passed as a plain array.
-function ResourceCard({ icon, label, description, onPress }: { icon: IconName; label: string; description: string; onPress: () => void }) {
+function ResourceCard({
+	icon,
+	label,
+	description,
+	width,
+	motif,
+	onPress,
+}: {
+	icon: IconName
+	label: string
+	description: string
+	width: number
+	motif: ResourceMotif
+	onPress: () => void
+}) {
 	const { palette, isDark } = useLumo()
 	const [pressed, setPressed] = useState(false)
 
@@ -137,9 +213,10 @@ function ResourceCard({ icon, label, description, onPress }: { icon: IconName; l
 			onPressOut={() => setPressed(false)}
 			style={[
 				styles.resourceCard,
-				{ backgroundColor: palette.card, shadowColor: palette.shadow, shadowOpacity: isDark ? 0.32 : 0.09, opacity: pressed ? 0.85 : 1 },
+				{ width, backgroundColor: palette.card, shadowColor: isDark ? 'transparent' : palette.shadow, opacity: pressed ? 0.85 : 1 },
 			]}
 		>
+			<ResourceCardBackdrop motif={motif} />
 			<Icon name={icon} size={22} color={palette.greenDark} weight='bulk' />
 			<AppText variant='bodySmall' color={palette.ink} style={styles.resourceLabel}>
 				{label}
@@ -160,6 +237,7 @@ export default function TodayScreen() {
 	const activeHabits = habits.filter((habit) => habit.status === 'active')
 	const bestStreak = bestStreakAcrossHabits(habits)
 	const selectedHabits = activeHabits.filter((habit) => isScheduledOnDate(habit, selectedDateKey))
+	const resourceCardWidth = (width - SCREEN_PADDING * 2) * 0.7
 
 	// Page-wide confetti when every habit for the selected day gets completed.
 	// Only fires on the transition to all-done while staying on the same day —
@@ -308,10 +386,19 @@ export default function TodayScreen() {
 				>
 					Explore
 				</AppText>
-				<View style={styles.resourceCards}>
-					<ResourceCard icon='sparkle' label='Habit Journey' description='Habit science, made simple' onPress={() => router.push('/tips')} />
-					<ResourceCard icon='note' label='FAQs' description='Quick answers about Lumo' onPress={() => router.push('/faqs')} />
-				</View>
+				<ScrollView
+					horizontal
+					showsHorizontalScrollIndicator={false}
+					style={styles.resourceScroller}
+					contentContainerStyle={styles.resourceCards}
+				>
+					<ResourceCard width={resourceCardWidth} motif='journey' icon='sparkle' label='Habit Journey' description='Habit science, made simple' onPress={() => router.push('/tips')} />
+					<ResourceCard width={resourceCardWidth} motif='faqs' icon='note' label='FAQs' description='Quick answers about Lumo' onPress={() => router.push('/faqs')} />
+					{/* Badges entry hidden for now — restore when the badge feature ships.
+					<ResourceCard width={resourceCardWidth} motif='next' icon='award' label='Badges' description='Celebrate your milestones' onPress={() => router.push('/badges')} />
+					*/}
+					<ResourceCard width={resourceCardWidth} motif='next' icon='star' label="What's next" description='Vote on what we build' onPress={() => router.push('/feature-soon')} />
+				</ScrollView>
 			</View>
 
 			{showConfetti ? (
@@ -377,9 +464,11 @@ const styles = StyleSheet.create({
 	},
 	avatarCircle: {
 		position: 'absolute',
-		width: 46,
-		height: 46,
-		borderRadius: 23,
+		top: 0,
+		left: 0,
+		width: 54,
+		height: 54,
+		borderRadius: 27,
 	},
 	nameBlock: {
 		flex: 1,
@@ -416,24 +505,39 @@ const styles = StyleSheet.create({
 		fontFamily: fontFamilies.lexendSemiBold,
 		marginBottom: spacing.xxs,
 	},
+	resourceScroller: {
+		marginHorizontal: -SCREEN_PADDING,
+		marginVertical: -spacing.lg,
+	},
+	// Generous vertical padding (offset by the negative margins above) keeps
+	// the soft card shadows from clipping at the scroll view bounds.
 	resourceCards: {
-		flexDirection: 'row',
 		gap: spacing.sm,
+		paddingHorizontal: SCREEN_PADDING,
+		paddingVertical: spacing.lg,
 	},
 	resourceCard: {
 		flex: 1,
 		alignItems: 'flex-start',
 		gap: spacing.xxs,
-		padding: spacing.md,
+		padding: spacing.lg,
 		borderRadius: radius.xl,
-		shadowOffset: { width: 0, height: 7 },
-		shadowRadius: 22,
-		elevation: 4,
+		shadowOffset: { width: 0, height: 3 },
+		shadowOpacity: 0.08,
+		shadowRadius: 10,
+		elevation: 2,
+	},
+	// Clips the decorative shapes to the card's rounded corners. The clip
+	// lives here instead of on the card so the iOS shadow isn't masked away.
+	resourceBackdrop: {
+		alignItems: 'flex-end',
+		borderRadius: radius.xl,
+		overflow: 'hidden',
 	},
 	resourceLabel: {
-		fontFamily: fontFamilies.lexendSemiBold,
-		fontSize: 15,
-		lineHeight: 20,
+		fontFamily: fontFamilies.lexendBold,
+		fontSize: 17,
+		lineHeight: 22,
 		marginTop: spacing.xxs,
 	},
 	resourceDescription: {
