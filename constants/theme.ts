@@ -15,7 +15,7 @@ export type ThemeColorScheme = (typeof themeColorOptions)[number]["key"];
 export type LumoPalette = typeof lightPalette;
 
 export const lightPalette = {
-  canvas: "#FFFDF8",
+  canvas: "#FFFFFF",
   surface: "#FFF7E6",
   surfaceStrong: "#BBDBB1",
   card: "#FFFFFF",
@@ -87,7 +87,7 @@ type PaletteAccent = Pick<
 const themeAccentPalettes = {
   black: {
     light: {
-      canvas: "#FAFBF8",
+      canvas: "#FFFFFF",
       surface: "#ECEEE9",
       surfaceStrong: "#D8DDD6",
       card: "#FFFFFF",
@@ -121,7 +121,7 @@ const themeAccentPalettes = {
   },
   blue: {
     light: {
-      canvas: "#FCFEFF",
+      canvas: "#FFFFFF",
       surface: "#EEF7FB",
       surfaceStrong: "#C8DEE8",
       card: "#FFFFFF",
@@ -155,7 +155,7 @@ const themeAccentPalettes = {
   },
   indigo: {
     light: {
-      canvas: "#FEFDFF",
+      canvas: "#FFFFFF",
       surface: "#F3F2FD",
       surfaceStrong: "#DAD9F4",
       card: "#FFFFFF",
@@ -189,7 +189,7 @@ const themeAccentPalettes = {
   },
   orange: {
     light: {
-      canvas: "#FFFDFA",
+      canvas: "#FFFFFF",
       surface: "#FFF3E7",
       surfaceStrong: "#F1D4B9",
       card: "#FFFFFF",
@@ -223,7 +223,7 @@ const themeAccentPalettes = {
   },
   pink: {
     light: {
-      canvas: "#FFFDFF",
+      canvas: "#FFFFFF",
       surface: "#FFF0F6",
       surfaceStrong: "#F1D4E2",
       card: "#FFFFFF",
@@ -257,7 +257,7 @@ const themeAccentPalettes = {
   },
   purple: {
     light: {
-      canvas: "#FFFDFF",
+      canvas: "#FFFFFF",
       surface: "#F7F0FC",
       surfaceStrong: "#E5D7F1",
       card: "#FFFFFF",

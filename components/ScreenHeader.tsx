@@ -31,6 +31,7 @@ type ScreenHeaderAction = {
   onPress: () => void;
   iconWeight?: IconWeight;
   iconSize?: number;
+  iconStyle?: StyleProp<ViewStyle>;
 };
 
 export function ScreenHeader({
@@ -45,7 +46,7 @@ export function ScreenHeader({
   centerContent?: ReactNode;
   centerLabel?: string;
   onCenterPress?: () => void;
-  leftAction: ScreenHeaderAction;
+  leftAction?: ScreenHeaderAction;
   rightAction?: ScreenHeaderAction;
   rightActions?: ScreenHeaderAction[];
   style?: StyleProp<ViewStyle>;
@@ -58,17 +59,21 @@ export function ScreenHeader({
 
   return (
     <View style={[styles.header, style]}>
-      <View style={[styles.sideSlot, { width: sideWidth }]}>
-        <IconButton
-          icon={leftAction.icon}
-          label={leftAction.label}
-          onPress={leftAction.onPress}
-          iconWeight={leftAction.iconWeight ?? "bulk"}
-          iconSize={leftAction.iconSize ?? HEADER_VISUAL_ICON_SIZES[leftAction.icon] ?? HEADER_ICON_SIZE}
-          buttonSize={HEADER_BUTTON_SIZE}
-          iconStyle={HEADER_ICON_OFFSETS[leftAction.icon]}
-        />
-      </View>
+      {leftAction ? (
+        <View style={[styles.sideSlot, { width: sideWidth }]}>
+          <IconButton
+            icon={leftAction.icon}
+            label={leftAction.label}
+            onPress={leftAction.onPress}
+            iconWeight={leftAction.iconWeight ?? "bulk"}
+            iconSize={leftAction.iconSize ?? HEADER_VISUAL_ICON_SIZES[leftAction.icon] ?? HEADER_ICON_SIZE}
+            buttonSize={HEADER_BUTTON_SIZE}
+            iconStyle={HEADER_ICON_OFFSETS[leftAction.icon]}
+          />
+        </View>
+      ) : (
+        <View style={[styles.placeholder, { width: sideWidth }]} />
+      )}
       {onCenterPress ? (
         <Pressable
           accessibilityRole="button"
@@ -94,7 +99,7 @@ export function ScreenHeader({
               iconWeight={action.iconWeight ?? "bulk"}
               iconSize={action.iconSize ?? HEADER_VISUAL_ICON_SIZES[action.icon] ?? HEADER_ICON_SIZE}
               buttonSize={HEADER_BUTTON_SIZE}
-              iconStyle={HEADER_ICON_OFFSETS[action.icon]}
+              iconStyle={action.iconStyle ?? HEADER_ICON_OFFSETS[action.icon]}
             />
           ))}
         </View>

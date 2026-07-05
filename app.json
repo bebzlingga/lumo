@@ -17,7 +17,21 @@
     "plugins": [
       "expo-router",
       "expo-notifications",
-      "expo-asset"
+      "expo-asset",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Lumo needs photo access to attach images to your journal."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Lumo needs the microphone to dictate your journal.",
+          "speechRecognitionPermission": "Lumo uses speech recognition to turn your voice into text."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

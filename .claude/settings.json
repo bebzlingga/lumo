@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx expo *)",
+      "Bash(awk 'NR>=690 && NR<=760 && /\\\\}, \\\\[/{print NR\": \"$0}' context/LumoContext.tsx)",
+      "Bash(node -e \"const {createAvatar}=require\\('@dicebear/core'\\); const {avataaars}=require\\('@dicebear/collection'\\); const s=createAvatar\\(avataaars,{seed:'x', top:['hat'], clothing:['hoodie'], skinColor:['edb98a']}\\).toString\\(\\); console.log\\(s.slice\\(0,120\\)\\); console.log\\('LEN', s.length\\);\")",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const p=require\\('@dicebear/core/package.json'\\); console.log\\('main:',p.main,'module:',p.module,'type:',p.type\\); console.log\\('exports:', JSON.stringify\\(p.exports\\)\\);\")",
+      "Bash(python3 -c \"import sys,json; p=json.load\\(sys.stdin\\); print\\('type:',p.get\\('type'\\)\\); print\\('main:',p.get\\('main'\\)\\); print\\('module:',p.get\\('module'\\)\\); print\\('rn:',p.get\\('react-native'\\)\\); print\\('exports:',json.dumps\\(p.get\\('exports'\\),indent=1\\)\\)\")",
+      "Bash(python3 -c \"import sys,json;p=json.load\\(sys.stdin\\);print\\('type:',p.get\\('type'\\),'main:',p.get\\('main'\\)\\)\")",
+      "Bash(node --input-type=module -e \"import {createAvatar} from '@dicebear/core'; import * as avataaars from '@dicebear/avataaars'; const s=createAvatar\\(avataaars,{seed:'x',top:['hat']}\\).toString\\(\\); console.log\\('OK len', s.length\\);\")",
+      "Bash(npm uninstall *)",
+      "Bash(node --input-type=module -e \"import {createAvatar} from '@dicebear/core'; import * as a from '@dicebear/avataaars'; console.log\\('len', createAvatar\\(a,{seed:'x'}\\).toString\\(\\).length\\);\")",
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(perl -0pi -e 's/\\(<ThumbGrid base=\\\\{draft\\\\} category=\"[a-zA-Z]+\" options=\\\\{[^}]+\\\\} selected=\\\\{[^}]+\\\\} onSelect=\\\\{[^}]+\\\\} palette=\\\\{palette\\\\}\\)\\( \\\\/>\\)/$1 size={thumbSize}$2/g' app/avatar.tsx)",
+      "Bash(grep -n \"const { palette } = useLumo\\(\\)\\\\|const { palette, isDark }\" components/HabitForm.tsx)",
+      "Bash(node -e \"const m=require\\('expo-speech-recognition'\\); console.log\\('exports:', Object.keys\\(m\\).join\\(', '\\)\\)\")",
+      "Bash(node -e \"const m=require\\('expo-speech-recognition'\\); console.log\\('hooks:', typeof m.useSpeechRecognitionEvent, 'module:', typeof m.ExpoSpeechRecognitionModule\\)\")",
+      "Bash(node -e \"const fs=require\\('expo-file-system'\\); console.log\\('documentDirectory' in fs, typeof fs.copyAsync, typeof fs.makeDirectoryAsync\\)\")",
+      "Bash(node -e \"console.log\\('svg', require\\('./node_modules/react-native-svg/package.json'\\).version\\)\")",
+      "Bash(node -e \"const p=require\\('./node_modules/react-native-svg/package.json'\\); console.log\\('react-native-svg', p.version\\)\")",
+      "Bash(node -e \"const s=require\\('react-native-svg'\\); ['Svg','Path','Circle','Rect','Line','LinearGradient','Stop','Ellipse','G','Polygon','ClipPath','Defs','Rect'].forEach\\(k=>console.log\\(k, typeof s[k]\\)\\)\")",
+      "Bash(lsof -nP -iTCP:8081 -sTCP:LISTEN)",
+      "Bash(lsof -nP -iTCP:8081 -sTCP:LISTEN -t)",
+      "Bash(awk 'NR>1{print $2}')",
+      "Bash(npx vite *)",
+      "Bash(echo \"=== exit: $? ===\")",
+      "Bash(node /private/tmp/claude-501/-Users-bebzlingga-Documents-GitHub-lumo/b77ac768-1cf1-4fa8-bf28-05cfe01e6c0e/scratchpad/analyze.mjs)",
+      "Bash(node /private/tmp/claude-501/-Users-bebzlingga-Documents-GitHub-lumo/b77ac768-1cf1-4fa8-bf28-05cfe01e6c0e/scratchpad/init.mjs)",
+      "Bash(node -e \"const FIRST=210,SP=240; const cw=\\(c\\)=>FIRST+Math.max\\(0,c-1\\)*SP+FIRST; for\\(const c of [100,300,1000,5000]\\) console.log\\('count',c,'contentWidth\\(px\\)',cw\\(c\\)\\)\")",
+      "Bash(node /private/tmp/claude-501/-Users-bebzlingga-Documents-GitHub-lumo/b77ac768-1cf1-4fa8-bf28-05cfe01e6c0e/scratchpad/timing.mjs)",
+      "Bash(node /private/tmp/claude-501/-Users-bebzlingga-Documents-GitHub-lumo/b77ac768-1cf1-4fa8-bf28-05cfe01e6c0e/scratchpad/wheel.mjs)",
+      "Bash(node /private/tmp/claude-501/-Users-bebzlingga-Documents-GitHub-lumo/b77ac768-1cf1-4fa8-bf28-05cfe01e6c0e/scratchpad/listeners.mjs)",
+      "Bash(awk '{print $5, $9}')",
+      "Bash(curl -s -o /dev/null -w \"reload:%{http_code}\" -X POST http://localhost:8081/reload)"
+    ]
+  }
+}

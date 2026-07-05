@@ -38,6 +38,12 @@
     <string>12.0</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Lumo needs the microphone to dictate your journal.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Lumo needs photo access to attach images to your journal.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Lumo uses speech recognition to turn your voice into text.</string>
     <key>NSAppTransportSecurity</key>
     <dict>
       <key>NSAllowsArbitraryLoads</key>

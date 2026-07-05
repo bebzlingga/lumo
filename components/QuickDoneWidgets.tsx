@@ -2,7 +2,7 @@ import * as Haptics from "expo-haptics";
 import React from "react";
 import { Alert, Animated, Easing, Pressable, StyleSheet, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
-import { fontFamilies, radius, spacing } from "@/constants/theme";
+import { fontFamilies, radius, spacing, ThemeColorScheme } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { toDateKey } from "@/lib/date";
 import { completionCount, currentStreak, dailyTarget, isDoneOnDate } from "@/lib/habitMath";
@@ -11,20 +11,100 @@ import { AppText, Card } from "./ui";
 import { HabitIcon } from "./HabitIcon";
 import { Icon } from "./Icon";
 
-const ACTION_SIZE = 48;
-const ACTION_RING_STROKE = 3.5;
-const ACTION_RING_RADIUS = 19;
-const ACTION_RING_CIRCUMFERENCE = 2 * Math.PI * ACTION_RING_RADIUS;
 const UNDO_HOLD_DURATION_MS = 1500;
+
+/**
+ * Contrasting pop color per theme for in-progress state (ring fill + TO DO
+ * badge) — deliberately NOT the theme's own hue, the way amber pops on the
+ * black theme. All are light enough to carry near-black text in both modes.
+ */
+const PROGRESS_ACCENTS: Record<ThemeColorScheme, string> = {
+  black: "#FFC94D", // amber
+  green: "#EE8B6C", // terracotta
+  blue: "#F09B7A", // peach coral
+  indigo: "#F0928A", // coral
+  orange: "#E5C685", // cream / sand
+  pink: "#F7BE45", // deep gold
+  purple: "#F2A08C" // salmon
+};
+const PROGRESS_ACCENT_TEXT = "#141413";
+
+const RING_SIZE = 30;
+const RING_STROKE = 5;
+const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const confettiPieces = [
-  { left: 14, top: 10, size: 7, fall: 34, drift: -12, rotate: 140 },
-  { left: 26, top: 18, size: 5, fall: 40, drift: 10, rotate: -120 },
-  { left: 42, top: 8, size: 8, fall: 38, drift: -6, rotate: 170 },
-  { left: 58, top: 16, size: 5, fall: 36, drift: 12, rotate: 100 },
-  { left: 72, top: 9, size: 7, fall: 42, drift: -10, rotate: -150 },
-  { left: 84, top: 20, size: 6, fall: 35, drift: 8, rotate: 130 }
-];
+
+/**
+ * A progress ring split into `total` arc segments with gaps between them.
+ * Each segment has its own animated value: the green arc grows over the gray
+ * track when it fills (0 -> 1) and shrinks back when a completion is undone.
+ */
+function SegmentedRing({ total, filled }: { total: number; filled: number }) {
+  const { palette, settings } = useLumo();
+  const fillColor = PROGRESS_ACCENTS[settings.colorScheme ?? "green"] ?? palette.glow;
+  const slice = RING_CIRCUMFERENCE / total;
+  // Round line caps extend half the stroke width into each side of a gap,
+  // so pad the gap enough to stay visible after the caps are drawn.
+  const gap = Math.min(8, Math.max(slice * 0.25, RING_STROKE + 3));
+  const segment = slice - gap;
+  const segmentAnims = React.useRef<Animated.Value[]>([]).current;
+
+  // Lazily create one value per segment, starting at its current fill state
+  // so nothing animates on first mount.
+  for (let index = segmentAnims.length; index < total; index++) {
+    segmentAnims.push(new Animated.Value(index < filled ? 1 : 0));
+  }
+
+  React.useEffect(() => {
+    segmentAnims.slice(0, total).forEach((value, index) => {
+      Animated.timing(value, {
+        toValue: index < filled ? 1 : 0,
+        duration: 380,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false
+      }).start();
+    });
+  }, [filled, total, segmentAnims]);
+
+  return (
+    <Svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}>
+      {Array.from({ length: total }, (_, index) => {
+        const shared = {
+          cx: RING_SIZE / 2,
+          cy: RING_SIZE / 2,
+          r: RING_RADIUS,
+          strokeWidth: RING_STROKE,
+          strokeDashoffset: -(index * slice + gap / 2),
+          strokeLinecap: "round" as const,
+          fill: "none",
+          originX: RING_SIZE / 2,
+          originY: RING_SIZE / 2,
+          rotation: -90
+        };
+
+        return (
+          <React.Fragment key={index}>
+            <Circle {...shared} stroke={palette.chartTrack} strokeDasharray={`${segment} ${RING_CIRCUMFERENCE - segment}`} />
+            <AnimatedCircle
+              {...shared}
+              stroke={fillColor}
+              strokeDasharray={segmentAnims[index].interpolate({
+                inputRange: [0, 1],
+                outputRange: [`0.01 ${RING_CIRCUMFERENCE}`, `${segment} ${RING_CIRCUMFERENCE - segment}`]
+              })}
+              opacity={segmentAnims[index].interpolate({
+                inputRange: [0, 0.04, 1],
+                outputRange: [0, 1, 1]
+              })}
+            />
+          </React.Fragment>
+        );
+      })}
+    </Svg>
+  );
+}
 
 type Props = {
   habits: Habit[];
@@ -47,51 +127,39 @@ function WidgetHabitRow({
   onHoldEnd?: () => void;
   onHoldStart?: () => void;
 }) {
-  const { palette, isDark, completeHabit, undoHabit } = useLumo();
+  const { palette, isDark, settings, completeHabit, undoHabit } = useLumo();
   const done = isDoneOnDate(habit, dateKey);
+  const todoBadgeColor = PROGRESS_ACCENTS[settings.colorScheme ?? "green"] ?? palette.glow;
+  const todoBadgeTextColor = PROGRESS_ACCENT_TEXT;
   const count = completionCount(habit, dateKey);
   const target = dailyTarget(habit);
   const isMultiple = habit.goal.type === "multiple";
-  const showProgressRing = isMultiple && !done;
-  const progress = target > 0 ? Math.min(count, target) / target : 0;
   const progressLabel = React.useMemo(
     () => (habit.goal.type === "multiple" ? `${Math.min(count, target)}/${target} today` : `${currentStreak(habit)} day streak`),
     [habit, count, target]
   );
   const iconBackgroundColor = isDark ? palette.greenSoft : palette.greenDark;
   const habitIconColor = isDark ? palette.greenDark : palette.white;
-  const progressTrackColor = isDark ? `${palette.greenSoft}4D` : `${palette.greenSoft}66`;
-  const iconProgress = React.useRef(new Animated.Value(1)).current;
-  const ringProgress = React.useRef(new Animated.Value(progress)).current;
   const suppressTapUntil = React.useRef(0);
-  const undoPromptOpen = React.useRef(false);
-  const iconWeight = done ? "bulk" : "linear";
+  const promptOpen = React.useRef(false);
+  const badgeScale = React.useRef(new Animated.Value(1)).current;
+  const prevDone = React.useRef(done);
   const canAddCompletion = !disabledActions && !done;
   const canUndoCompletion = !disabledActions && count > 0;
   const isActionDisabled = !canAddCompletion && !canUndoCompletion;
-  const ringOffset = ringProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [ACTION_RING_CIRCUMFERENCE, 0]
-  });
 
   React.useEffect(() => {
-    iconProgress.setValue(0.82);
-    Animated.spring(iconProgress, {
-      toValue: 1,
-      friction: 5,
-      tension: 180,
-      useNativeDriver: true
-    }).start();
-  }, [done, iconProgress]);
-
-  React.useEffect(() => {
-    Animated.timing(ringProgress, {
-      toValue: progress,
-      duration: 360,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false
-    }).start();
-  }, [progress, ringProgress]);
+    if (done && !prevDone.current) {
+      badgeScale.setValue(0.6);
+      Animated.spring(badgeScale, {
+        toValue: 1,
+        friction: 4,
+        tension: 160,
+        useNativeDriver: true
+      }).start();
+    }
+    prevDone.current = done;
+  }, [done, badgeScale]);
 
   function handlePressIn() {
     if (canUndoCompletion) {
@@ -103,33 +171,67 @@ function WidgetHabitRow({
     onHoldEnd?.();
   }
 
-  function handleAddCompletion() {
+  function handleRowPress() {
     if (Date.now() < suppressTapUntil.current) {
       return;
     }
 
-    if (done && canUndoCompletion) {
+    if (canAddCompletion) {
+      confirmAddCompletion();
+      return;
+    }
+
+    if (canUndoCompletion) {
       handleUndoCompletion();
+    }
+  }
+
+  function confirmAddCompletion() {
+    if (promptOpen.current) {
       return;
     }
 
-    if (!canAddCompletion) {
-      return;
-    }
-
-    if (count + 1 >= target) {
-      onCompleted?.(habit.id);
-    }
-
-    completeHabit(habit.id, dateKey);
+    promptOpen.current = true;
+    suppressTapUntil.current = Date.now() + 500;
+    Alert.alert(
+      isMultiple ? "Add a completion?" : "Complete habit?",
+      isMultiple
+        ? `Log one more for ${habit.name} — that makes ${Math.min(count + 1, target)}/${target} today.`
+        : `Mark ${habit.name} as done for today?`,
+      [
+        {
+          text: "Not yet",
+          style: "cancel",
+          onPress: () => {
+            promptOpen.current = false;
+          }
+        },
+        {
+          text: isMultiple ? "Add" : "Complete",
+          onPress: () => {
+            promptOpen.current = false;
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+            if (count + 1 >= target) {
+              onCompleted?.(habit.id);
+            }
+            completeHabit(habit.id, dateKey);
+          }
+        }
+      ],
+      {
+        onDismiss: () => {
+          promptOpen.current = false;
+        }
+      }
+    );
   }
 
   function handleUndoCompletion(trigger: "tap" | "longPress" = "tap") {
-    if (!canUndoCompletion || undoPromptOpen.current) {
+    if (!canUndoCompletion || promptOpen.current) {
       return;
     }
 
-    undoPromptOpen.current = true;
+    promptOpen.current = true;
     suppressTapUntil.current = Date.now() + 1000;
     if (trigger === "longPress") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
@@ -143,21 +245,21 @@ function WidgetHabitRow({
           text: "Cancel",
           style: "cancel",
           onPress: () => {
-            undoPromptOpen.current = false;
+            promptOpen.current = false;
           }
         },
         {
           text: "Undo",
           style: "destructive",
           onPress: () => {
-            undoPromptOpen.current = false;
+            promptOpen.current = false;
             undoHabit(habit.id, dateKey);
           }
         }
       ],
       {
         onDismiss: () => {
-          undoPromptOpen.current = false;
+          promptOpen.current = false;
         }
       }
     );
@@ -165,16 +267,25 @@ function WidgetHabitRow({
 
   return (
     <Pressable
-      accessibilityLabel={canUndoCompletion ? `${habit.name}. Long press to undo completion.` : undefined}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: isActionDisabled, selected: done }}
+      accessibilityLabel={
+        done
+          ? `${habit.name}. Completed. Tap or long press to undo completion.`
+          : isMultiple
+            ? `${habit.name}. ${progressLabel}. Tap to add a completion.`
+            : `${habit.name}. Tap to complete.`
+      }
       delayLongPress={UNDO_HOLD_DURATION_MS}
-      disabled={!canUndoCompletion}
+      disabled={isActionDisabled}
       onLongPress={() => handleUndoCompletion("longPress")}
+      onPress={handleRowPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       style={styles.widgetRow}
     >
       <View style={[styles.widgetIcon, { backgroundColor: iconBackgroundColor }]}>
-        <HabitIcon value={habit.emoji} color={habitIconColor} size={22} />
+        <HabitIcon value={habit.emoji} color={habitIconColor} size={19} />
       </View>
       <View style={styles.rowText}>
         <AppText variant="titleSmall" numberOfLines={1}>
@@ -184,69 +295,26 @@ function WidgetHabitRow({
           {progressLabel}
         </AppText>
       </View>
-      <Pressable
-        accessibilityLabel={
-          done
-            ? `${progressLabel}. Completed. Tap or long press to undo completion.`
-            : canUndoCompletion
-              ? `${progressLabel}. Tap to add completion. Long press to undo completion.`
-              : habit.goal.type === "multiple"
-                ? "Add completion"
-                : "Mark done"
-        }
-        accessibilityRole="button"
-        accessibilityState={{ disabled: isActionDisabled, selected: done }}
-        delayLongPress={UNDO_HOLD_DURATION_MS}
-        onLongPress={() => handleUndoCompletion("longPress")}
-        onPress={handleAddCompletion}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        disabled={isActionDisabled}
-        style={({ pressed }) => [
-          styles.iconDoneButton,
-          {
-            backgroundColor: showProgressRing ? "transparent" : palette.greenSoft,
-            borderColor: palette.hairline,
-            opacity: disabledActions && !done ? 0.45 : pressed ? 0.76 : 1
-          }
-        ]}
-      >
-        {showProgressRing ? (
-          <View style={styles.progressAction}>
-            <Svg width={ACTION_SIZE} height={ACTION_SIZE} viewBox={`0 0 ${ACTION_SIZE} ${ACTION_SIZE}`} style={styles.progressRing}>
-              <Circle
-                cx={ACTION_SIZE / 2}
-                cy={ACTION_SIZE / 2}
-                r={ACTION_RING_RADIUS}
-                stroke={progressTrackColor}
-                strokeWidth={ACTION_RING_STROKE}
-                fill="none"
-              />
-              <AnimatedCircle
-                cx={ACTION_SIZE / 2}
-                cy={ACTION_SIZE / 2}
-                r={ACTION_RING_RADIUS}
-                stroke={palette.greenDark}
-                strokeWidth={ACTION_RING_STROKE}
-                strokeDasharray={`${ACTION_RING_CIRCUMFERENCE} ${ACTION_RING_CIRCUMFERENCE}`}
-                strokeDashoffset={ringOffset}
-                strokeLinecap="round"
-                fill="none"
-                originX={ACTION_SIZE / 2}
-                originY={ACTION_SIZE / 2}
-                rotation="-90"
-              />
-            </Svg>
-            <Animated.View style={{ opacity: iconProgress, transform: [{ scale: iconProgress }] }}>
-              <Icon name="checkCircle" size={24} color={palette.greenDark} weight={iconWeight} />
-            </Animated.View>
-          </View>
-        ) : (
-          <Animated.View style={{ opacity: iconProgress, transform: [{ scale: iconProgress }] }}>
-            <Icon name="checkCircle" size={23} color={palette.greenDark} weight={iconWeight} />
-          </Animated.View>
-        )}
-      </Pressable>
+      {isMultiple && !done ? (
+        <View style={[styles.ringWrap, { opacity: disabledActions ? 0.45 : 1 }]}>
+          <SegmentedRing total={target} filled={Math.min(count, target)} />
+        </View>
+      ) : (
+        <Animated.View
+          style={[
+            styles.statusBadge,
+            {
+              backgroundColor: done ? palette.greenSoft : todoBadgeColor,
+              opacity: disabledActions && !done ? 0.45 : 1,
+              transform: [{ scale: badgeScale }]
+            }
+          ]}
+        >
+          <AppText variant="caption" color={done ? palette.greenDark : todoBadgeTextColor} style={styles.statusBadgeText}>
+            {done ? "DONE" : "TO DO"}
+          </AppText>
+        </Animated.View>
+      )}
     </Pressable>
   );
 }
@@ -326,111 +394,6 @@ function QuickHabitCard({
   );
 }
 
-function CompletionCelebrationCard() {
-  const { palette, isDark } = useLumo();
-  const entranceProgress = React.useRef(new Animated.Value(0)).current;
-  const confettiProgress = React.useRef(new Animated.Value(0)).current;
-  const cardBackground = isDark ? palette.greenSoft : palette.greenDark;
-  const titleColor = palette.white;
-  const bodyColor = isDark ? palette.greenDark : palette.greenSoft;
-  const confettiColors = [palette.glow, palette.greenSoft, palette.white, palette.accent, bodyColor];
-  const entranceTranslateY = entranceProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [18, 0]
-  });
-  const entranceScale = entranceProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.96, 1]
-  });
-
-  React.useEffect(() => {
-    Animated.spring(entranceProgress, {
-      toValue: 1,
-      friction: 8,
-      tension: 90,
-      useNativeDriver: true
-    }).start();
-  }, [entranceProgress]);
-
-  React.useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(confettiProgress, {
-          toValue: 1,
-          duration: 1700,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true
-        }),
-        Animated.delay(450),
-        Animated.timing(confettiProgress, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true
-        })
-      ])
-    );
-
-    animation.start();
-    return () => animation.stop();
-  }, [confettiProgress]);
-
-  return (
-    <Animated.View style={{ opacity: entranceProgress, transform: [{ translateY: entranceTranslateY }, { scale: entranceScale }] }}>
-      <Card style={[styles.celebrationCard, { backgroundColor: cardBackground }]}>
-        <View pointerEvents="none" style={styles.confettiLayer}>
-          {confettiPieces.map((piece, index) => {
-            const translateY = confettiProgress.interpolate({
-              inputRange: [0, 1],
-              outputRange: [-8, piece.fall]
-            });
-            const translateX = confettiProgress.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, piece.drift]
-            });
-            const rotate = confettiProgress.interpolate({
-              inputRange: [0, 1],
-              outputRange: ["0deg", `${piece.rotate}deg`]
-            });
-            const opacity = confettiProgress.interpolate({
-              inputRange: [0, 0.12, 0.82, 1],
-              outputRange: [0, 1, 1, 0]
-            });
-
-            return (
-              <Animated.View
-                key={`${piece.left}-${piece.top}`}
-                style={[
-                  styles.confettiPiece,
-                  {
-                    backgroundColor: confettiColors[index % confettiColors.length],
-                    height: piece.size,
-                    left: `${piece.left}%`,
-                    opacity,
-                    top: piece.top,
-                    transform: [{ translateX }, { translateY }, { rotate }],
-                    width: piece.size * 1.5
-                  }
-                ]}
-              />
-            );
-          })}
-        </View>
-        <View style={styles.celebrationIcon}>
-          <Icon name="award" size={104} color={titleColor} weight="bulk" />
-        </View>
-        <View style={styles.celebrationCopy}>
-          <AppText variant="titleSmall" color={titleColor} style={styles.celebrationTitle}>
-            Congratulations!
-          </AppText>
-          <AppText variant="body" color={bodyColor} style={styles.celebrationBody}>
-            You showed up for yourself today.
-          </AppText>
-        </View>
-      </Card>
-    </Animated.View>
-  );
-}
-
 export function QuickDoneWidgets({ habits, dateKey = toDateKey(), disabledActions = false }: Props) {
   const { palette } = useLumo();
   const [showCompleted, setShowCompleted] = React.useState(true);
@@ -472,33 +435,29 @@ export function QuickDoneWidgets({ habits, dateKey = toDateKey(), disabledAction
 
   return (
     <View style={styles.wrap}>
-      {needsCompletion.length ? (
-        needsCompletion.map((habit) => (
-          <QuickHabitCard key={habit.id} exiting={settlingCompletedIds.has(habit.id) && isDoneOnDate(habit, dateKey)} habit={habit} style={styles.habitCard}>
-            {({ onHoldEnd, onHoldStart }) => (
-              <WidgetHabitRow
-                habit={habit}
-                dateKey={dateKey}
-                disabledActions={disabledActions}
-                onCompleted={holdCompletedHabit}
-                onHoldEnd={onHoldEnd}
-                onHoldStart={onHoldStart}
-              />
-            )}
-          </QuickHabitCard>
-        ))
-      ) : (
-        <CompletionCelebrationCard />
-      )}
+      {needsCompletion.map((habit) => (
+        <QuickHabitCard key={habit.id} exiting={settlingCompletedIds.has(habit.id) && isDoneOnDate(habit, dateKey)} habit={habit} style={styles.habitCard}>
+          {({ onHoldEnd, onHoldStart }) => (
+            <WidgetHabitRow
+              habit={habit}
+              dateKey={dateKey}
+              disabledActions={disabledActions}
+              onCompleted={holdCompletedHabit}
+              onHoldEnd={onHoldEnd}
+              onHoldStart={onHoldStart}
+            />
+          )}
+        </QuickHabitCard>
+      ))}
 
       {completed.length ? (
-        <View style={styles.completedSection}>
+        <View style={[styles.completedSection, !needsCompletion.length && styles.completedSectionFlush]}>
           <View style={styles.completedHeader}>
             <AppText variant="titleSmall" color={palette.ink} style={styles.completedTitle}>
               Completed
             </AppText>
             <View style={styles.completedHeaderActions}>
-              <AppText variant="bodySmall" color={palette.muted} style={styles.completedCount}>
+              <AppText variant="bodySmall" color={palette.subtle} style={styles.completedCount}>
                 {completed.length} {completed.length === 1 ? "Habit" : "Habits"}
               </AppText>
               <Pressable
@@ -572,66 +531,32 @@ const styles = StyleSheet.create({
   rowText: {
     flex: 1
   },
-  iconDoneButton: {
-    width: ACTION_SIZE,
-    height: ACTION_SIZE,
-    minHeight: ACTION_SIZE,
-    minWidth: ACTION_SIZE,
-    borderRadius: radius.nav,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 0
-  },
-  progressAction: {
-    width: ACTION_SIZE,
-    height: ACTION_SIZE,
+  ringWrap: {
+    minWidth: 56,
     alignItems: "center",
     justifyContent: "center"
   },
-  progressRing: {
-    ...StyleSheet.absoluteFillObject
-  },
-  celebrationCard: {
-    borderRadius: 34,
-    marginBottom: spacing.md,
-    minHeight: 220,
-    paddingVertical: spacing.xxl,
-    paddingHorizontal: spacing.lg,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-    overflow: "hidden"
-  },
-  celebrationIcon: {
+  statusBadge: {
+    minWidth: 56,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center"
   },
-  celebrationCopy: {
-    alignItems: "center",
-    gap: spacing.xxs
-  },
-  celebrationTitle: {
-    fontFamily: fontFamilies.lexendSemiBold,
-    fontSize: 22,
-    lineHeight: 29,
-    textAlign: "center"
-  },
-  celebrationBody: {
-    fontSize: 13,
-    lineHeight: 19,
-    textAlign: "center"
-  },
-  confettiLayer: {
-    ...StyleSheet.absoluteFillObject
-  },
-  confettiPiece: {
-    position: "absolute",
-    borderRadius: radius.xs
+  statusBadgeText: {
+    fontFamily: "Lexend-Black",
+    fontSize: 10,
+    lineHeight: 14,
+    letterSpacing: 0.6
   },
   completedSection: {
     gap: spacing.sm,
     paddingTop: spacing.sm,
     paddingBottom: spacing.xs
+  },
+  completedSectionFlush: {
+    paddingTop: 0
   },
   completedCards: {
     gap: spacing.xs
@@ -652,7 +577,8 @@ const styles = StyleSheet.create({
     gap: spacing.xs
   },
   completedCount: {
-    fontFamily: fontFamilies.lexendSemiBold
+    fontFamily: fontFamilies.lexendSemiBold,
+    opacity: 0.5
   },
   completedToggle: {
     width: 34,

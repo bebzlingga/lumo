@@ -12,9 +12,14 @@ import {
   requestNotificationPermissions,
   scheduleHabitReminder
 } from "@/lib/notifications";
-import { AppSettings, BackupFrequency, CompletionEntry, Habit, HabitCategory, habitCategories, HabitDraft } from "@/types/habit";
+import { AvatarConfig, defaultAvatar, normalizeAvatar } from "@/lib/avatar";
+import { AppSettings, BackupFrequency, CompletionEntry, FeatureRequest, Habit, HabitCategory, habitCategories, HabitDraft, JournalEntry, JournalMood } from "@/types/habit";
 
 const STORAGE_KEY = "@lumo/state/v1";
+// Free users can keep this many habits / journal entries; the one-time purchase
+// lifts both caps.
+export const FREE_HABIT_LIMIT = 3;
+export const FREE_JOURNAL_LIMIT = 3;
 const BACKUP_DIRECTORY_NAME = "Lumo/Backup/";
 const BACKUP_INTERVAL_MS: Record<BackupFrequency, number> = {
   daily: 24 * 60 * 60 * 1000,
@@ -35,18 +40,72 @@ const messages = [
 
 type StoredState = {
   habits: Habit[];
+  journals: JournalEntry[];
   settings: AppSettings;
   hasOnboarded: boolean;
   nickname: string;
+  featureRequests: FeatureRequest[];
+  avatar: AvatarConfig;
 };
+
+// Seed board so it isn't empty on first open. A real backend would replace this.
+const DEFAULT_FEATURE_REQUESTS: FeatureRequest[] = [
+  {
+    id: "seed-widgets",
+    title: "Home screen widgets",
+    description: "Quick-complete habits straight from an iOS/Android widget.",
+    votes: 42,
+    votedByMe: false,
+    mine: false,
+    status: "planned",
+    createdAt: "2026-01-05T00:00:00.000Z"
+  },
+  {
+    id: "seed-apple-health",
+    title: "Apple Health sync",
+    description: "Pull steps and workouts in to auto-complete fitness habits.",
+    votes: 28,
+    votedByMe: false,
+    mine: false,
+    status: "open",
+    createdAt: "2026-02-11T00:00:00.000Z"
+  },
+  {
+    id: "seed-cloud-sync",
+    title: "Cloud sync across devices",
+    description: "Keep habits and journals in sync between phone and tablet.",
+    votes: 19,
+    votedByMe: false,
+    mine: false,
+    status: "open",
+    createdAt: "2026-03-02T00:00:00.000Z"
+  }
+];
 
 type LumoContextValue = StoredState & {
   isReady: boolean;
+  deletedHabits: Habit[];
   isDark: boolean;
   palette: LumoPalette;
   lastMessage: string;
+  // Freemium entitlement + gating.
+  isPro: boolean;
+  habitLimit: number;
+  ownedHabitCount: number;
+  canCreateHabit: boolean;
+  journalLimit: number;
+  journalCount: number;
+  canCreateJournal: boolean;
+  purchasePro: () => Promise<boolean>;
+  restorePurchases: () => Promise<boolean>;
+  setProUnlocked: (value: boolean) => void;
+  // Feature request board. Visible to all; submitting/voting is Pro-only.
+  canUseFeatureBoard: boolean;
+  submitFeatureRequest: (title: string, description?: string, photoUri?: string) => void;
+  toggleFeatureVote: (id: string) => void;
   setHasOnboarded: (value: boolean) => void;
   setNickname: (value: string) => void;
+  setAvatar: (config: AvatarConfig) => void;
   setThemeMode: (mode: AppSettings["themeMode"]) => void;
   setColorScheme: (colorScheme: ThemeColorScheme) => void;
   setNotificationsEnabled: (enabled: boolean) => Promise<void>;
@@ -63,6 +122,11 @@ type LumoContextValue = StoredState & {
   archiveHabit: (id: string) => Promise<void>;
   recoverHabit: (id: string) => Promise<void>;
   deleteHabit: (id: string) => Promise<void>;
+  restoreHabit: (id: string) => Promise<void>;
+  permanentlyDeleteHabit: (id: string) => Promise<void>;
+  emptyTrash: () => Promise<void>;
+  saveJournal: (date: string, content: string, photoUri?: string, mood?: JournalMood, title?: string) => void;
+  deleteJournal: (date: string) => void;
   exportData: () => string;
   createDataBackup: () => Promise<string>;
   importData: (json: string) => Promise<void>;
@@ -74,14 +138,18 @@ const defaultSettings: AppSettings = {
   notificationStatus: "unknown",
   notificationsEnabled: true,
   autoBackupEnabled: false,
-  backupFrequency: "weekly"
+  backupFrequency: "weekly",
+  isPro: false
 };
 
 const defaultState: StoredState = {
   habits: [],
+  journals: [],
   settings: defaultSettings,
   hasOnboarded: false,
-  nickname: ""
+  nickname: "",
+  featureRequests: DEFAULT_FEATURE_REQUESTS,
+  avatar: defaultAvatar()
 };
 
 const LumoContext = createContext<LumoContextValue | null>(null);
@@ -127,7 +195,10 @@ function normalizeState(parsed: StoredState): StoredState {
     hasOnboarded: parsed.hasOnboarded ?? false,
     nickname: parsed.nickname ?? "",
     settings,
-    habits: (parsed.habits ?? []).map(normalizeHabit)
+    habits: (parsed.habits ?? []).map(normalizeHabit),
+    journals: (parsed.journals ?? []).filter((entry) => entry && typeof entry.date === "string"),
+    featureRequests: parsed.featureRequests ?? DEFAULT_FEATURE_REQUESTS,
+    avatar: normalizeAvatar(parsed.avatar)
   };
 }
 
@@ -360,17 +431,97 @@ export function LumoProvider({ children }: { children: ReactNode }) {
   }, [isReady]);
 
   const value = useMemo<LumoContextValue>(() => {
+    // Active + paused habits count toward the free limit; archived and trashed
+    // habits don't occupy a slot.
+    const ownedHabitCount = state.habits.filter(
+      (habit) => habit.status === "active" || habit.status === "paused"
+    ).length;
+    const isPro = state.settings.isPro;
+
     return {
       ...state,
+      // Hide soft-deleted habits from every consumer; the Trash screen reads
+      // `deletedHabits` instead.
+      habits: state.habits.filter((habit) => habit.status !== "deleted"),
+      deletedHabits: state.habits.filter((habit) => habit.status === "deleted"),
+      // Newest first for the journal list.
+      journals: [...state.journals].sort((a, b) => b.date.localeCompare(a.date)),
       isReady,
       isDark,
       palette,
       lastMessage,
+      isPro,
+      habitLimit: FREE_HABIT_LIMIT,
+      ownedHabitCount,
+      canCreateHabit: isPro || ownedHabitCount < FREE_HABIT_LIMIT,
+      journalLimit: FREE_JOURNAL_LIMIT,
+      journalCount: state.journals.length,
+      canCreateJournal: isPro || state.journals.length < FREE_JOURNAL_LIMIT,
+      canUseFeatureBoard: isPro,
+      submitFeatureRequest(title, description, photoUri) {
+        const cleanTitle = title.trim();
+        // Submitting is Pro-only; the UI routes free users to the paywall.
+        if (!cleanTitle || !stateRef.current.settings.isPro) {
+          return;
+        }
+        const cleanDescription = description?.trim();
+        const request: FeatureRequest = {
+          id: createId(),
+          title: cleanTitle,
+          description: cleanDescription || undefined,
+          photoUri: photoUri || undefined,
+          votes: 1,
+          votedByMe: true,
+          mine: true,
+          status: "open",
+          createdAt: new Date().toISOString()
+        };
+        setState((current) => ({ ...current, featureRequests: [request, ...current.featureRequests] }));
+      },
+      toggleFeatureVote(id) {
+        // Voting is Pro-only and yes-only (tapping again withdraws the vote).
+        if (!stateRef.current.settings.isPro) {
+          return;
+        }
+        setState((current) => ({
+          ...current,
+          featureRequests: current.featureRequests.map((request) => {
+            if (request.id !== id) {
+              return request;
+            }
+            const votedByMe = !request.votedByMe;
+            return { ...request, votedByMe, votes: Math.max(0, request.votes + (votedByMe ? 1 : -1)) };
+          })
+        }));
+      },
+      setProUnlocked(unlocked) {
+        setState((current) => ({
+          ...current,
+          settings: { ...current.settings, isPro: unlocked }
+        }));
+      },
+      // TODO(iap): replace with react-native-iap requestPurchase() + receipt
+      // handling. For now this unlocks locally so the flow is testable.
+      async purchasePro() {
+        setState((current) => ({
+          ...current,
+          settings: { ...current.settings, isPro: true }
+        }));
+        return true;
+      },
+      // TODO(iap): replace with react-native-iap getAvailablePurchases() to
+      // restore the non-consumable entitlement.
+      async restorePurchases() {
+        return stateRef.current.settings.isPro;
+      },
       setHasOnboarded(value) {
         setState((current) => ({ ...current, hasOnboarded: value }));
       },
       setNickname(value) {
         setState((current) => ({ ...current, nickname: value }));
+      },
+      setAvatar(config) {
+        setState((current) => ({ ...current, avatar: config }));
       },
       setThemeMode(mode) {
         setState((current) => ({
@@ -568,9 +719,74 @@ export function LumoProvider({ children }: { children: ReactNode }) {
       async deleteHabit(id) {
         const habit = state.habits.find((item) => item.id === id);
         await cancelHabitReminders(habit?.notificationIds);
+        // Soft delete: move to Trash so it can be recovered.
+        setState((current) => ({
+          ...current,
+          habits: current.habits.map((item) => (item.id === id ? { ...item, status: "deleted", notificationIds: [], deletedAt: new Date().toISOString() } : item))
+        }));
+      },
+      async restoreHabit(id) {
+        const habit = state.habits.find((item) => item.id === id);
+
+        if (!habit) {
+          return;
+        }
+
+        const restoredHabit = { ...habit, status: "active" as const, notificationIds: [] };
+        const notificationIds = await scheduleHabitReminderIfEnabled(restoredHabit, state.settings.notificationsEnabled);
+
+        setState((current) => ({
+          ...current,
+          habits: current.habits.map((item) => (item.id === id ? { ...restoredHabit, notificationIds } : item))
+        }));
+      },
+      async permanentlyDeleteHabit(id) {
+        const habit = state.habits.find((item) => item.id === id);
+        await cancelHabitReminders(habit?.notificationIds);
         setState((current) => ({
           ...current,
           habits: current.habits.filter((item) => item.id !== id)
+        }));
+      },
+      async emptyTrash() {
+        await Promise.all(state.habits.filter((item) => item.status === "deleted").map((item) => cancelHabitReminders(item.notificationIds)));
+        setState((current) => ({
+          ...current,
+          habits: current.habits.filter((item) => item.status !== "deleted")
+        }));
+      },
+      saveJournal(date, content, photoUri, mood, title) {
+        const trimmed = content.trim();
+        const trimmedTitle = title?.trim() || undefined;
+
+        setState((current) => {
+          // An entry with no title, text, photo, or mood is removed entirely.
+          if (!trimmed && !trimmedTitle && !photoUri && !mood) {
+            return { ...current, journals: current.journals.filter((entry) => entry.date !== date) };
+          }
+
+          const now = new Date().toISOString();
+          const existing = current.journals.find((entry) => entry.date === date);
+
+          // Enforce the free journal cap: don't let a brand-new entry push a
+          // free user past the limit (the UI routes them to the paywall first).
+          if (!existing && !current.settings.isPro && current.journals.length >= FREE_JOURNAL_LIMIT) {
+            return current;
+          }
+          const nextEntry: JournalEntry = existing
+            ? { ...existing, title: trimmedTitle, content, photoUri, mood, updatedAt: now }
+            : { date, title: trimmedTitle, content, photoUri, mood, createdAt: now, updatedAt: now };
+
+          return {
+            ...current,
+            journals: [...current.journals.filter((entry) => entry.date !== date), nextEntry]
+          };
+        });
+      },
+      deleteJournal(date) {
+        setState((current) => ({
+          ...current,
+          journals: current.journals.filter((entry) => entry.date !== date)
         }));
       },
       exportData() {

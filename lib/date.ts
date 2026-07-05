@@ -73,6 +73,27 @@ export function formatLongDate(dateKey: string) {
   return date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 }
 
+export function formatFullDate(dateKey: string) {
+  const date = parseDateKey(dateKey);
+  return date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", year: "numeric" });
+}
+
+export function formatMonthYear(dateKey: string) {
+  const date = parseDateKey(dateKey);
+  return date.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+}
+
+export function formatHeaderDateParts(dateKey: string) {
+  const date = parseDateKey(dateKey);
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = date.toLocaleDateString(undefined, { month: "short" });
+
+  return {
+    weekday: dayNames[date.getDay()],
+    date: `${day} ${month} ${date.getFullYear()}`
+  };
+}
+
 export function formatHistoryDateParts(dateKey: string) {
   const date = parseDateKey(dateKey);
 

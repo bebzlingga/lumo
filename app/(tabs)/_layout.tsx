@@ -9,9 +9,10 @@ import { useLumo } from "@/context/LumoContext";
 
 const tabIcons: Record<string, IconName> = {
   today: "home",
-  habits: "grid",
+  habits: "colorFilter",
   stats: "chart",
-  settings: "settings"
+  journal: "book",
+  friends: "friends"
 };
 
 function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
@@ -58,7 +59,12 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBar
         ]}
       >
         <Icon name={tabIcons[route.name] ?? "grid"} size={25} color={color} weight="bulk" />
-        <AppText variant="caption" color={color} style={{ fontSize: 10, lineHeight: 13, textAlign: "center", width: "100%" }} numberOfLines={1}>
+        <AppText
+          variant="caption"
+          color={color}
+          style={{ fontSize: 10, lineHeight: 13, textAlign: "center", width: "100%", opacity: isFocused ? 1 : 0.55 }}
+          numberOfLines={1}
+        >
           {label}
         </AppText>
       </Pressable>
@@ -88,7 +94,7 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBar
         }}
       >
         <View className="h-full w-full flex-row items-center justify-center px-5">
-          {state.routes.map(renderRoute)}
+          {state.routes.filter((route) => route.name !== "settings").map(renderRoute)}
         </View>
       </View>
     </View>
@@ -124,14 +130,29 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="friends"
+        options={{
+          title: "Friends"
+        }}
+      />
+      <Tabs.Screen
+        name="journal"
+        options={{
+          title: "Journal"
+        }}
+      />
+      <Tabs.Screen
         name="stats"
         options={{
           title: "Insights"
         }}
       />
+      {/* Hidden from the tab bar, but kept in the tabs navigator so the bottom
+          navigation pane still shows while the Settings screen is open. */}
       <Tabs.Screen
         name="settings"
         options={{
+          href: null,
           title: "Settings"
         }}
       />

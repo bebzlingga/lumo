@@ -68,7 +68,6 @@ export async function scheduleHabitReminder(habit: Habit) {
     return [];
   }
 
-  const { hour, minute } = parseReminderTime(habit.reminderTime);
   const days = weekdaysForSchedule(habit.repeatSchedule);
   const content = {
     title: "Time for your habit",
@@ -86,23 +85,32 @@ export async function scheduleHabitReminder(habit: Habit) {
     return [id];
   }
 
-  if (!days) {
-    const id = await Notifications.scheduleNotificationAsync({
-      content,
-      trigger: { hour, minute, repeats: true } as Notifications.NotificationTriggerInput
-    });
-
-    return [id];
-  }
+  // "Multiple times per day" goals can carry several reminder times; everything
+  // else fires once at the single `reminderTime`.
+  const rawTimes =
+    habit.goal.type === "multiple" && habit.reminderTimes?.length ? habit.reminderTimes : [habit.reminderTime];
+  // De-duplicate so identical times don't schedule twice.
+  const times = Array.from(new Set(rawTimes)).map(parseReminderTime);
 
   const ids: string[] = [];
 
-  for (const day of days) {
-    const id = await Notifications.scheduleNotificationAsync({
-      content,
-      trigger: { weekday: expoWeekday(day), hour, minute, repeats: true } as Notifications.NotificationTriggerInput
-    });
-    ids.push(id);
+  for (const { hour, minute } of times) {
+    if (!days) {
+      const id = await Notifications.scheduleNotificationAsync({
+        content,
+        trigger: { hour, minute, repeats: true } as Notifications.NotificationTriggerInput
+      });
+      ids.push(id);
+      continue;
+    }
+
+    for (const day of days) {
+      const id = await Notifications.scheduleNotificationAsync({
+        content,
+        trigger: { weekday: expoWeekday(day), hour, minute, repeats: true } as Notifications.NotificationTriggerInput
+      });
+      ids.push(id);
+    }
   }
 
   return ids;

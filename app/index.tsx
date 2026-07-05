@@ -1,13 +1,18 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Alert, Animated, Easing, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { CategoryChips, categoryNamePlaceholders } from "@/components/CategoryChips";
 import { FloatingDropdown } from "@/components/FloatingDropdown";
+import { IconName } from "@/components/Icon";
+import { IconPicker, categoryIconOptions } from "@/components/IconPicker";
 import { OnboardingIllustration } from "@/components/OnboardingIllustrations";
-import { AppText, LoadingState, LumoInput, Screen } from "@/components/ui";
-import { control, fontFamilies, habitColors, radius, spacing } from "@/constants/theme";
+import { ScreenHeader } from "@/components/ScreenHeader";
+import { AppText, FieldLabel, LoadingState, LumoInput, Screen } from "@/components/ui";
+import { fontFamilies, habitColors, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
+import { alpha } from "@/lib/color";
 import { toDateKey } from "@/lib/date";
-import { habitCategories, type HabitCategory, type HabitDraft, type RepeatSchedule } from "@/types/habit";
+import { type GoalType, type HabitCategory, type HabitDraft, type RepeatSchedule } from "@/types/habit";
 
 const slides = [
   {
@@ -30,11 +35,16 @@ const slides = [
 type OnboardingStep = "slides" | "nickname" | "habit";
 type BasicFrequency = Extract<RepeatSchedule["type"], "daily" | "weekdays" | "weekends">;
 const ONBOARDING_PX = spacing.xl;
-const categoryOptions = habitCategories.map((category) => ({ label: category, value: category }));
 const frequencyOptions: { label: string; value: BasicFrequency }[] = [
   { label: "Daily", value: "daily" },
   { label: "Weekdays", value: "weekdays" },
   { label: "Weekends", value: "weekends" }
+];
+const goalOptions: { label: string; value: GoalType["type"] }[] = [
+  { label: "Once per day", value: "once" },
+  { label: "Multiple times", value: "multiple" },
+  { label: "Weekly target", value: "weekly" },
+  { label: "Monthly target", value: "monthly" }
 ];
 
 function OnboardingCta({
@@ -46,7 +56,7 @@ function OnboardingCta({
   onPress: () => void;
   disabled?: boolean;
 }) {
-  const { palette } = useLumo();
+  const { palette, isDark } = useLumo();
 
   return (
     <Pressable
@@ -56,8 +66,8 @@ function OnboardingCta({
       onPress={onPress}
       style={({ pressed }) => [styles.onboardingButtonPressable, { opacity: disabled ? 0.45 : pressed ? 0.82 : 1 }]}
     >
-      <View style={[styles.onboardingButton, { backgroundColor: palette.surface, borderColor: palette.hairline }]}>
-        <AppText variant="button" color={palette.ink}>
+      <View style={[styles.onboardingButton, { backgroundColor: isDark ? palette.green : palette.greenDark, shadowColor: isDark ? "transparent" : palette.greenDark }]}>
+        <AppText variant="button" color={palette.white}>
           {label}
         </AppText>
       </View>
@@ -92,12 +102,17 @@ export default function OnboardingScreen() {
   const { width } = useWindowDimensions();
   const slideScrollRef = useRef<ScrollView>(null);
   const { createHabit, isReady, hasOnboarded, nickname, palette, setNickname } = useLumo();
+  // Resting bottom-border for inputs and selects — matches the create-habit form.
+  const fieldBorderColor = alpha(palette.greenDark, "33");
   const [step, setStep] = useState<OnboardingStep>("slides");
   const [slideIndex, setSlideIndex] = useState(0);
   const [nicknameDraft, setNicknameDraft] = useState(nickname);
   const [firstHabitName, setFirstHabitName] = useState("");
   const [firstHabitCategory, setFirstHabitCategory] = useState<HabitCategory>("General");
+  const [firstHabitEmoji, setFirstHabitEmoji] = useState<IconName>(categoryIconOptions.General[0]);
   const [firstHabitFrequency, setFirstHabitFrequency] = useState<BasicFrequency>("daily");
+  const [firstHabitGoalType, setFirstHabitGoalType] = useState<GoalType["type"]>("once");
+  const [firstHabitGoalAmount, setFirstHabitGoalAmount] = useState("3");
   const [isSavingHabit, setIsSavingHabit] = useState(false);
 
   const illustrationWidth = useMemo(() => Math.min(width - ONBOARDING_PX * 2, 330), [width]);
@@ -108,6 +123,22 @@ export default function OnboardingScreen() {
       router.replace("/(tabs)/today");
     }
   }, [hasOnboarded, isReady, router]);
+
+  // Slide + fade the first-habit step in when arriving from the nickname step.
+  const habitStepAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (step !== "habit") {
+      return;
+    }
+
+    habitStepAnim.setValue(0);
+    Animated.timing(habitStepAnim, {
+      toValue: 1,
+      duration: 340,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true
+    }).start();
+  }, [step, habitStepAnim]);
 
   if (!isReady || hasOnboarded) {
     return <LoadingState />;
@@ -130,6 +161,13 @@ export default function OnboardingScreen() {
     if (nextIndex !== slideIndex) {
       setSlideIndex(Math.min(Math.max(nextIndex, 0), slides.length - 1));
     }
+  }
+
+  function handleCategoryChange(category: HabitCategory) {
+    setFirstHabitCategory(category);
+    // Switch the icon to the new category's default so it visibly follows the
+    // category (the name placeholder follows via categoryNamePlaceholders).
+    setFirstHabitEmoji(categoryIconOptions[category][0]);
   }
 
   function continueToHabit() {
@@ -155,7 +193,7 @@ export default function OnboardingScreen() {
     const draft: HabitDraft = {
       name: cleanHabitName,
       category: firstHabitCategory,
-      emoji: "star",
+      emoji: firstHabitEmoji,
       color: habitColors[0],
       createdAt: toDateKey(),
       reminderEnabled: false,
@@ -164,7 +202,12 @@ export default function OnboardingScreen() {
       reminderIntervalValue: 1,
       reminderIntervalUnit: "hours",
       repeatSchedule: { type: firstHabitFrequency },
-      goal: { type: "once" }
+      goal:
+        firstHabitGoalType === "multiple"
+          ? { type: "multiple", count: Math.max(2, Number(firstHabitGoalAmount) || 2) }
+          : firstHabitGoalType === "weekly" || firstHabitGoalType === "monthly"
+            ? { type: firstHabitGoalType, target: Math.max(1, Number(firstHabitGoalAmount) || 1) }
+            : { type: "once" }
     };
 
     setIsSavingHabit(true);
@@ -180,17 +223,18 @@ export default function OnboardingScreen() {
   if (step === "nickname") {
     return (
       <Screen contentStyle={styles.screen}>
-        <View style={styles.mainContent}>
+        <ScreenHeader leftAction={{ icon: "back", label: "Back", onPress: () => setStep("slides") }} />
+        <View style={styles.formMainContent}>
           <View style={styles.heroArea}>
             <OnboardingIllustration name="nickname" palette={palette} width={illustrationWidth} height={238} />
           </View>
 
           <View style={styles.copy}>
             <AppText variant="displaySmall" style={styles.title}>
-              What should Lumo call you?
+              What should we call you?
             </AppText>
-            <AppText variant="body" color={palette.body} style={styles.body}>
-              Add a nickname so your daily nudges and wins feel a little more yours.
+            <AppText variant="body" color={palette.subtle} style={styles.body}>
+              Add a nickname so Lumo's nudges and little wins feel more like yours.
             </AppText>
           </View>
 
@@ -203,7 +247,7 @@ export default function OnboardingScreen() {
               autoFocus
               returnKeyType="done"
               onSubmitEditing={continueToHabit}
-              style={styles.input}
+              style={[styles.flatInput, { borderColor: fieldBorderColor, textAlign: "center", fontSize: 22 }]}
             />
           </View>
         </View>
@@ -218,60 +262,86 @@ export default function OnboardingScreen() {
   if (step === "habit") {
     return (
       <Screen contentStyle={styles.screen}>
-        <View style={styles.mainContent}>
+        <ScreenHeader leftAction={{ icon: "back", label: "Back", onPress: () => setStep("nickname") }} />
+        <Animated.View
+          style={[
+            styles.formMainContent,
+            {
+              opacity: habitStepAnim,
+              transform: [{ translateX: habitStepAnim.interpolate({ inputRange: [0, 1], outputRange: [32, 0] }) }]
+            }
+          ]}
+        >
           <View style={styles.copy}>
             <AppText variant="displaySmall" style={styles.title}>
               Let's add your first habit.
             </AppText>
-            <AppText variant="body" color={palette.body} style={styles.body}>
+            <AppText variant="body" color={palette.subtle} style={styles.body}>
               Start with one small promise to yourself. Keep it simple today, and you can update the details later.
             </AppText>
           </View>
 
-          <View style={[styles.firstHabitForm, { backgroundColor: palette.card, shadowColor: palette.shadow }]}>
+          <View style={styles.firstHabitForm}>
+            <CategoryChips value={firstHabitCategory} onChange={handleCategoryChange} edgePadding={ONBOARDING_PX + spacing.md} />
+
             <View style={styles.formField}>
-              <AppText variant="caption" color={palette.subtle}>
-                Habit name
-              </AppText>
+              <FieldLabel>Habit name</FieldLabel>
               <LumoInput
                 value={firstHabitName}
                 onChangeText={setFirstHabitName}
-                placeholder="Drink water"
+                placeholder={categoryNamePlaceholders[firstHabitCategory]}
                 autoCapitalize="sentences"
                 autoFocus
                 returnKeyType="done"
                 onSubmitEditing={finishOnboarding}
-                style={styles.formInput}
+                style={[styles.flatInput, { borderColor: fieldBorderColor }]}
               />
             </View>
 
             <View style={styles.formField}>
-              <AppText variant="caption" color={palette.subtle}>
-                Category
-              </AppText>
-              <FloatingDropdown
-                variant="input"
-                options={categoryOptions}
-                value={firstHabitCategory}
-                onChange={setFirstHabitCategory}
-                accessibilityLabel="First habit category"
-              />
+              <FieldLabel>Icon</FieldLabel>
+              <IconPicker category={firstHabitCategory} value={firstHabitEmoji} onChange={setFirstHabitEmoji} />
             </View>
 
             <View style={styles.formField}>
-              <AppText variant="caption" color={palette.subtle}>
-                Frequency
-              </AppText>
+              <FieldLabel>Frequency</FieldLabel>
               <FloatingDropdown
                 variant="input"
                 options={frequencyOptions}
                 value={firstHabitFrequency}
                 onChange={setFirstHabitFrequency}
                 accessibilityLabel="First habit frequency"
+                borderColor={fieldBorderColor}
               />
             </View>
+
+            <View style={styles.formField}>
+              <FieldLabel>Target</FieldLabel>
+              <FloatingDropdown
+                variant="input"
+                options={goalOptions}
+                value={firstHabitGoalType}
+                onChange={setFirstHabitGoalType}
+                accessibilityLabel="First habit target"
+                borderColor={fieldBorderColor}
+              />
+            </View>
+
+            {firstHabitGoalType !== "once" ? (
+              <View style={styles.formField}>
+                <FieldLabel>
+                  {firstHabitGoalType === "multiple" ? "Times per day" : firstHabitGoalType === "weekly" ? "Times per week" : "Times per month"}
+                </FieldLabel>
+                <LumoInput
+                  value={firstHabitGoalAmount}
+                  onChangeText={setFirstHabitGoalAmount}
+                  keyboardType="number-pad"
+                  style={[styles.flatInput, { borderColor: fieldBorderColor }]}
+                />
+              </View>
+            ) : null}
           </View>
-        </View>
+        </Animated.View>
 
         <View style={styles.bottomAction}>
           <OnboardingCta
@@ -311,7 +381,7 @@ export default function OnboardingScreen() {
                 <AppText variant="displaySmall" style={styles.title}>
                   {slide.title}
                 </AppText>
-                <AppText variant="body" color={palette.body} style={styles.body}>
+                <AppText variant="body" color={palette.subtle} style={styles.body}>
                   {slide.body}
                 </AppText>
               </View>
@@ -338,6 +408,13 @@ const styles = StyleSheet.create({
   mainContent: {
     flex: 1,
     justifyContent: "center"
+  },
+  // Form steps (nickname, first habit) align toward the top so the fields sit
+  // higher and stay clear of the keyboard.
+  formMainContent: {
+    flex: 1,
+    justifyContent: "flex-start",
+    paddingTop: spacing.xs
   },
   header: {
     alignItems: "center",
@@ -379,37 +456,32 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     marginTop: spacing.lg
   },
-  input: {
-    borderRadius: radius.nav,
-    fontSize: 16,
-    height: 54,
-    paddingHorizontal: spacing.lg,
-    textAlign: "center"
-  },
   firstHabitForm: {
     alignSelf: "stretch",
-    borderRadius: radius.nav,
-    gap: spacing.md,
+    gap: spacing.lg,
     marginTop: spacing.xl,
-    padding: spacing.lg,
-    shadowOffset: { width: 0, height: 7 },
-    shadowOpacity: 0.09,
-    shadowRadius: 22,
-    elevation: 4
+    paddingHorizontal: spacing.md
   },
   formField: {
     gap: spacing.xs
   },
-  formInput: {
-    borderRadius: radius.xl,
+  flatInput: {
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    borderBottomWidth: 1,
+    borderRadius: 0,
+    minHeight: 0,
+    paddingHorizontal: 0,
+    paddingTop: spacing.xxs,
+    paddingBottom: spacing.sm,
     fontSize: 16,
-    height: 54,
-    paddingHorizontal: spacing.lg
+    fontFamily: fontFamilies.lexendBold
   },
   bottomAction: {
     alignItems: "stretch",
     alignSelf: "stretch",
-    paddingTop: spacing.lg
+    paddingTop: spacing.lg,
+    marginBottom: spacing.xl
   },
   onboardingButtonPressable: {
     alignSelf: "stretch"
@@ -417,10 +489,13 @@ const styles = StyleSheet.create({
   onboardingButton: {
     alignItems: "center",
     alignSelf: "stretch",
-    borderRadius: control.radius,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 18,
     justifyContent: "center",
     minHeight: 56,
-    paddingHorizontal: spacing.xl
+    paddingHorizontal: spacing.xl,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    elevation: 8
   }
 });

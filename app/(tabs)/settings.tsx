@@ -1,15 +1,18 @@
 import Constants from "expo-constants";
 import * as DocumentPicker from "expo-document-picker";
+import { useRouter } from "expo-router";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import React, { useState } from "react";
 import { Alert, Linking, Modal, Pressable, Share, StyleSheet, StyleProp, TextStyle, View, ViewStyle } from "react-native";
 import { ActionTile } from "@/components/ActionTile";
 import { FloatingDropdown } from "@/components/FloatingDropdown";
+import { Avatar } from "@/components/Avatar";
 import { Icon, IconName } from "@/components/Icon";
 import { AppText, Card, LoadingState, LumoInput, Screen } from "@/components/ui";
 import { fontFamilies, layout, radius, spacing, themeColorOptions } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
+import { alpha } from "@/lib/color";
 import { BackupFrequency } from "@/types/habit";
 
 const LUMO_FACEBOOK_URL = "https://www.facebook.com/lumo.habittracker/";
@@ -48,14 +51,18 @@ function SettingsCopy({
   );
 }
 
-function SettingsSectionHeader({ icon, title, description, right }: { icon: IconName; title: string; description?: string; right?: React.ReactNode }) {
+function SettingsSectionHeader({ icon, iconNode, title, description, right }: { icon?: IconName; iconNode?: React.ReactNode; title: string; description?: string; right?: React.ReactNode }) {
   const { palette } = useLumo();
 
   return (
     <View style={styles.sectionHeader}>
-      <View style={[styles.sectionIcon, { backgroundColor: palette.chartTrack }]}>
-        <Icon name={icon} size={20} color={palette.greenDark} weight="bulk" />
-      </View>
+      {iconNode ? (
+        iconNode
+      ) : (
+        <View style={[styles.sectionIcon, { backgroundColor: palette.chartTrack }]}>
+          <Icon name={icon ?? "smiley"} size={20} color={palette.greenDark} weight="bulk" />
+        </View>
+      )}
       <SettingsCopy title={title} description={description} titleVariant="titleSmall" titleStyle={styles.sectionTitle} style={styles.sectionCopy} />
       {right ? <View style={styles.sectionRight}>{right}</View> : null}
     </View>
@@ -103,12 +110,15 @@ function SettingsSwitch({
 }
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const {
     isReady,
     nickname,
     palette,
     settings,
+    deletedHabits,
     isDark,
+    avatar,
     setNickname,
     setThemeMode,
     setColorScheme,
@@ -269,9 +279,22 @@ export default function SettingsScreen() {
       </View>
 
       <Card style={styles.card}>
-        <SettingsSectionHeader icon="smiley" title="Profile" description="Update how Lumo greets you." />
+        <View style={styles.profileHeader}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Edit avatar" onPress={() => router.push("/avatar")} style={styles.avatarFrame}>
+            <View style={[styles.avatarCircle, { backgroundColor: alpha(palette.greenDark, "10") }]} pointerEvents="none" />
+            <Avatar config={avatar} size={120} rounded={false} />
+          </Pressable>
+        </View>
         <View style={[styles.divider, { backgroundColor: palette.hairline }]} />
         <View style={styles.usernameField}>
+          <View style={styles.profileCopy}>
+            <AppText variant="titleSmall" color={palette.ink} style={styles.profileTitle}>
+              Profile
+            </AppText>
+            <AppText variant="bodySmall" color={palette.subtle} style={styles.profileDescription}>
+              Update how Lumo greets you.
+            </AppText>
+          </View>
           <LumoInput
             value={nickname}
             onChangeText={setNickname}
@@ -431,6 +454,19 @@ export default function SettingsScreen() {
       </Card>
 
       <Card style={styles.card}>
+        <SettingsSectionHeader icon="trash" title="Trash" description="Restore or permanently remove deleted habits." />
+        <View style={[styles.divider, { backgroundColor: palette.hairline }]} />
+        <View style={styles.actionGrid}>
+          <ActionTile
+            icon="trash"
+            label={deletedHabits.length ? `Open Trash (${deletedHabits.length})` : "Open Trash"}
+            onPress={() => router.push("/trash")}
+            style={styles.actionButton}
+          />
+        </View>
+      </Card>
+
+      <Card style={styles.card}>
         <SettingsSectionHeader
           icon="sparkle"
           title="About Lumo"
@@ -448,6 +484,34 @@ export default function SettingsScreen() {
         <AppText variant="bodySmall" color={palette.subtle} style={styles.descriptionText}>
           Privacy note: all habit data is stored locally on this device.
         </AppText>
+        <View style={[styles.optionDivider, { backgroundColor: palette.hairline }]} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open feature request board"
+          onPress={() => router.push("/feature-soon")}
+          style={({ pressed }) => [
+            styles.communityLink,
+            {
+              backgroundColor: palette.surface,
+              borderColor: palette.hairline,
+              opacity: pressed ? 0.76 : 1
+            }
+          ]}
+        >
+          <View style={styles.communityContent}>
+            <View style={[styles.communityIcon, { backgroundColor: palette.chartTrack }]}>
+              <Icon name="star" size={19} color={palette.greenDark} weight="bulk" />
+            </View>
+            <View style={styles.communityCopy}>
+              <AppText variant="bodySmall" color={palette.ink} style={styles.communityTitle}>
+                Feature request board
+              </AppText>
+              <AppText variant="bodySmall" color={palette.subtle} numberOfLines={1} style={styles.descriptionText}>
+                Coming soon
+              </AppText>
+            </View>
+          </View>
+        </Pressable>
         <View style={[styles.optionDivider, { backgroundColor: palette.hairline }]} />
         <View style={styles.communitySection}>
           <AppText variant="bodySmall" color={palette.ink} style={styles.rowTitle}>
@@ -495,7 +559,7 @@ const styles = StyleSheet.create({
     gap: spacing.xxs
   },
   headerTitle: {
-    fontFamily: fontFamilies.lexendBold,
+    fontFamily: "Lexend-Black",
     fontSize: 34,
     lineHeight: 40
   },
@@ -519,6 +583,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm
   },
+  profileHeader: {
+    alignItems: "center",
+    gap: spacing.sm
+  },
+  avatarFrame: {
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  avatarCircle: {
+    position: "absolute",
+    width: 120,
+    height: 120,
+    borderRadius: 60
+  },
+  profileCopy: {
+    alignItems: "flex-start",
+    gap: 2
+  },
+  profileTitle: {
+    fontFamily: fontFamilies.lexendSemiBold
+  },
+  profileDescription: {},
   sectionIcon: {
     width: 40,
     height: 40,
@@ -707,7 +793,8 @@ const styles = StyleSheet.create({
   },
   communityCopy: {
     flex: 1,
-    minWidth: 0
+    minWidth: 0,
+    gap: 2
   },
   communityTitle: {
     fontFamily: fontFamilies.lexendSemiBold,

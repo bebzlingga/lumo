@@ -7,6 +7,7 @@ import { alpha } from "@/lib/color";
 import { addDays, dateRange, dayLabels, daysBetween, parseDateKey, toDateKey } from "@/lib/date";
 import { completionCount, currentStreak, dailyTarget, isDoneOnDate, isScheduledOnDate, totalCompletions } from "@/lib/habitMath";
 import { Habit } from "@/types/habit";
+import { FireIcon } from "./FireIcon";
 import { HabitIcon } from "./HabitIcon";
 import { Icon } from "./Icon";
 import { AppText, StatTile } from "./ui";
@@ -210,7 +211,7 @@ function todayScoreForHabits(habits: Habit[], dateKey: string) {
 }
 
 function EmptyStats({ message }: { message: string }) {
-  const { palette } = useLumo();
+  const { palette, canCreateHabit } = useLumo();
   const emptyColor = alpha(palette.subtle, "B8");
 
   return (
@@ -221,7 +222,7 @@ function EmptyStats({ message }: { message: string }) {
       </AppText>
       <Pressable
         accessibilityRole="button"
-        onPress={() => router.push("/habit/new")}
+        onPress={() => router.push(canCreateHabit ? "/habit/new" : "/paywall")}
         style={({ pressed }) => [
           styles.addButton,
           {
@@ -293,7 +294,7 @@ export function StatsSegmentedControl({ value, onChange }: { value: StatsTab; on
 }
 
 export function TodayStatsView({ habits, onOpenOverall }: { habits: Habit[]; onOpenOverall?: () => void }) {
-  const { palette } = useLumo();
+  const { palette, canCreateHabit } = useLumo();
   const todayKey = toDateKey();
   const yesterdayKey = addDays(todayKey, -1);
   const currentHabits = activeHabits(habits);
@@ -367,7 +368,7 @@ export function TodayStatsView({ habits, onOpenOverall }: { habits: Habit[]; onO
       <View style={styles.actionRow}>
         <Pressable
           accessibilityRole="button"
-          onPress={() => router.push("/habit/new")}
+          onPress={() => router.push(canCreateHabit ? "/habit/new" : "/paywall")}
           style={({ pressed }) => [
             styles.addButton,
             {
@@ -641,10 +642,8 @@ function MonthlyHabitCard({ habit }: { habit: Habit }) {
   const { palette, isDark } = useLumo();
   const [monthGridWidth, setMonthGridWidth] = React.useState(0);
   const todayKey = toDateKey();
-  const days = lastThreeMonthRange(todayKey);
-  const scheduled = days.filter((dateKey) => dateKey >= habit.createdAt && isScheduledOnDate(habit, dateKey));
-  const completed = scheduled.filter((dateKey) => isDoneOnDate(habit, dateKey)).length;
-  const targetDays = days.length;
+  const days = lastThreeMonthRange(todayKey).slice(3);
+  const streak = currentStreak(habit, todayKey);
   const monthDotSize =
     monthGridWidth > 0
       ? Math.max(8, (monthGridWidth - monthlyGridGap * (monthlyGridColumns - 1)) / monthlyGridColumns)
@@ -664,9 +663,14 @@ function MonthlyHabitCard({ habit }: { habit: Habit }) {
             {habit.name}
           </AppText>
         </View>
-        <AppText variant="bodySmall" color={palette.muted} numberOfLines={1} style={styles.habitScheduleText}>
-          {completed}/{targetDays} days
-        </AppText>
+        {streak >= 3 ? (
+          <View style={styles.habitStreak}>
+            <FireIcon size={14} />
+            <AppText variant="bodySmall" color={palette.muted} numberOfLines={1} style={styles.habitScheduleText}>
+              {streak} day streak
+            </AppText>
+          </View>
+        ) : null}
       </View>
 
       <View style={[styles.habitDivider, { backgroundColor: palette.hairline }]} />
@@ -692,8 +696,7 @@ function MonthlyHabitCard({ habit }: { habit: Habit }) {
                   height: monthDotSize,
                   marginRight: isRowEnd ? 0 : monthlyGridGap,
                   marginBottom: monthlyGridGap,
-                  backgroundColor: fill,
-                  borderColor: status === "missed" ? palette.hairline : fill
+                  backgroundColor: fill
                 }
               ]}
             />
@@ -732,7 +735,7 @@ function WeeklyHabitCard({ habit }: { habit: Habit }) {
           const partial = status === "partial";
           const missed = status === "missed";
           const backgroundColor =
-            done ? palette.green : partial ? alpha(palette.greenDark, "66") : missed ? `${palette.danger}1A` : alpha(palette.greenSoft, "3D");
+            done ? alpha(palette.greenDark, "CC") : partial ? alpha(palette.greenDark, "66") : missed ? `${palette.danger}1A` : alpha(palette.greenSoft, "3D");
 
           return (
             <View key={dateKey} style={styles.weekDay}>
@@ -960,7 +963,7 @@ function OverallMissPatternCard({ habits }: { habits: Habit[] }) {
 
 const styles = StyleSheet.create({
   segmentedControl: {
-    borderRadius: radius.xl
+    borderRadius: radius.pill
   },
   segmentedShadow: {
     shadowOffset: { width: 0, height: 7 },
@@ -970,7 +973,7 @@ const styles = StyleSheet.create({
   },
   segmentSurface: {
     minHeight: 44,
-    borderRadius: radius.lg,
+    borderRadius: radius.pill,
     paddingVertical: spacing.sm
   },
   segmentSurfaceShadow: {
@@ -1183,6 +1186,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18
   },
+  habitStreak: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xxs
+  },
   habitDivider: {
     height: StyleSheet.hairlineWidth
   },
@@ -1214,8 +1222,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxs
   },
   monthDot: {
-    borderRadius: radius.xs,
-    borderWidth: StyleSheet.hairlineWidth
+    borderRadius: radius.xs
   },
   metricGrid: {
     flexDirection: "row",

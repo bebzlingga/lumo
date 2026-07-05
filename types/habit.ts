@@ -19,7 +19,7 @@ export type ReminderMode = "time" | "interval";
 
 export type ReminderIntervalUnit = "minutes" | "hours";
 
-export type HabitStatus = "active" | "paused" | "archived";
+export type HabitStatus = "active" | "paused" | "archived" | "deleted";
 
 export const habitCategories = [
   "General",
@@ -51,6 +51,9 @@ export type Habit = {
   reminderEnabled: boolean;
   reminderMode: ReminderMode;
   reminderTime: string;
+  // Extra times of day for "multiple times per day" goals. The primary time
+  // stays in `reminderTime`; this holds the full list when more than one.
+  reminderTimes?: string[];
   reminderIntervalValue: number;
   reminderIntervalUnit: ReminderIntervalUnit;
   repeatSchedule: RepeatSchedule;
@@ -59,6 +62,8 @@ export type Habit = {
   completions: CompletionEntry[];
   status: HabitStatus;
   notificationIds?: string[];
+  // Set when the habit is soft-deleted (moved to Trash).
+  deletedAt?: string;
 };
 
 export type HabitDraft = {
@@ -70,10 +75,45 @@ export type HabitDraft = {
   reminderEnabled: boolean;
   reminderMode: ReminderMode;
   reminderTime: string;
+  reminderTimes?: string[];
   reminderIntervalValue: number;
   reminderIntervalUnit: ReminderIntervalUnit;
   repeatSchedule: RepeatSchedule;
   goal: GoalType;
+};
+
+export type JournalMood = "happy" | "neutral" | "sad";
+
+export type JournalEntry = {
+  // One entry per day, keyed by date (YYYY-MM-DD).
+  date: string;
+  // Optional big header/title for the entry.
+  title?: string;
+  content: string;
+  // Optional single photo attachment (local file URI).
+  photoUri?: string;
+  // Optional mood for the day.
+  mood?: JournalMood;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FeatureRequestStatus = "open" | "planned" | "in_progress" | "done";
+
+export type FeatureRequest = {
+  id: string;
+  title: string;
+  description?: string;
+  // Optional attached screenshot (local file URI).
+  photoUri?: string;
+  // Total upvotes (seeded base + this user's vote when `votedByMe`).
+  votes: number;
+  // Whether this user has upvoted. Voting is yes-only; abstaining = no vote.
+  votedByMe: boolean;
+  // Whether this user submitted it (local stub; a real backend would use authorship).
+  mine: boolean;
+  status: FeatureRequestStatus;
+  createdAt: string;
 };
 
 export type ThemeMode = "system" | "light" | "dark";
@@ -87,5 +127,8 @@ export type AppSettings = {
   notificationsEnabled: boolean;
   autoBackupEnabled: boolean;
   backupFrequency: BackupFrequency;
+  // One-time "unlock unlimited habits" purchase. Free users are capped at
+  // FREE_HABIT_LIMIT; this flag lifts the cap.
+  isPro: boolean;
   lastBackupAt?: string;
 };

@@ -14,17 +14,30 @@ type Props = {
   dotSize?: number;
   layout?: "weekly" | "monthly";
   tone?: "default" | "hero";
+  /** Dots per column. 7 keeps the week-aligned grid; other values chunk the
+   * raw day range directly, with today as the very last dot. */
+  rows?: number;
+  /** Align week columns Monday–Sunday instead of the default Sunday start. */
+  weekStartsOnMonday?: boolean;
 };
+
+function startOfWeekMonday(dateKey: string) {
+  const monday = addDays(startOfWeek(dateKey), 1);
+
+  return monday > dateKey ? addDays(monday, -7) : monday;
+}
 
 function Dot({
   status,
   size,
   isInactive,
+  isTodayPending,
   tone
 }: {
   status: "empty" | "partial" | "complete" | "strong";
   size: number;
   isInactive: boolean;
+  isTodayPending: boolean;
   tone: NonNullable<Props["tone"]>;
 }) {
   const { palette, isDark } = useLumo();
@@ -38,8 +51,9 @@ function Dot({
     transform: [{ scale: scale.value }]
   }));
 
-  const backgroundColor =
-    tone === "hero"
+  const backgroundColor = isTodayPending
+    ? palette.danger
+    : tone === "hero"
       ? status === "empty"
         ? `${palette.white}${isDark ? "33" : "44"}`
         : status === "partial"
@@ -61,7 +75,7 @@ function Dot({
           height: size,
           borderRadius: Math.min(radius.xs, size / 2),
           backgroundColor,
-          opacity: isInactive ? 0.72 : 1
+          opacity: isInactive && !isTodayPending ? 0.72 : 1
         }
       ]}
     />
@@ -88,40 +102,61 @@ function getDotStatus(habit: Habit, dateKey: string, todayKey: string): "empty" 
   return count > 1 ? "strong" : "complete";
 }
 
-function datesToColumns(dates: string[]) {
+function datesToColumns(dates: string[], size = 7) {
   const columns: string[][] = [];
 
-  for (let index = 0; index < dates.length; index += 7) {
-    columns.push(dates.slice(index, index + 7));
+  for (let index = 0; index < dates.length; index += size) {
+    columns.push(dates.slice(index, index + size));
   }
 
   return columns;
 }
 
-export function DottedProgressChart({ habit, days = 84, dotSize = 10, layout = "weekly", tone = "default" }: Props) {
+export function DottedProgressChart({
+  habit,
+  days = 84,
+  dotSize = 10,
+  layout = "weekly",
+  tone = "default",
+  rows = 7,
+  weekStartsOnMonday = false
+}: Props) {
   const todayKey = toDateKey();
+  const scrollRef = React.useRef<ScrollView>(null);
+  const weekAligned = rows === 7;
   const rawDates =
     layout === "monthly"
       ? monthRange(todayKey)
       : dateRange(days, todayKey);
-  const firstDate = startOfWeek(rawDates[0]);
-  const lastWeekStart = startOfWeek(rawDates[rawDates.length - 1]);
-  const lastDate = addDays(lastWeekStart, 6);
-  const gridDates = Array.from({ length: daysBetween(firstDate, lastDate) + 1 }, (_, index) => addDays(firstDate, index));
-  const columns = datesToColumns(gridDates);
+  let gridDates = rawDates;
+
+  if (weekAligned) {
+    // Align the start to a week boundary, but end at the last real day —
+    // the current week's column grows one box per day instead of showing
+    // empty placeholders for days that haven't happened yet.
+    const alignStart = weekStartsOnMonday ? startOfWeekMonday : startOfWeek;
+    const firstDate = alignStart(rawDates[0]);
+    const lastDate = rawDates[rawDates.length - 1];
+    gridDates = Array.from({ length: daysBetween(firstDate, lastDate) + 1 }, (_, index) => addDays(firstDate, index));
+  }
+
+  const columns = datesToColumns(gridDates, rows);
 
   return (
     <ScrollView
+      ref={scrollRef}
       horizontal
       showsHorizontalScrollIndicator={false}
+      onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
       style={styles.scroller}
       contentContainerStyle={[styles.scrollContent, tone === "hero" ? styles.heroScrollContent : null]}
     >
-      <View style={[styles.weeklyWrap, tone === "hero" ? styles.heroWeeklyWrap : null]}>
+      <View style={styles.weeklyWrap}>
         {columns.map((week, index) => (
           <View key={`${week[0]}-${index}`} style={styles.weekColumn}>
             {week.map((dateKey) => {
               const status = getDotStatus(habit, dateKey, todayKey);
+              const isTodayPending = dateKey === todayKey && status !== "complete" && status !== "strong";
 
               return (
                 <Dot
@@ -129,6 +164,7 @@ export function DottedProgressChart({ habit, days = 84, dotSize = 10, layout = "
                   status={status}
                   size={dotSize}
                   isInactive={status === "empty"}
+                  isTodayPending={isTodayPending}
                   tone={tone}
                 />
               );
@@ -147,19 +183,18 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingRight: spacing.md
   },
+  // The hero card removes its own horizontal padding so the grid clips at the
+  // card edges (a visual cue that it scrolls); the inset lives here instead.
+  // Per-side values because the base style's paddingRight would otherwise win
+  // over the paddingHorizontal shorthand.
   heroScrollContent: {
-    flexGrow: 1,
-    paddingRight: 0
+    paddingLeft: spacing.lg,
+    paddingRight: spacing.lg
   },
   weeklyWrap: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 5
-  },
-  heroWeeklyWrap: {
-    width: "100%",
-    justifyContent: "space-between",
-    gap: 0
   },
   weekColumn: {
     gap: 5,

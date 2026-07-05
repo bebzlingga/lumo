@@ -1,8 +1,9 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
-import { Alert, Image, Modal, Pressable, StyleSheet, View } from "react-native";
+import { Alert, Modal, Pressable, StyleSheet, View } from "react-native";
 import { ActionTile } from "@/components/ActionTile";
 import { DottedProgressChart } from "@/components/DottedProgressChart";
+import { FireIcon } from "@/components/FireIcon";
 import { HabitIcon } from "@/components/HabitIcon";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -12,8 +13,6 @@ import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { dateRange, formatHistoryDateParts, monthRange, toDateKey } from "@/lib/date";
 import { completionCount, habitSummary, isDoneOnDate, isScheduledOnDate } from "@/lib/habitMath";
-
-const fireGif = require("../../assets/gif/icons8-fire.gif");
 
 type HistoryRange = "7d" | "14d" | "1m";
 
@@ -102,11 +101,10 @@ export default function HabitDetailScreen() {
   }
 
   function confirmArchive() {
-    Alert.alert("Archive habit?", "This hides the habit from your active list. You can recover it later.", [
+    Alert.alert("Mark as complete?", "This marks the habit as completed and moves it out of your active list. You can recover it anytime.", [
       { text: "Cancel", style: "cancel" },
       {
-        text: "Archive",
-        style: "destructive",
+        text: "Complete",
         onPress: async () => {
           await archiveHabit(currentHabit.id);
           router.replace("/(tabs)/habits");
@@ -150,7 +148,7 @@ export default function HabitDetailScreen() {
         centerContent={
           currentHabit.status === "archived" ? (
             <AppText variant="titleSmall" color={palette.greenDark} numberOfLines={1} style={styles.headerStatus}>
-              Archived
+              Completed
             </AppText>
           ) : currentHabit.status === "paused" ? (
             <AppText variant="titleSmall" color={palette.greenDark} numberOfLines={1} style={styles.headerStatus}>
@@ -158,14 +156,14 @@ export default function HabitDetailScreen() {
             </AppText>
           ) : summary.currentStreak > 0 ? (
             <View style={styles.headerStreak}>
-              <Image source={fireGif} style={styles.headerFireIcon} />
+              {summary.currentStreak >= 3 ? <FireIcon size={20} /> : null}
               <AppText variant="titleSmall" color={palette.greenDark} numberOfLines={1}>
                 {summary.currentStreak} day streak
               </AppText>
             </View>
           ) : null
         }
-        centerLabel={currentHabit.status === "archived" ? "Archived habit" : currentHabit.status === "paused" ? "Habit paused" : "Show streak details"}
+        centerLabel={currentHabit.status === "archived" ? "Completed habit" : currentHabit.status === "paused" ? "Habit paused" : "Show streak details"}
         onCenterPress={currentHabit.status === "active" && summary.currentStreak > 0 ? () => setIsStreakModalVisible(true) : undefined}
         leftAction={{
           icon: "back",
@@ -175,38 +173,39 @@ export default function HabitDetailScreen() {
         rightActions={headerRightActions}
       />
 
-      <Card style={[styles.heroCard, { backgroundColor: heroBackgroundColor }]}>
-        <View style={styles.heroHeader}>
-          <View style={[styles.heroIcon, { backgroundColor: isDark ? palette.greenSoft : palette.green }]}>
-            <HabitIcon value={currentHabit.emoji} color={palette.white} size={24} />
-          </View>
-          <View style={styles.heroCopy}>
-            <AppText variant="title" color={heroTextColor} numberOfLines={1}>
-              {currentHabit.name}
+      <View style={styles.heroHeader}>
+        <View style={[styles.heroIcon, { backgroundColor: isDark ? palette.greenSoft : palette.greenDark }]}>
+          <HabitIcon value={currentHabit.emoji} color={isDark ? palette.greenDark : palette.white} size={24} />
+        </View>
+        <View style={styles.heroCopy}>
+          <AppText variant="title" color={palette.ink} numberOfLines={1}>
+            {currentHabit.name}
+          </AppText>
+          <View style={styles.heroMetaRow}>
+            <Icon name="clock" size={14} color={palette.subtle} weight="bulk" />
+            <AppText variant="bodySmall" color={palette.subtle}>
+              {reminderLabel}
             </AppText>
-            <View style={styles.heroMetaRow}>
-              <Icon name="clock" size={14} color={heroMutedColor} weight="bulk" />
-              <AppText variant="bodySmall" color={heroMutedColor}>
-                {reminderLabel}
-              </AppText>
-              {targetLabel ? (
-                <>
-                  <View style={[styles.heroMetaDot, { backgroundColor: heroMutedColor }]} />
-                  <AppText variant="bodySmall" color={heroMutedColor}>
-                    {targetLabel}
-                  </AppText>
-                </>
-              ) : null}
-            </View>
+            {targetLabel ? (
+              <>
+                <View style={[styles.heroMetaDot, { backgroundColor: palette.subtle }]} />
+                <AppText variant="bodySmall" color={palette.subtle}>
+                  {targetLabel}
+                </AppText>
+              </>
+            ) : null}
           </View>
         </View>
+      </View>
+
+      <Card style={[styles.heroCard, { backgroundColor: heroBackgroundColor }]}>
         <View style={styles.heroChart}>
-          <DottedProgressChart habit={displayHabit} days={140} dotSize={11} tone="hero" />
+          <DottedProgressChart habit={displayHabit} days={182} dotSize={11} tone="hero" weekStartsOnMonday />
         </View>
       </Card>
 
       <View style={styles.statsRow}>
-        <StatTile label="Current streak" value={`${summary.currentStreak}`} icon="fire" />
+        <StatTile label="Current streak" value={`${summary.currentStreak}`} icon={summary.currentStreak >= 3 ? "fire" : "activity"} />
         <StatTile label="Best streak" value={`${summary.bestStreak}`} icon="trophy" />
         <StatTile label="Completion rate" value={`${summary.completionRate}%`} icon="chart" />
         <StatTile label="Total completions" value={`${summary.totalCompletions}`} icon="checkCircle" />
@@ -293,15 +292,14 @@ export default function HabitDetailScreen() {
         {currentHabit.status === "archived" ? (
           <ActionTile icon="refresh" label="Recover" onPress={confirmRecover} style={styles.actionButton} />
         ) : (
-          <ActionTile icon="archive" label="Archive" onPress={confirmArchive} style={styles.actionButton} />
+          <ActionTile icon="checkCircle" label="Complete" onPress={confirmArchive} style={styles.actionButton} />
         )}
         <ActionTile
           icon="trash"
           label="Delete"
           color={palette.danger}
-          backgroundColor={`${palette.danger}1A`}
           onPress={confirmDelete}
-          style={[styles.actionButton, { shadowColor: isDark ? "transparent" : palette.danger, shadowOpacity: isDark ? 0 : 0.12 }]}
+          style={[styles.actionButton, { shadowColor: isDark ? "transparent" : palette.danger, shadowOpacity: isDark ? 0 : 0.18 }]}
         />
       </View>
 
@@ -317,7 +315,7 @@ export default function HabitDetailScreen() {
             <View style={styles.flameArt}>
               <View style={[styles.flameGlow, { backgroundColor: palette.surface }]} />
               <View style={[styles.streakIconFrame, { backgroundColor: palette.surfaceStrong }]}>
-                <Image source={fireGif} style={styles.modalFireIcon} />
+                <FireIcon size={56} />
               </View>
               <AppText color={palette.ink} style={styles.flameCount}>
                 {summary.currentStreak}
@@ -355,7 +353,7 @@ export default function HabitDetailScreen() {
 
 const styles = StyleSheet.create({
   screenContent: {
-    paddingBottom: spacing.xl
+    paddingBottom: spacing.xxl
   },
   headerStreak: {
     minHeight: 44,
@@ -368,10 +366,6 @@ const styles = StyleSheet.create({
   headerStatus: {
     paddingBottom: 10,
     textAlign: "center"
-  },
-  headerFireIcon: {
-    width: 22,
-    height: 22
   },
   modalOverlay: {
     flex: 1,
@@ -413,10 +407,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.nav,
     alignItems: "center",
     justifyContent: "center"
-  },
-  modalFireIcon: {
-    width: 62,
-    height: 62
   },
   flameCount: {
     position: "absolute",
@@ -462,7 +452,9 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     gap: spacing.md,
-    overflow: "hidden"
+    overflow: "hidden",
+    paddingHorizontal: 0,
+    marginTop: spacing.xs
   },
   heroHeader: {
     flexDirection: "row",

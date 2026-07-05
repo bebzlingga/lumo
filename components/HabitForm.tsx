@@ -1,12 +1,15 @@
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Alert, Modal, Pressable, ScrollView, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
+import { WheelTimePicker } from "./WheelTimePicker";
 import { fontFamilies, habitColors, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { dayLabels, dayNames, parseDateKey, toDateKey } from "@/lib/date";
 import { Habit, HabitDraft, GoalType, RepeatSchedule, Weekday, habitCategories } from "@/types/habit";
+import { categoryIcons, categoryNamePlaceholders } from "./CategoryChips";
 import { FloatingDropdown } from "./FloatingDropdown";
+import { categoryIconOptions } from "./IconPicker";
 import { HabitIcon } from "./HabitIcon";
 import { Icon, IconName, isIconName } from "./Icon";
 import {
@@ -49,51 +52,12 @@ const repeatScheduleOptions: { label: string; value: RepeatSchedule["type"] }[] 
   { label: "Custom interval", value: "interval" }
 ];
 
-const categoryIcons: Record<(typeof habitCategories)[number], IconName> = {
-  General: "sparkle",
-  Health: "heart",
-  Fitness: "weight",
-  Mind: "smiley",
-  Focus: "eye",
-  Learning: "book",
-  Social: "emojiHappy",
-  Home: "home",
-  Money: "money",
-  Creative: "brush"
-};
-
-const categoryNamePlaceholders: Record<(typeof habitCategories)[number], string> = {
-  General: "Drink water",
-  Health: "Take vitamins",
-  Fitness: "Go for a run",
-  Mind: "Meditate 10 minutes",
-  Focus: "Deep work session",
-  Learning: "Read 10 pages",
-  Social: "Call a friend",
-  Home: "Tidy up the space",
-  Money: "Track today's spending",
-  Creative: "Sketch for 15 minutes"
-};
-
 const goalOptions: { label: string; value: GoalType["type"] }[] = [
   { label: "Once per day", value: "once" },
   { label: "Multiple times", value: "multiple" },
   { label: "Weekly target", value: "weekly" },
   { label: "Monthly target", value: "monthly" }
 ];
-
-const categoryIconOptions: Record<(typeof habitCategories)[number], IconName[]> = {
-  General: ["sparkle", "star", "taskSquare", "note", "calendar", "checkCircle", "grid", "elementPlus"],
-  Health: ["health", "heart", "drop", "milk", "glass", "moon", "sun", "weight"],
-  Fitness: ["weight", "activity", "fire", "zap", "trophy", "heart", "timer", "award"],
-  Mind: ["moon", "smiley", "emojiHappy", "sun", "sparkle", "tree", "heart", "star"],
-  Focus: ["eye", "timer", "clock", "taskSquare", "chart", "zap", "note", "book"],
-  Learning: ["book", "note", "edit", "award", "headphone", "chart", "taskSquare", "star"],
-  Social: ["emojiHappy", "heart", "smiley", "coffee", "headphone", "facebook", "star", "sparkle"],
-  Home: ["home", "broom", "tree", "coffee", "milk", "drop", "note", "sun"],
-  Money: ["money", "chart", "trophy", "award", "star", "calendar", "taskSquare", "archive"],
-  Creative: ["brush", "edit", "sparkle", "note", "headphone", "star", "drop", "coffee"]
-};
 
 function FormSection({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   return <Card style={[styles.formCard, style]}>{children}</Card>;
@@ -187,6 +151,40 @@ function dateKeyToMasked(dateKey: string) {
   return `${month} / ${day} / ${year}`;
 }
 
+// Backspace over an auto-inserted separator should also drop the digit before
+// it, so deletion isn't stuck on the " / " glue.
+function digitsAfterEdit(text: string, previousMasked: string) {
+  let nextDigits = text.replace(/\D/g, "");
+
+  if (text.length < previousMasked.length && nextDigits === previousMasked.replace(/\D/g, "")) {
+    nextDigits = nextDigits.slice(0, -1);
+  }
+
+  return nextDigits;
+}
+
+// Reminder times are stored as 24-hour "HH:MM" (what the scheduler parses), but
+// shown to the user in 12-hour time with AM/PM via the picker.
+function normalizeTime(value?: string) {
+  const match = value?.match(/^(\d{1,2}):(\d{2})$/);
+
+  if (!match) {
+    return "09:00";
+  }
+
+  const hour = Math.min(23, Math.max(0, Number(match[1])));
+  const minute = Math.min(59, Math.max(0, Number(match[2])));
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+// "HH:MM" (24h) -> "9:00 AM" display string.
+function formatTime12(value: string) {
+  const [hour, minute] = normalizeTime(value).split(":").map(Number);
+  const period = hour < 12 ? "AM" : "PM";
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${hour12}:${String(minute).padStart(2, "0")} ${period}`;
+}
+
 function draftFromHabit(habit?: Habit): HabitDraft {
   if (!habit) {
     return createDefaultDraft();
@@ -201,6 +199,7 @@ function draftFromHabit(habit?: Habit): HabitDraft {
     reminderEnabled: habit.reminderEnabled,
     reminderMode: habit.reminderMode ?? "time",
     reminderTime: habit.reminderTime,
+    reminderTimes: habit.reminderTimes,
     reminderIntervalValue: habit.reminderIntervalValue ?? 1,
     reminderIntervalUnit: habit.reminderIntervalUnit ?? "hours",
     repeatSchedule: habit.repeatSchedule,
@@ -218,7 +217,11 @@ export function HabitForm({
   onSave: (draft: HabitDraft) => Promise<void>;
 }) {
   const router = useRouter();
-  const { palette } = useLumo();
+  const { palette, isDark } = useLumo();
+  // greenDark is a *dark* green in light mode but a *light* green in dark mode,
+  // so a filled button needs the medium green in dark to keep white text legible.
+  const buttonFill = isDark ? palette.green : palette.greenDark;
+  const buttonShadow = isDark ? "transparent" : palette.greenDark;
   const [draft, setDraft] = useState<HabitDraft>(() => draftFromHabit(habit));
   const [customInterval, setCustomInterval] = useState(() => {
     return draft.repeatSchedule.type === "interval" ? String(draft.repeatSchedule.every) : "2";
@@ -233,25 +236,66 @@ export function HabitForm({
     return "3";
   });
   const [startDateInput, setStartDateInput] = useState(() => dateKeyToMasked(draft.createdAt));
+  // Reminder times kept as 24h "HH:MM". A single time covers once/weekly/monthly
+  // goals; the array holds one time per check-in for "multiple times per day".
+  const [singleTime, setSingleTime] = useState(() => normalizeTime(draft.reminderTime));
+  const [multiTimes, setMultiTimes] = useState<string[]>(() => {
+    const times = draft.reminderTimes?.length ? draft.reminderTimes : [draft.reminderTime];
+    return times.map(normalizeTime);
+  });
+  // Which time field has the picker open: "single", a slot index, or null.
+  const [pickerTarget, setPickerTarget] = useState<null | "single" | number>(null);
   const selectedIconName = isIconName(draft.emoji) ? draft.emoji : DEFAULT_HABIT_ICON;
   // Resting bottom-border for inputs and selects — a tinted green that reads
   // more clearly than the faint cream hairline.
   const fieldBorderColor = alpha(palette.greenDark, "33");
 
-  function handleStartDateChange(text: string) {
-    let nextDigits = text.replace(/\D/g, "");
+  const multipleCount = draft.goal.type === "multiple" ? Math.max(2, Number(goalAmount) || 2) : 1;
 
-    // If a backspace only removed an auto-inserted " / " (the digits are
-    // unchanged but the string got shorter), drop the last digit too so
-    // deletion isn't stuck on the separator.
-    if (text.length < startDateInput.length && nextDigits === startDateInput.replace(/\D/g, "")) {
-      nextDigits = nextDigits.slice(0, -1);
+  // Keep one reminder-time slot per daily check-in when the goal is "multiple".
+  useEffect(() => {
+    if (draft.goal.type !== "multiple") {
+      return;
     }
 
-    const masked = maskDateInput(nextDigits);
+    setMultiTimes((current) => {
+      if (current.length === multipleCount) {
+        return current;
+      }
+      const next = current.slice(0, multipleCount);
+      while (next.length < multipleCount) {
+        next.push("09:00");
+      }
+      return next;
+    });
+  }, [multipleCount, draft.goal.type]);
+
+  function handleStartDateChange(text: string) {
+    const masked = maskDateInput(digitsAfterEdit(text, startDateInput));
     setStartDateInput(masked);
     setDraft((current) => ({ ...current, createdAt: maskedDateToKey(masked) }));
   }
+
+  const pickerValue =
+    pickerTarget === "single"
+      ? singleTime
+      : typeof pickerTarget === "number"
+        ? multiTimes[pickerTarget] ?? "09:00"
+        : "09:00";
+
+  function applyPickedTime(time: string) {
+    if (pickerTarget === "single") {
+      setSingleTime(time);
+    } else if (typeof pickerTarget === "number") {
+      const index = pickerTarget;
+      setMultiTimes((current) => {
+        const next = [...current];
+        next[index] = time;
+        return next;
+      });
+    }
+  }
+
   const selectedDays = useMemo(() => {
     return draft.repeatSchedule.type === "specific" ? draft.repeatSchedule.days : ([1, 2, 3, 4, 5] as Weekday[]);
   }, [draft.repeatSchedule]);
@@ -304,13 +348,18 @@ export function HabitForm({
       return;
     }
 
+    const wantsMultiple = draft.goal.type === "multiple";
+    const reminderTimeValues = multiTimes.slice(0, multipleCount).map(normalizeTime);
+
     const cleanDraft: HabitDraft = {
       ...draft,
       name: cleanName,
       createdAt: cleanStartDate,
       emoji: selectedIconName,
+      reminderMode: "time",
       reminderIntervalValue: Math.max(1, Number(draft.reminderIntervalValue) || 1),
-      reminderTime: draft.reminderTime.match(/^\d{1,2}:\d{2}$/) ? draft.reminderTime : "09:00",
+      reminderTime: wantsMultiple ? reminderTimeValues[0] ?? "09:00" : normalizeTime(singleTime),
+      reminderTimes: wantsMultiple ? reminderTimeValues : undefined,
       repeatSchedule:
         draft.repeatSchedule.type === "interval"
           ? { type: "interval", every: Math.max(1, Number(customInterval) || 1) }
@@ -348,9 +397,10 @@ export function HabitForm({
         />
       </View>
 
-      <FormSection style={styles.categoryCard}>
+      <FormSection>
         <ScrollView
           horizontal
+          directionalLockEnabled
           showsHorizontalScrollIndicator={false}
           style={styles.categoryScroll}
           contentContainerStyle={styles.categoryRow}
@@ -393,9 +443,7 @@ export function HabitForm({
               );
             })}
           </ScrollView>
-      </FormSection>
 
-      <FormSection>
         <Field>
           <FieldLabel>Habit name</FieldLabel>
           <LumoInput
@@ -540,12 +588,103 @@ export function HabitForm({
         ) : null}
       </FormSection>
 
+      <FormSection>
+        <View style={styles.reminderHeaderRow}>
+          <View style={[styles.cardHeader, styles.reminderHeaderText]}>
+            <AppText variant="titleSmall" color={palette.ink}>
+              Reminder
+            </AppText>
+            <AppText variant="bodySmall" color={palette.subtle} numberOfLines={1}>
+              {draft.goal.type === "multiple" ? "A nudge at each check-in time." : "A gentle nudge at your set time."}
+            </AppText>
+          </View>
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityLabel="Enable reminders"
+            accessibilityState={{ checked: draft.reminderEnabled }}
+            onPress={() => setDraft((current) => ({ ...current, reminderEnabled: !current.reminderEnabled }))}
+            hitSlop={8}
+            style={({ pressed }) => [styles.switchButton, { opacity: pressed ? 0.76 : 1 }]}
+          >
+            <View
+              style={[
+                styles.switchTrack,
+                {
+                  backgroundColor: draft.reminderEnabled ? palette.green : palette.chartTrack,
+                  borderColor: draft.reminderEnabled ? palette.green : palette.chartTrack
+                }
+              ]}
+            >
+              <View style={[styles.switchThumb, { transform: [{ translateX: draft.reminderEnabled ? 16 : 0 }] }]} />
+            </View>
+          </Pressable>
+        </View>
+        {draft.reminderEnabled ? <View style={[styles.sectionDivider, { backgroundColor: palette.hairline }]} /> : null}
+
+        {draft.reminderEnabled ? (
+          draft.goal.type === "multiple" ? (
+            multiTimes.slice(0, multipleCount).map((time, index) => (
+              <Field key={`reminder-${index}`}>
+                <FieldLabel>{`Reminder ${index + 1}`}</FieldLabel>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Reminder ${index + 1} time, ${formatTime12(time)}`}
+                  onPress={() => setPickerTarget(index)}
+                  style={[styles.timeField, { borderColor: fieldBorderColor }]}
+                >
+                  <AppText variant="body" color={palette.ink} style={styles.timeFieldText}>
+                    {formatTime12(time)}
+                  </AppText>
+                  <Icon name="clock" size={20} color={palette.subtle} weight="bulk" />
+                </Pressable>
+              </Field>
+            ))
+          ) : (
+            <Field>
+              <FieldLabel>Reminder time</FieldLabel>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Reminder time, ${formatTime12(singleTime)}`}
+                onPress={() => setPickerTarget("single")}
+                style={[styles.timeField, { borderColor: fieldBorderColor }]}
+              >
+                <AppText variant="body" color={palette.ink} style={styles.timeFieldText}>
+                  {formatTime12(singleTime)}
+                </AppText>
+                <Icon name="clock" size={20} color={palette.subtle} weight="bulk" />
+              </Pressable>
+            </Field>
+          )
+        ) : null}
+      </FormSection>
+
+      {pickerTarget !== null ? (
+        <Modal transparent animationType="none" visible onRequestClose={() => setPickerTarget(null)}>
+          <View style={styles.pickerBackdrop}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setPickerTarget(null)} />
+            <View style={[styles.pickerSheet, { backgroundColor: palette.card }]}>
+              <WheelTimePicker value={pickerValue} onChange={applyPickedTime} />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Done"
+                onPress={() => setPickerTarget(null)}
+                style={({ pressed }) => [styles.pickerDoneButton, { backgroundColor: buttonFill, opacity: pressed ? 0.85 : 1 }]}
+              >
+                <AppText variant="button" color={palette.white} style={styles.pickerDoneLabel}>
+                  Done
+                </AppText>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
+
       <View
         style={{
           marginTop: spacing.xs,
           borderRadius: 18,
-          backgroundColor: palette.greenDark,
-          shadowColor: palette.greenDark,
+          backgroundColor: buttonFill,
+          shadowColor: buttonShadow,
           shadowOffset: { width: 0, height: 8 },
           shadowOpacity: 0.28,
           shadowRadius: 16,
@@ -557,7 +696,8 @@ export function HabitForm({
           variant="primary"
           onPress={save}
           className="min-h-[48px] w-full flex-row items-center justify-center rounded-[18px] px-4 py-2"
-          style={{ backgroundColor: palette.greenDark, borderRadius: 18, borderWidth: 0 }}
+          style={{ backgroundColor: buttonFill, borderRadius: 18, borderWidth: 0 }}
+          labelStyle={{ fontSize: 17 }}
         />
       </View>
     </Screen>
@@ -603,11 +743,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingRight: spacing.lg
   },
-  categoryCard: {
-    paddingVertical: spacing.md + 4
-  },
   categoryScroll: {
-    marginHorizontal: -spacing.xl
+    marginHorizontal: -spacing.xl,
+    marginBottom: spacing.sm
   },
   categoryRow: {
     alignItems: "flex-start",
@@ -678,5 +816,78 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xxs,
     paddingBottom: spacing.sm,
     fontFamily: fontFamilies.lexendBold
+  },
+  reminderHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md
+  },
+  reminderHeaderText: {
+    flex: 1
+  },
+  switchButton: {
+    width: 38,
+    height: 22,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  switchTrack: {
+    width: 38,
+    height: 22,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    padding: 3,
+    justifyContent: "center",
+    alignItems: "flex-start",
+    overflow: "hidden"
+  },
+  switchThumb: {
+    width: 16,
+    height: 16,
+    borderRadius: radius.pill,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#141413",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.14,
+    shadowRadius: 2,
+    elevation: 2
+  },
+  timeField: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    borderBottomWidth: 1,
+    paddingTop: spacing.xxs,
+    paddingBottom: spacing.sm
+  },
+  timeFieldText: {
+    fontFamily: fontFamilies.lexendBold
+  },
+  pickerBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg,
+    backgroundColor: "rgba(0, 0, 0, 0.35)"
+  },
+  pickerSheet: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 40,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xl
+  },
+  pickerDoneButton: {
+    marginTop: spacing.md,
+    minHeight: 48,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  pickerDoneLabel: {
+    fontSize: 17
   }
 });

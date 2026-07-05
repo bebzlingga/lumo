@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
     zIndex: 1
   },
   headerTitle: {
-    fontFamily: fontFamilies.lexendBold,
+    fontFamily: "Lexend-Black",
     fontSize: 34,
     lineHeight: 40
   }

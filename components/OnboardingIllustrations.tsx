@@ -4,6 +4,37 @@ import { type LumoPalette } from "@/constants/theme";
 
 type IllustrationName = "habits" | "progress" | "challenge" | "nickname";
 
+// Colorful base layer rendered behind every illustration: soft color clouds for
+// fullness plus a few bold accent specks. It sits under the line art, so any
+// speck overlapping a subject is simply hidden — only the empty areas get color.
+function IllustrationBackdrop({ palette }: { palette: LumoPalette }) {
+  return (
+    <G>
+      {/* Soft color clouds for a full, flat base (Storyset-style). */}
+      <Circle cx={158} cy={114} r={116} fill={palette.greenSoft} opacity={0.42} />
+      <Circle cx={216} cy={60} r={66} fill={palette.glowSoft} opacity={0.72} />
+      <Circle cx={78} cy={178} r={54} fill={palette.glowSoft} opacity={0.55} />
+      {/* Grounding floor shadow under the subject. */}
+      <Ellipse cx={160} cy={226} rx={124} ry={15} fill={palette.greenDark} opacity={0.08} />
+
+      {/* Geometric accents tucked into the corners, drawn behind the subject
+          so any that overlap are hidden — only empty space gets decorated. */}
+      <G strokeLinecap="round" fill="none">
+        <Path d="M28 32v14M21 39h14" stroke={palette.glow} strokeWidth={3} />
+        <Circle cx={292} cy={44} r={8} stroke={palette.green} strokeWidth={3} />
+        <Circle cx={30} cy={206} r={7} stroke={palette.accent} strokeWidth={3} />
+        <Path d="M292 196v14M285 203h14" stroke={palette.green} strokeWidth={3} />
+      </G>
+
+      {/* Flat accent dots. */}
+      <Circle cx={302} cy={150} r={4} fill={palette.green} />
+      <Circle cx={18} cy={120} r={4} fill={palette.glow} />
+      <Circle cx={150} cy={20} r={4} fill={palette.accent} />
+      <Circle cx={250} cy={214} r={4} fill={palette.glow} />
+    </G>
+  );
+}
+
 export function OnboardingIllustration({
   name,
   palette,
@@ -26,6 +57,7 @@ export function OnboardingIllustration({
   if (name === "progress") {
     return (
       <Svg width={width} height={height} viewBox="0 0 320 250" fill="none">
+        <IllustrationBackdrop palette={palette} />
         <G stroke={line} strokeLinecap="round" strokeLinejoin="round" strokeWidth={3}>
           <Circle cx={80} cy={98} r={34} fill={yellow} />
           <Line x1={80} y1={43} x2={80} y2={28} />
@@ -58,6 +90,11 @@ export function OnboardingIllustration({
           <Circle cx={281} cy={180} r={3} fill={line} stroke="none" />
           <Circle cx={298} cy={180} r={3} fill={line} stroke="none" />
           <Path d="M284 195c5 4 12 4 17 0" />
+          {/* blush cheeks */}
+          <Ellipse cx={63} cy={99} rx={4.5} ry={3} fill={coral} stroke="none" opacity={0.45} />
+          <Ellipse cx={98} cy={99} rx={4.5} ry={3} fill={coral} stroke="none" opacity={0.45} />
+          <Ellipse cx={164} cy={154} rx={4} ry={2.6} fill={coral} stroke="none" opacity={0.5} />
+          <Ellipse cx={200} cy={154} rx={4} ry={2.6} fill={coral} stroke="none" opacity={0.5} />
         </G>
       </Svg>
     );
@@ -66,6 +103,7 @@ export function OnboardingIllustration({
   if (name === "challenge") {
     return (
       <Svg width={width} height={height} viewBox="0 0 320 250" fill="none">
+        <IllustrationBackdrop palette={palette} />
         <G stroke={line} strokeLinecap="round" strokeLinejoin="round" strokeWidth={3}>
           <Path d="M58 191h204" />
           <Path d="M79 183 159 96l79 87Z" fill={coral} opacity={0.86} stroke="none" />
@@ -86,6 +124,9 @@ export function OnboardingIllustration({
           <Path d="M102 51 91 36" stroke={coral} />
           <Path d="M121 39 116 21" stroke={coral} />
           <Path d="M203 39l5-18" stroke={coral} />
+          {/* blush cheeks */}
+          <Ellipse cx={124} cy={116} rx={4.5} ry={2.8} fill={coral} stroke="none" opacity={0.45} />
+          <Ellipse cx={197} cy={116} rx={4.5} ry={2.8} fill={coral} stroke="none" opacity={0.45} />
         </G>
       </Svg>
     );
@@ -94,6 +135,7 @@ export function OnboardingIllustration({
   if (name === "nickname") {
     return (
       <Svg width={width} height={height} viewBox="0 0 320 250" fill="none">
+        <IllustrationBackdrop palette={palette} />
         <G stroke={line} strokeLinecap="round" strokeLinejoin="round" strokeWidth={3}>
           <Path d="M98 175c23-39 71-58 121-35" stroke={yellowSoft} strokeWidth={28} />
           <Circle cx={137} cy={104} r={38} fill={yellow} />
@@ -106,6 +148,12 @@ export function OnboardingIllustration({
           <Circle cx={148} cy={97} r={3} fill={line} stroke="none" />
           <Path d="M126 115c8 6 19 6 27 0" />
           <Path d="M74 198c58 19 142 19 200-1" />
+          {/* bee body stripes */}
+          <Path d="M113 146q22 9 44 0" strokeWidth={5} />
+          <Path d="M111 166q24 9 48 0" strokeWidth={5} />
+          {/* blush cheeks */}
+          <Ellipse cx={118} cy={110} rx={5} ry={3.2} fill={coral} stroke="none" opacity={0.5} />
+          <Ellipse cx={157} cy={110} rx={5} ry={3.2} fill={coral} stroke="none" opacity={0.5} />
         </G>
       </Svg>
     );
@@ -113,6 +161,7 @@ export function OnboardingIllustration({
 
   return (
     <Svg width={width} height={height} viewBox="0 0 320 250" fill="none">
+      <IllustrationBackdrop palette={palette} />
       <G stroke={line} strokeLinecap="round" strokeLinejoin="round" strokeWidth={3}>
         <Path d="M57 71h143l39 125H94Z" fill={card} />
         <Path d="M44 97h27l40 116h153l-25-17" fill={greenSoft} />
@@ -139,6 +188,9 @@ export function OnboardingIllustration({
         <Line x1={260} y1={163} x2={270} y2={183} />
         <Line x1={266} y1={161} x2={287} y2={168} />
         <Polygon points="198,188 268,189 248,204 205,202" fill={coral} />
+        {/* blush cheeks */}
+        <Ellipse cx={207} cy={116} rx={4} ry={2.6} fill={coral} stroke="none" opacity={0.5} />
+        <Ellipse cx={237} cy={116} rx={4} ry={2.6} fill={coral} stroke="none" opacity={0.5} />
       </G>
     </Svg>
   );

@@ -24,7 +24,15 @@ export function ActionTile({
   const iconColor = color ?? palette.greenDark;
 
   return (
-    <Pressable style={[styles.tile, { backgroundColor: backgroundColor ?? palette.card, shadowColor: isDark ? "transparent" : palette.shadow }, style]} onPress={onPress}>
+    <Pressable
+      style={[
+        styles.tile,
+        // A subtle shadow vanishes on the dark canvas, so deepen it in dark mode.
+        { backgroundColor: backgroundColor ?? palette.card, shadowColor: palette.shadow, shadowOpacity: isDark ? 0.32 : 0.09 },
+        style
+      ]}
+      onPress={onPress}
+    >
       <Icon name={icon} size={18} color={iconColor} weight="bulk" />
       <AppText variant="caption" color={color ?? palette.greenDark} numberOfLines={1} style={styles.label}>
         {label}

@@ -158,7 +158,7 @@ export function HabitCard({
         <Card style={compact ? styles.compactCard : undefined}>
           <View style={styles.header}>
             <View style={[styles.iconBubble, { backgroundColor: iconBackgroundColor }]}>
-              <HabitIcon value={habit.emoji} color={iconColor} size={24} />
+              <HabitIcon value={habit.emoji} color={iconColor} size={21} />
             </View>
             <View style={styles.titleBlock}>
               <View style={styles.titleRow}>

@@ -10,7 +10,8 @@ import { habitCategories } from "@/types/habit";
 
 export default function HabitsScreen() {
   const router = useRouter();
-  const { habits, isReady, palette } = useLumo();
+  const { habits, isReady, isDark, palette, canCreateHabit } = useLumo();
+  const buttonFill = isDark ? palette.green : palette.greenDark;
   const [showArchived, setShowArchived] = React.useState(false);
   const visibleHabits = habits.filter((habit) => habit.status !== "archived");
   const archivedHabits = habits.filter((habit) => habit.status === "archived");
@@ -40,7 +41,7 @@ export default function HabitsScreen() {
     <Screen contentStyle={{ paddingBottom: layout.tabScreenBottomPadding }}>
       <View style={styles.screenHeader} className="flex-row items-center justify-between gap-4">
         <View className="flex-1 gap-1">
-          <AppText variant="displaySmall" color={palette.ink} style={{ fontFamily: fontFamilies.lexendBold, fontSize: 34, lineHeight: 40 }}>
+          <AppText variant="displaySmall" color={palette.ink} style={{ fontFamily: "Lexend-Black", fontSize: 34, lineHeight: 40 }}>
             Habits
           </AppText>
           <AppText variant="bodySmall" color={palette.subtle}>
@@ -53,9 +54,9 @@ export default function HabitsScreen() {
           iconWeight="bulk"
           variant="primary"
           shape="pill"
-          onPress={() => router.push("/habit/new")}
+          onPress={() => router.push(canCreateHabit ? "/habit/new" : "/paywall")}
           className="min-h-[40px] min-w-[92px] flex-row items-center justify-center gap-1.5 rounded-[22px] px-3 py-1"
-          style={{ backgroundColor: palette.greenDark, borderWidth: 0 }}
+          style={{ backgroundColor: buttonFill, borderWidth: 0 }}
         />
       </View>
 
@@ -67,7 +68,7 @@ export default function HabitsScreen() {
                 <AppText variant="titleSmall" color={palette.ink} style={styles.categoryTitle}>
                   {category}
                 </AppText>
-                <AppText variant="bodySmall" color={palette.muted} style={styles.categoryCount}>
+                <AppText variant="bodySmall" color={palette.subtle} style={styles.categoryCount}>
                   {items.length} {items.length === 1 ? "Habit" : "Habits"}
                 </AppText>
               </View>
@@ -84,15 +85,15 @@ export default function HabitsScreen() {
           <View style={styles.categorySection}>
             <View style={styles.categoryHeader}>
               <AppText variant="titleSmall" color={palette.ink} style={styles.categoryTitle}>
-                Archived
+                Completed
               </AppText>
               <View style={styles.archiveHeaderActions}>
-                <AppText variant="bodySmall" color={palette.muted} style={styles.categoryCount}>
+                <AppText variant="bodySmall" color={palette.subtle} style={styles.categoryCount}>
                   {archivedHabits.length} {archivedHabits.length === 1 ? "Habit" : "Habits"}
                 </AppText>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={showArchived ? "Hide archived habits" : "Show archived habits"}
+                  accessibilityLabel={showArchived ? "Hide completed habits" : "Show completed habits"}
                   accessibilityState={{ expanded: showArchived }}
                   onPress={() => setShowArchived((current) => !current)}
                   style={({ pressed }) => [
@@ -142,7 +143,8 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.lexendSemiBold
   },
   categoryCount: {
-    fontFamily: fontFamilies.lexendSemiBold
+    fontFamily: fontFamilies.lexendSemiBold,
+    opacity: 0.5
   },
   archiveHeaderActions: {
     flexDirection: "row",

@@ -126,7 +126,8 @@ export function Button({
   variant = "primary",
   shape = "default",
   disabled = false,
-  style
+  style,
+  labelStyle
 }: {
   label: string;
   onPress?: () => void;
@@ -142,6 +143,7 @@ export function Button({
   shape?: "default" | "pill";
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
+  labelStyle?: StyleProp<TextStyle>;
 }) {
   const { palette } = useLumo();
   const customStyle = StyleSheet.flatten(style);
@@ -213,7 +215,7 @@ export function Button({
       />
       {icon ? <Icon name={icon} size={17} color={color} weight={iconWeight} /> : null}
       {label ? (
-        <AppText variant="button" color={color} style={styles.buttonText}>
+        <AppText variant="button" color={color} style={[styles.buttonText, labelStyle]}>
           {label}
         </AppText>
       ) : null}
@@ -310,8 +312,10 @@ export function controlBorderColor(palette: ReturnType<typeof useLumo>["palette"
 }
 
 export function LumoInput(props: TextInputProps) {
-  const { palette, isDark } = useLumo();
+  const { palette, isDark, settings } = useLumo();
   const [focused, setFocused] = React.useState(false);
+  // The green theme uses a soft green-tinted field instead of the cream surface.
+  const fieldBackground = settings.colorScheme === "green" ? alpha(palette.greenDark, "14") : palette.surface;
 
   return (
     <TextInput
@@ -328,7 +332,7 @@ export function LumoInput(props: TextInputProps) {
       style={[
         styles.input,
         {
-          backgroundColor: palette.surface,
+          backgroundColor: fieldBackground,
           borderColor: controlBorderColor(palette, isDark, focused),
           color: palette.ink
         },
@@ -493,10 +497,10 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: radius.nav,
     padding: spacing.lg,
-    shadowOffset: { width: 0, height: 7 },
-    shadowOpacity: 0.09,
-    shadowRadius: 22,
-    elevation: 4
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2
   },
   buttonBase: {
     alignItems: "center",
@@ -588,10 +592,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.nav,
     padding: spacing.lg,
     gap: spacing.xxs,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.075,
-    shadowRadius: 18,
-    elevation: 3
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2
   },
   statIconWrap: {
     position: "absolute",
