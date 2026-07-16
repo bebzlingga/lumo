@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
+import * as Notifications from "expo-notifications";
+import { router } from "expo-router";
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, useColorScheme } from "react-native";
 import { getPalette, LumoPalette, ThemeColorScheme } from "@/constants/theme";
@@ -16,6 +18,9 @@ import { AvatarConfig, defaultAvatar, normalizeAvatar } from "@/lib/avatar";
 import { friendsService } from "@/lib/friends";
 import { fetchServerEntitlement, purchaseFriendsSubscription, restoreFriendsSubscription } from "@/lib/iap";
 import { formatLumoId, generateLumoSuffix } from "@/lib/lumoId";
+import { getExpoPushToken } from "@/lib/notifications";
+import { subscribeToUserNotifications } from "@/lib/realtime";
+import { ensureSignedIn } from "@/lib/supabase";
 import { updateTodayWidget } from "@/lib/widget";
 import { AppSettings, BackupFrequency, CompletionEntry, FeatureRequest, Habit, HabitCategory, habitCategories, HabitDraft, JournalEntry, JournalMood } from "@/types/habit";
 
@@ -524,6 +529,46 @@ export function LumoProvider({ children }: { children: ReactNode }) {
       updateTodayWidget(state.habits);
     }
   }, [isReady, state.habits]);
+
+  // Push + realtime notifications: register this device's push token (so the
+  // server can notify when the app is closed) and subscribe to live in-app
+  // banners for friend requests / group invites / cheers while it's open.
+  useEffect(() => {
+    if (!isReady) {
+      return;
+    }
+
+    let active = true;
+    let unsubscribe: (() => void) | undefined;
+
+    (async () => {
+      const userId = await ensureSignedIn();
+      if (!active || !userId) {
+        return;
+      }
+
+      const token = await getExpoPushToken();
+      if (token) {
+        friendsService.savePushToken(token);
+      }
+
+      unsubscribe = subscribeToUserNotifications(userId);
+    })();
+
+    // Tapping any of our notifications deep-links to the relevant screen.
+    const tapSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const route = response.notification.request.content.data?.route;
+      if (typeof route === "string") {
+        router.push(route as Parameters<typeof router.push>[0]);
+      }
+    });
+
+    return () => {
+      active = false;
+      unsubscribe?.();
+      tapSub.remove();
+    };
+  }, [isReady]);
 
   const value = useMemo<LumoContextValue>(() => {
     // Active + paused habits count toward the free limit; archived and trashed

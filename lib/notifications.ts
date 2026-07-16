@@ -1,14 +1,63 @@
+import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
+import { AppState, Platform } from "react-native";
 import { Habit, RepeatSchedule, Weekday } from "@/types/habit";
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true
-  })
+  handleNotification: async (notification) => {
+    // When the app is foregrounded, Supabase Realtime already presents a local
+    // banner for social events (lib/realtime.ts). Suppress the matching remote
+    // push so the user doesn't see it twice; background pushes are shown by the
+    // system directly (this handler isn't consulted then).
+    const isRemotePush = (notification.request.trigger as { type?: string } | null)?.type === "push";
+    const show = !(isRemotePush && AppState.currentState === "active");
+
+    return {
+      shouldPlaySound: show,
+      shouldSetBadge: false,
+      shouldShowBanner: show,
+      shouldShowList: show
+    };
+  }
 });
+
+/**
+ * Registers this device for Expo push and returns the token (to store
+ * server-side). Returns null when permission is denied or the token can't be
+ * fetched (simulator, missing EAS project id). Never throws.
+ */
+export async function getExpoPushToken(): Promise<string | null> {
+  try {
+    const status = await requestNotificationPermissions();
+    if (status !== "granted") {
+      return null;
+    }
+
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("default", {
+        name: "Lumo",
+        importance: Notifications.AndroidImportance.DEFAULT
+      });
+    }
+
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId ?? undefined;
+    const token = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+
+    return token.data;
+  } catch {
+    return null;
+  }
+}
+
+/** Immediately shows a local banner (used for live in-app realtime events). */
+export async function presentLocalNotification(title: string, body: string, data?: Record<string, unknown>): Promise<void> {
+  try {
+    await Notifications.scheduleNotificationAsync({ content: { title, body, data }, trigger: null });
+  } catch {
+    // Notifications unavailable / not permitted — ignore.
+  }
+}
 
 function parseReminderTime(time: string) {
   const [hour = "9", minute = "0"] = time.split(":");

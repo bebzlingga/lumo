@@ -6,19 +6,32 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/lumo-logo.png",
+    "splash": {
+      "image": "./assets/lumo-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.lumo.habits",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSSpeechRecognitionUsageDescription": "Lumo uses speech recognition to turn your voice into text.",
+        "NSMicrophoneUsageDescription": "Lumo needs the microphone to dictate your journal."
       },
       "entitlements": {
-        "com.apple.security.application-groups": ["group.com.lumo.habits"]
+        "com.apple.security.application-groups": [
+          "group.com.lumo.habits"
+        ]
       }
     },
     "android": {
-      "package": "com.lumo.habits"
+      "package": "com.lumo.habits",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -42,6 +55,30 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "bundleIdentifier": "com.lumo.habits.widget",
+                  "targetName": "LumoWidget",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.lumo.habits"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "projectId": "ed18109c-8f2f-4b29-870c-a660a65b5068"
+      }
+    },
+    "owner": "bebzlingga"
   }
 }

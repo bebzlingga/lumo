@@ -47,6 +47,26 @@ create policy "own email only"
   using (auth.uid() = id) with check (auth.uid() = id);
 
 -- ---------------------------------------------------------------------------
+-- Device push tokens (Expo push): one row per device. The push-sending Edge
+-- Function reads any user's tokens with the service-role key; the owner can
+-- only read/write their own.
+-- ---------------------------------------------------------------------------
+create table device_tokens (
+  token text primary key,
+  user_id uuid not null references profiles(id) on delete cascade,
+  platform text not null default 'ios' check (platform in ('ios', 'android')),
+  updated_at timestamptz not null default now()
+);
+
+alter table device_tokens enable row level security;
+
+create policy "own device tokens"
+  on device_tokens for all to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create index device_tokens_user_idx on device_tokens (user_id);
+
+-- ---------------------------------------------------------------------------
 -- Subscription entitlements (Friends + Feature Board, ₱29/month Apple sub).
 -- Written ONLY by server-side receipt validation (an Edge Function handling
 -- App Store Server Notifications, or a RevenueCat webhook) via the
@@ -385,3 +405,12 @@ create index profiles_lumo_id_idx on profiles (lumo_id);
 create index friendships_addressee_idx on friendships (addressee, status);
 create index group_completions_day_idx on group_completions (group_id, day);
 create index feature_requests_created_idx on feature_requests (created_at desc);
+
+-- ---------------------------------------------------------------------------
+-- Realtime: broadcast row changes so the app can show live in-app banners for
+-- incoming friend requests, group invites, and cheers/nudges (lib/realtime.ts).
+-- RLS still applies to realtime, so each client only receives its own rows.
+-- ---------------------------------------------------------------------------
+alter publication supabase_realtime add table friendships;
+alter publication supabase_realtime add table group_members;
+alter publication supabase_realtime add table group_reactions;

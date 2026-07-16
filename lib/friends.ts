@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import type { IconName } from "@/components/Icon";
 import { type AvatarConfig } from "@/lib/avatar";
 import { addDays, parseDateKey, startOfWeek, toDateKey } from "@/lib/date";
@@ -577,6 +578,20 @@ export const friendsService = {
       .from("friendships")
       .delete()
       .or(`and(requester.eq.${userId},addressee.eq.${friendId}),and(requester.eq.${friendId},addressee.eq.${userId})`);
+
+    return !error;
+  },
+
+  /** Stores this device's Expo push token so the server can notify this user. */
+  async savePushToken(token: string): Promise<boolean> {
+    const userId = await ensureSignedIn();
+    if (!userId || !token) {
+      return false;
+    }
+
+    const { error } = await supabase
+      .from("device_tokens")
+      .upsert({ token, user_id: userId, platform: Platform.OS === "android" ? "android" : "ios" }, { onConflict: "token" });
 
     return !error;
   },
