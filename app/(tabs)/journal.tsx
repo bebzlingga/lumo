@@ -20,7 +20,7 @@ type ListItem =
 
 export default function JournalScreen() {
   const router = useRouter();
-  const { journals, isReady, isDark, palette, canCreateJournal } = useLumo();
+  const { journals, isReady, isDark, palette } = useLumo();
   const todayCardBackground = isDark ? palette.surfaceStrong : palette.greenDark;
   const todayCardText = isDark ? palette.ink : palette.white;
   const todayCardMuted = isDark ? palette.muted : "rgba(255,255,255,0.82)";
@@ -57,13 +57,6 @@ export default function JournalScreen() {
   }
 
   function openEntry(dateKey: string) {
-    // Opening an existing entry is always allowed; creating a new one is gated
-    // by the free journal limit.
-    const isNewEntry = !entriesByDate.has(dateKey);
-    if (isNewEntry && !canCreateJournal) {
-      router.push("/paywall");
-      return;
-    }
     router.push(`/journal/${dateKey}`);
   }
 
@@ -140,7 +133,13 @@ export default function JournalScreen() {
                 <View style={styles.entryHead}>
                   <View style={styles.entryHeadLeft}>
                     {item.entry?.mood ? (
-                      <Icon name={moodIcon(item.entry.mood)} size={20} color={moodColor(palette, item.entry.mood)} weight="bulk" />
+                      <Icon
+                        name={moodIcon(item.entry.mood)}
+                        size={20}
+                        color={moodColor(palette, item.entry.mood)}
+                        weight="bulk"
+                        style={styles.entryMoodIcon}
+                      />
                     ) : null}
                     <AppText
                       variant="titleSmall"
@@ -210,7 +209,8 @@ const styles = StyleSheet.create({
   todayCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md
+    gap: spacing.md,
+    marginTop: spacing.sm
   },
   todayIcon: {
     width: 46,
@@ -250,6 +250,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs
+  },
+  entryMoodIcon: {
+    transform: [{ translateY: 1 }]
   },
   entryWeekday: {
     fontFamily: fontFamilies.lexendSemiBold

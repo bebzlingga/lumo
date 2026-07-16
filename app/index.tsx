@@ -8,7 +8,7 @@ import { IconPicker, categoryIconOptions } from "@/components/IconPicker";
 import { OnboardingIllustration } from "@/components/OnboardingIllustrations";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, FieldLabel, LoadingState, LumoInput, Screen } from "@/components/ui";
-import { fontFamilies, habitColors, radius, spacing } from "@/constants/theme";
+import { defaultHabitColor, fontFamilies, getPalette, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { toDateKey } from "@/lib/date";
@@ -16,67 +16,35 @@ import { type GoalType, type HabitCategory, type HabitDraft, type RepeatSchedule
 
 const slides = [
   {
-    title: "Manage Your Daily Habits",
-    body: "Keep your streaks by completing daily tasks. Reach small goals with consistent habits.",
+    title: "Small habits, big change",
+    body: "Real change starts tiny. Two minutes a day, done gently and often, beats any perfect plan — and Lumo makes every check-in feel like a win.",
     illustration: "habits" as const
   },
   {
-    title: "Watch Progress Glow",
-    body: "See every bright dot, streak, and completion rate come together as your routine grows.",
+    title: "See yourself grow",
+    body: "Progress you can see is motivation you can feel. Every bright dot and streak is proof you showed up — and proof you can do it again tomorrow.",
     illustration: "progress" as const
   },
   {
-    title: "Challenge Yourself!",
-    body: "Set clear targets, build momentum, and keep showing up for the version of you that is forming.",
+    title: "Remember the wins",
+    body: "One honest line a day is enough. On hard days, your own words become the best encouragement to keep going.",
+    illustration: "journal" as const
+  },
+  {
+    title: "Better together",
+    body: "Shared goals are kept goals — you're far more likely to stick with a habit when a friend is cheering you on. Carry each other through the off days.",
     illustration: "challenge" as const
   }
 ];
 
-type OnboardingStep = "slides" | "nickname" | "habit";
-type BasicFrequency = Extract<RepeatSchedule["type"], "daily" | "weekdays" | "weekends">;
-const ONBOARDING_PX = spacing.xl;
-const frequencyOptions: { label: string; value: BasicFrequency }[] = [
-  { label: "Daily", value: "daily" },
-  { label: "Weekdays", value: "weekdays" },
-  { label: "Weekends", value: "weekends" }
-];
-const goalOptions: { label: string; value: GoalType["type"] }[] = [
-  { label: "Once per day", value: "once" },
-  { label: "Multiple times", value: "multiple" },
-  { label: "Weekly target", value: "weekly" },
-  { label: "Monthly target", value: "monthly" }
-];
+type OnboardingStep = "welcome" | "profile" | "habit";
 
-function OnboardingCta({
-  label,
-  onPress,
-  disabled = false
-}: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-}) {
-  const { palette, isDark } = useLumo();
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [styles.onboardingButtonPressable, { opacity: disabled ? 0.45 : pressed ? 0.82 : 1 }]}
-    >
-      <View style={[styles.onboardingButton, { backgroundColor: isDark ? palette.green : palette.greenDark, shadowColor: isDark ? "transparent" : palette.greenDark }]}>
-        <AppText variant="button" color={palette.white}>
-          {label}
-        </AppText>
-      </View>
-    </Pressable>
-  );
-}
+// Onboarding always renders the light "black" look — the user hasn't picked a
+// theme yet, so it must not depend on whatever settings happen to be stored.
+const onboardingPalette = getPalette(false, "black");
 
 function ProgressDots({ index }: { index: number }) {
-  const { palette } = useLumo();
+  const palette = onboardingPalette;
 
   return (
     <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.dots}>
@@ -96,17 +64,70 @@ function ProgressDots({ index }: { index: number }) {
     </View>
   );
 }
+type BasicFrequency = Extract<RepeatSchedule["type"], "daily" | "weekdays" | "weekends">;
+const ONBOARDING_PX = spacing.xl;
+const frequencyOptions: { label: string; value: BasicFrequency }[] = [
+  { label: "Daily", value: "daily" },
+  { label: "Weekdays", value: "weekdays" },
+  { label: "Weekends", value: "weekends" }
+];
+const goalOptions: { label: string; value: GoalType["type"] }[] = [
+  { label: "Once per day", value: "once" },
+  { label: "Multiple times", value: "multiple" },
+  { label: "Weekly target", value: "weekly" },
+  { label: "Monthly target", value: "monthly" }
+];
+
+function OnboardingCta({
+  label,
+  onPress,
+  disabled = false,
+  variant = "fill"
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  variant?: "fill" | "ghost";
+}) {
+  const palette = onboardingPalette;
+  const ghost = variant === "ghost";
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.onboardingButtonPressable, { opacity: disabled ? 0.45 : pressed ? 0.82 : 1 }]}
+    >
+      <View
+        style={[
+          styles.onboardingButton,
+          ghost
+            ? { backgroundColor: "transparent", shadowOpacity: 0, elevation: 0 }
+            : { backgroundColor: palette.greenDark, shadowColor: palette.greenDark }
+        ]}
+      >
+        <AppText variant="button" color={ghost ? palette.greenDark : palette.white}>
+          {label}
+        </AppText>
+      </View>
+    </Pressable>
+  );
+}
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  const { createHabit, isReady, hasOnboarded, nickname, setNickname, setEmail } = useLumo();
+  const { width, height: windowHeight } = useWindowDimensions();
   const slideScrollRef = useRef<ScrollView>(null);
-  const { createHabit, isReady, hasOnboarded, nickname, palette, setNickname } = useLumo();
+  const palette = onboardingPalette;
   // Resting bottom-border for inputs and selects — matches the create-habit form.
   const fieldBorderColor = alpha(palette.greenDark, "33");
-  const [step, setStep] = useState<OnboardingStep>("slides");
+  const [step, setStep] = useState<OnboardingStep>("welcome");
   const [slideIndex, setSlideIndex] = useState(0);
   const [nicknameDraft, setNicknameDraft] = useState(nickname);
+  const [emailDraft, setEmailDraft] = useState("");
   const [firstHabitName, setFirstHabitName] = useState("");
   const [firstHabitCategory, setFirstHabitCategory] = useState<HabitCategory>("General");
   const [firstHabitEmoji, setFirstHabitEmoji] = useState<IconName>(categoryIconOptions.General[0]);
@@ -115,7 +136,19 @@ export default function OnboardingScreen() {
   const [firstHabitGoalAmount, setFirstHabitGoalAmount] = useState("3");
   const [isSavingHabit, setIsSavingHabit] = useState(false);
 
-  const illustrationWidth = useMemo(() => Math.min(width - ONBOARDING_PX * 2, 330), [width]);
+  // Artwork scales with both screen axes (320:250 aspect kept) so small phones
+  // keep room for the copy and CTA instead of overflowing.
+  const { illustrationWidth, illustrationHeight, profileIllustrationHeight } = useMemo(() => {
+    const aspect = 250 / 320;
+    const nextWidth = Math.round(Math.min(width - ONBOARDING_PX * 2, 330, (windowHeight * 0.34) / aspect));
+    const nextHeight = Math.round(nextWidth * aspect);
+
+    return {
+      illustrationWidth: nextWidth,
+      illustrationHeight: nextHeight,
+      profileIllustrationHeight: Math.min(190, nextHeight)
+    };
+  }, [width, windowHeight]);
   const slideWidth = width - ONBOARDING_PX * 2;
 
   useEffect(() => {
@@ -152,7 +185,7 @@ export default function OnboardingScreen() {
       return;
     }
 
-    setStep("nickname");
+    setStep("profile");
   }
 
   function updateSlideIndex(event: NativeSyntheticEvent<NativeScrollEvent>) {
@@ -174,11 +207,19 @@ export default function OnboardingScreen() {
     const cleanNickname = nicknameDraft.trim();
 
     if (!cleanNickname) {
-      Alert.alert("Nickname needed", "What should Lumo call you?");
+      Alert.alert("Username needed", "What should Lumo call you?");
+      return;
+    }
+
+    const cleanEmail = emailDraft.trim();
+
+    if (cleanEmail && !/^\S+@\S+\.\S+$/.test(cleanEmail)) {
+      Alert.alert("Check your email", "That email address doesn't look right — or leave it empty to skip.");
       return;
     }
 
     setNickname(cleanNickname);
+    setEmail(cleanEmail);
     setStep("habit");
   }
 
@@ -194,7 +235,7 @@ export default function OnboardingScreen() {
       name: cleanHabitName,
       category: firstHabitCategory,
       emoji: firstHabitEmoji,
-      color: habitColors[0],
+      color: defaultHabitColor,
       createdAt: toDateKey(),
       reminderEnabled: false,
       reminderMode: "time",
@@ -220,35 +261,55 @@ export default function OnboardingScreen() {
     }
   }
 
-  if (step === "nickname") {
+  if (step === "profile") {
     return (
       <Screen contentStyle={styles.screen}>
-        <ScreenHeader leftAction={{ icon: "back", label: "Back", onPress: () => setStep("slides") }} />
+        <ScreenHeader leftAction={{ icon: "back", label: "Back", onPress: () => setStep("welcome") }} />
         <View style={styles.formMainContent}>
-          <View style={styles.heroArea}>
-            <OnboardingIllustration name="nickname" palette={palette} width={illustrationWidth} height={238} />
+          <View style={styles.profileHero}>
+            <OnboardingIllustration name="nickname" palette={palette} width={illustrationWidth} height={profileIllustrationHeight} />
           </View>
 
-          <View style={styles.copy}>
-            <AppText variant="displaySmall" style={styles.title}>
-              What should we call you?
+          <View style={[styles.copy, styles.copyLeft]}>
+            <AppText variant="displaySmall" style={[styles.title, styles.titleLeft]}>
+              Make Lumo yours
             </AppText>
-            <AppText variant="body" color={palette.subtle} style={styles.body}>
-              Add a nickname so Lumo's nudges and little wins feel more like yours.
+            <AppText variant="body" color={palette.subtle} style={[styles.body, styles.bodyLeft]}>
+              Pick a username so your streaks and little wins feel like yours.
             </AppText>
           </View>
 
-          <View style={styles.nicknameField}>
-            <LumoInput
-              value={nicknameDraft}
-              onChangeText={setNicknameDraft}
-              placeholder="Your nickname"
-              autoCapitalize="words"
-              autoFocus
-              returnKeyType="done"
-              onSubmitEditing={continueToHabit}
-              style={[styles.flatInput, { borderColor: fieldBorderColor, textAlign: "center", fontSize: 22 }]}
-            />
+          <View style={styles.profileFields}>
+            <View style={styles.formField}>
+              <FieldLabel>Username</FieldLabel>
+              <LumoInput
+                value={nicknameDraft}
+                onChangeText={setNicknameDraft}
+                placeholder="Your username"
+                autoCapitalize="words"
+                autoFocus
+                returnKeyType="next"
+                style={[styles.flatInput, { borderColor: fieldBorderColor }]}
+              />
+            </View>
+
+            <View style={styles.formField}>
+              <FieldLabel>Email (optional)</FieldLabel>
+              <LumoInput
+                value={emailDraft}
+                onChangeText={setEmailDraft}
+                placeholder="you@example.com"
+                autoCapitalize="none"
+                autoComplete="email"
+                keyboardType="email-address"
+                returnKeyType="done"
+                onSubmitEditing={continueToHabit}
+                style={[styles.flatInput, { borderColor: fieldBorderColor }]}
+              />
+              <AppText variant="caption" color={palette.subtle} style={styles.emailHint}>
+                Only used to recover your data one day — never for spam. You can skip this.
+              </AppText>
+            </View>
           </View>
         </View>
 
@@ -262,7 +323,7 @@ export default function OnboardingScreen() {
   if (step === "habit") {
     return (
       <Screen contentStyle={styles.screen}>
-        <ScreenHeader leftAction={{ icon: "back", label: "Back", onPress: () => setStep("nickname") }} />
+        <ScreenHeader leftAction={{ icon: "back", label: "Back", onPress: () => setStep("profile") }} />
         <Animated.View
           style={[
             styles.formMainContent,
@@ -272,17 +333,17 @@ export default function OnboardingScreen() {
             }
           ]}
         >
-          <View style={styles.copy}>
-            <AppText variant="displaySmall" style={styles.title}>
+          <View style={[styles.copy, styles.copyLeft, styles.habitCopy]}>
+            <AppText variant="displaySmall" style={[styles.title, styles.titleLeft]}>
               Let's add your first habit.
             </AppText>
-            <AppText variant="body" color={palette.subtle} style={styles.body}>
+            <AppText variant="body" color={palette.subtle} style={[styles.body, styles.bodyLeft]}>
               Start with one small promise to yourself. Keep it simple today, and you can update the details later.
             </AppText>
           </View>
 
           <View style={styles.firstHabitForm}>
-            <CategoryChips value={firstHabitCategory} onChange={handleCategoryChange} edgePadding={ONBOARDING_PX + spacing.md} />
+            <CategoryChips value={firstHabitCategory} onChange={handleCategoryChange} edgePadding={ONBOARDING_PX} />
 
             <View style={styles.formField}>
               <FieldLabel>Habit name</FieldLabel>
@@ -373,8 +434,8 @@ export default function OnboardingScreen() {
         >
           {slides.map((slide) => (
             <View key={slide.title} style={[styles.slide, { width: slideWidth }]}>
-              <View style={styles.heroArea}>
-                <OnboardingIllustration name={slide.illustration} palette={palette} width={illustrationWidth} />
+              <View style={[styles.heroArea, { minHeight: illustrationHeight + spacing.xs }]}>
+                <OnboardingIllustration name={slide.illustration} palette={palette} width={illustrationWidth} height={illustrationHeight} />
               </View>
 
               <View style={styles.copy}>
@@ -391,7 +452,7 @@ export default function OnboardingScreen() {
       </View>
 
       <View style={styles.bottomAction}>
-        <OnboardingCta label="NEXT" onPress={goNext} />
+        <OnboardingCta variant="ghost" label={slideIndex === slides.length - 1 ? "GET STARTED" : "NEXT"} onPress={goNext} />
       </View>
     </Screen>
   );
@@ -427,7 +488,6 @@ const styles = StyleSheet.create({
   },
   heroArea: {
     alignItems: "center",
-    minHeight: 258,
     justifyContent: "center"
   },
   dots: {
@@ -444,23 +504,51 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.md
   },
+  // Form steps (profile, first habit) lead with left-aligned copy; the welcome
+  // slides stay centered.
+  copyLeft: {
+    alignSelf: "stretch",
+    alignItems: "flex-start",
+    gap: spacing.xs
+  },
   title: {
     fontFamily: fontFamilies.lexendBold,
     textAlign: "center"
+  },
+  titleLeft: {
+    textAlign: "left"
   },
   body: {
     maxWidth: 310,
     textAlign: "center"
   },
-  nicknameField: {
+  bodyLeft: {
+    maxWidth: "100%",
+    textAlign: "left"
+  },
+  profileHero: {
+    alignItems: "center",
+    // Tuck the illustration up against the header row.
+    marginTop: -spacing.lg,
+    marginBottom: spacing.md
+  },
+  emailHint: {
+    marginTop: spacing.xs,
+    lineHeight: 16
+  },
+  profileFields: {
     alignSelf: "stretch",
+    gap: spacing.lg,
     marginTop: spacing.lg
+  },
+  // Same header tuck as the profile step's hero.
+  habitCopy: {
+    marginTop: -spacing.lg
   },
   firstHabitForm: {
     alignSelf: "stretch",
     gap: spacing.lg,
-    marginTop: spacing.xl,
-    paddingHorizontal: spacing.md
+    marginTop: spacing.xl
   },
   formField: {
     gap: spacing.xs

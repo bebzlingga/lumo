@@ -8,10 +8,10 @@ import { HabitIcon } from "@/components/HabitIcon";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Button, Card, LoadingState, Screen, StatTile } from "@/components/ui";
-import { fontFamilies, radius, spacing } from "@/constants/theme";
+import { fontFamilies, habitAccent, habitColorOption, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
-import { dateRange, formatHistoryDateParts, monthRange, toDateKey } from "@/lib/date";
+import { dateRange, formatHistoryDate, monthRange, toDateKey } from "@/lib/date";
 import { completionCount, habitSummary, isDoneOnDate, isScheduledOnDate } from "@/lib/habitMath";
 
 type HistoryRange = "7d" | "14d" | "1m";
@@ -72,10 +72,14 @@ export default function HabitDetailScreen() {
   const displayHabit = { ...currentHabit, status: "active" as const };
   const todayKey = toDateKey();
   const summary = habitSummary(displayHabit);
+  // Habits with a color theme carry it through the screen; legacy habits keep
+  // the app theme's greens.
+  const habitColor = habitColorOption(currentHabit.color);
+  // Mode-aware accent for pure color marks (chart boxes, history dots, icons);
+  // accent-filled surfaces with white content (history tabs) keep the raw accent.
+  const accentColor = habitAccent(currentHabit.color, isDark) ?? palette.greenDark;
+  const fillAccentColor = habitColor?.accent ?? palette.greenDark;
   const modalButtonTextColor = isDark ? palette.onAccent : palette.white;
-  const heroTextColor = isDark ? palette.ink : palette.white;
-  const heroMutedColor = isDark ? palette.muted : palette.greenSoft;
-  const heroBackgroundColor = isDark ? palette.surfaceStrong : palette.greenDark;
   const reminderLabel = !currentHabit.reminderEnabled
     ? "No reminder"
     : currentHabit.reminderMode === "interval"
@@ -94,7 +98,7 @@ export default function HabitDetailScreen() {
         style: "destructive",
         onPress: async () => {
           await deleteHabit(currentHabit.id);
-          router.replace("/(tabs)/today");
+          router.replace("/(tabs)/habits");
         }
       }
     ]);
@@ -134,14 +138,6 @@ export default function HabitDetailScreen() {
     }
   ];
 
-  if (currentHabit.status !== "archived") {
-    headerRightActions.push({
-      icon: currentHabit.status === "paused" ? "play" : "pause",
-      label: currentHabit.status === "paused" ? "Resume habit" : "Pause habit",
-      onPress: () => (currentHabit.status === "paused" ? resumeHabit(currentHabit.id) : pauseHabit(currentHabit.id))
-    });
-  }
-
   return (
     <Screen contentStyle={styles.screenContent}>
       <ScreenHeader
@@ -173,34 +169,48 @@ export default function HabitDetailScreen() {
         rightActions={headerRightActions}
       />
 
-      <View style={styles.heroHeader}>
-        <View style={[styles.heroIcon, { backgroundColor: isDark ? palette.greenSoft : palette.greenDark }]}>
-          <HabitIcon value={currentHabit.emoji} color={isDark ? palette.greenDark : palette.white} size={24} />
-        </View>
-        <View style={styles.heroCopy}>
-          <AppText variant="title" color={palette.ink} numberOfLines={1}>
-            {currentHabit.name}
-          </AppText>
-          <View style={styles.heroMetaRow}>
-            <Icon name="clock" size={14} color={palette.subtle} weight="bulk" />
-            <AppText variant="bodySmall" color={palette.subtle}>
-              {reminderLabel}
-            </AppText>
-            {targetLabel ? (
-              <>
-                <View style={[styles.heroMetaDot, { backgroundColor: palette.subtle }]} />
-                <AppText variant="bodySmall" color={palette.subtle}>
-                  {targetLabel}
-                </AppText>
-              </>
-            ) : null}
+      {/* Header and chart share one standard card — white in light mode, the
+          regular dark card tone in dark mode — with the boxes carrying the
+          habit's color. */}
+      <Card style={styles.heroCard}>
+        <View style={styles.heroHeader}>
+          <View style={[styles.heroIcon, { backgroundColor: habitColor ? habitColor.color : isDark ? palette.greenSoft : palette.greenDark }]}>
+            <HabitIcon value={currentHabit.emoji} color={habitColor ? habitColor.onColor : isDark ? palette.greenDark : palette.white} size={24} />
           </View>
+          <View style={styles.heroCopy}>
+            <AppText variant="title" color={palette.ink} numberOfLines={1}>
+              {currentHabit.name}
+            </AppText>
+            <View style={styles.heroMetaRow}>
+              <Icon name="clock" size={14} color={palette.subtle} weight="bulk" />
+              <AppText variant="bodySmall" color={palette.subtle}>
+                {reminderLabel}
+              </AppText>
+              {targetLabel ? (
+                <>
+                  <View style={[styles.heroMetaDot, { backgroundColor: palette.subtle }]} />
+                  <AppText variant="bodySmall" color={palette.subtle}>
+                    {targetLabel}
+                  </AppText>
+                </>
+              ) : null}
+            </View>
+          </View>
+          {currentHabit.status !== "archived" ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={currentHabit.status === "paused" ? "Resume habit" : "Pause habit"}
+              hitSlop={8}
+              onPress={() => (currentHabit.status === "paused" ? resumeHabit(currentHabit.id) : pauseHabit(currentHabit.id))}
+              style={({ pressed }) => [styles.heroPause, { opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Icon name={currentHabit.status === "paused" ? "play" : "pause"} size={22} color={accentColor} weight="bulk" />
+            </Pressable>
+          ) : null}
         </View>
-      </View>
 
-      <Card style={[styles.heroCard, { backgroundColor: heroBackgroundColor }]}>
         <View style={styles.heroChart}>
-          <DottedProgressChart habit={displayHabit} days={182} dotSize={11} tone="hero" weekStartsOnMonday />
+          <DottedProgressChart habit={displayHabit} days={182} dotSize={11} accentColor={habitColor ? accentColor : undefined} weekStartsOnMonday />
         </View>
       </Card>
 
@@ -234,8 +244,8 @@ export default function HabitDetailScreen() {
                     style={[
                       styles.historyTab,
                       {
-                        backgroundColor: selected ? palette.greenDark : `${palette.greenSoft}2E`,
-                        borderColor: selected ? palette.greenDark : `${palette.greenSoft}4D`
+                        backgroundColor: selected ? fillAccentColor : `${palette.greenSoft}2E`,
+                        borderColor: selected ? fillAccentColor : `${palette.greenSoft}4D`
                       }
                     ]}
                   >
@@ -253,36 +263,31 @@ export default function HabitDetailScreen() {
           const done = isDoneOnDate(currentHabit, dateKey);
           const count = completionCount(currentHabit, dateKey);
           const partial = currentHabit.goal.type === "multiple" && count > 0 && count < currentHabit.goal.count;
-          const historyDate = formatHistoryDateParts(dateKey);
           const isLast = index === history.length - 1;
+          const historyEmptyColor = habitColor ? alpha(accentColor, "24") : alpha(palette.greenSoft, "3D");
           const historyDotColor = !scheduled
-            ? alpha(palette.greenSoft, "3D")
+            ? historyEmptyColor
             : done
-              ? palette.greenDark
+              ? accentColor
               : partial
-                ? alpha(palette.greenDark, "66")
-                : alpha(palette.greenSoft, "3D");
+                ? alpha(accentColor, "66")
+                : historyEmptyColor;
           const historyTextColor = palette.ink;
 
           return (
             <View key={dateKey} style={[styles.historyRow, !isLast ? styles.historyRowBorder : null, !isLast ? { borderBottomColor: palette.hairline } : null]}>
-              <View style={styles.historyLeft}>
-                <View
-                  style={[
-                    styles.historyDot,
-                    {
-                      backgroundColor: historyDotColor,
-                      borderColor: !scheduled || (!done && !partial) ? palette.hairline : historyDotColor
-                    }
-                  ]}
-                />
-                <AppText variant="bodySmall" color={historyTextColor} numberOfLines={1} style={styles.historyWeekday}>
-                  {historyDate.weekday}
-                </AppText>
-              </View>
-              <AppText variant="bodySmall" color={palette.subtle} numberOfLines={1} style={styles.historyDate}>
-                {historyDate.date}
+              <AppText variant="bodySmall" color={historyTextColor} numberOfLines={1} style={styles.historyWeekday}>
+                {formatHistoryDate(dateKey)}
               </AppText>
+              <View
+                style={[
+                  styles.historyDot,
+                  {
+                    backgroundColor: historyDotColor,
+                    borderColor: !scheduled || (!done && !partial) ? palette.hairline : historyDotColor
+                  }
+                ]}
+              />
             </View>
           );
         })}
@@ -452,9 +457,17 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     gap: spacing.md,
-    overflow: "hidden",
-    paddingHorizontal: 0,
-    marginTop: spacing.xs
+    // No overflow: "hidden" here — it would clip the card's own shadow on
+    // iOS. The chart's ScrollView clips its content by itself.
+    // Negative margin tucks the card up against the header row (the screen's
+    // built-in child gap is md).
+    marginTop: -spacing.sm,
+    // Stronger than the Card default so the white card separates from the
+    // white canvas in light mode.
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.09,
+    shadowRadius: 16,
+    elevation: 4
   },
   heroHeader: {
     flexDirection: "row",
@@ -470,7 +483,13 @@ const styles = StyleSheet.create({
   },
   heroCopy: {
     flex: 1,
-    gap: spacing.xxs
+    gap: 2
+  },
+  heroPause: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center"
   },
   heroMetaRow: {
     flexDirection: "row",
@@ -485,7 +504,15 @@ const styles = StyleSheet.create({
     opacity: 0.72
   },
   heroChart: {
-    alignSelf: "stretch"
+    alignSelf: "stretch",
+    // Bleed the scroll viewport to the card edges (same pattern as HabitCard)
+    // so the grid clips at the card, hinting that it scrolls.
+    marginHorizontal: -spacing.lg,
+    paddingLeft: spacing.lg,
+    // The chart's scroll content carries its own md right padding, so pad the
+    // wrapper by the difference — the resting gap then matches the card's lg
+    // padding on the left.
+    paddingRight: spacing.lg - spacing.md
   },
   statsRow: {
     flexDirection: "row",
@@ -536,13 +563,6 @@ const styles = StyleSheet.create({
   historyRowBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth
   },
-  historyLeft: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm
-  },
   historyDot: {
     width: 12,
     height: 12,
@@ -552,12 +572,6 @@ const styles = StyleSheet.create({
   historyWeekday: {
     flex: 1,
     fontFamily: fontFamilies.lexendSemiBold
-  },
-  historyDate: {
-    flexShrink: 0,
-    fontSize: 12,
-    lineHeight: 16,
-    textAlign: "right"
   },
   actionGrid: {
     flexDirection: "row",

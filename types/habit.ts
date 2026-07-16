@@ -100,10 +100,14 @@ export type JournalEntry = {
 
 export type FeatureRequestStatus = "open" | "planned" | "in_progress" | "done";
 
+export type FeatureRequestType = "feature" | "bug";
+
 export type FeatureRequest = {
   id: string;
   title: string;
   description?: string;
+  // Optional for legacy local entries; the board treats missing as "feature".
+  type?: FeatureRequestType;
   // Optional attached screenshot (local file URI).
   photoUri?: string;
   // Total upvotes (seeded base + this user's vote when `votedByMe`).
@@ -114,6 +118,8 @@ export type FeatureRequest = {
   mine: boolean;
   status: FeatureRequestStatus;
   createdAt: string;
+  // Submitter's nickname (missing when they haven't set one).
+  authorName?: string;
 };
 
 export type ThemeMode = "system" | "light" | "dark";
@@ -127,8 +133,8 @@ export type AppSettings = {
   notificationsEnabled: boolean;
   autoBackupEnabled: boolean;
   backupFrequency: BackupFrequency;
-  // One-time "unlock unlimited habits" purchase. Free users are capped at
-  // FREE_HABIT_LIMIT; this flag lifts the cap.
+  // Active Lumo Plus subscription (₱29/month) — gates the social features
+  // (Friends + Feature Board). All core features are free; see lib/iap.ts.
   isPro: boolean;
   lastBackupAt?: string;
 };

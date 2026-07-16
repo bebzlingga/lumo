@@ -1,5 +1,6 @@
 import { createAvatar } from "@dicebear/core";
 import * as avataaars from "@dicebear/avataaars";
+import * as thumbs from "@dicebear/thumbs";
 
 export type AvatarGender = "male" | "female";
 
@@ -75,6 +76,8 @@ function topFor(config: AvatarConfig) {
 
 function avatarOptions(config: AvatarConfig) {
   return {
+    // Fixed seed — baked into every rendered avatar; changing it would alter
+    // all existing users' avatars.
     seed: "lumo",
     backgroundColor: [] as string[],
     top: [topFor(config)],
@@ -98,6 +101,15 @@ export function buildAvatarSvg(config: AvatarConfig) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const svg = createAvatar(avataaars, avatarOptions(config) as any).toString();
   // react-native-svg's parser doesn't handle the embedded RDF metadata block.
+  return svg.replace(/<metadata[\s\S]*?<\/metadata>/, "");
+}
+
+// Group avatar: deterministic DiceBear "thumbs" face seeded by the group id,
+// so every member sees the same face without storing anything. Scaled down so
+// the square art isn't clipped by the circular containers it renders in.
+export function buildGroupAvatarSvg(seed: string) {
+  const svg = createAvatar(thumbs, { seed, scale: 75 }).toString();
+
   return svg.replace(/<metadata[\s\S]*?<\/metadata>/, "");
 }
 

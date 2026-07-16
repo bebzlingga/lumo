@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Alert, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { Icon } from "@/components/Icon";
 import { MarkdownView } from "@/components/MarkdownView";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -10,12 +10,96 @@ import { AppText, LoadingState, Screen } from "@/components/ui";
 import { fontFamilies, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
-import { formatHeaderDateParts, toDateKey } from "@/lib/date";
+import { dayNames, parseDateKey, toDateKey } from "@/lib/date";
+import { moodColor, moodIcon, moodOptions } from "@/lib/mood";
+import type { JournalMood } from "@/types/habit";
 
 // Temporarily hidden — flip to true to bring the Voice/Attach/Save bar back.
 const SHOW_FLOATING_MENU = false;
 
 const PHOTO_DIRECTORY = `${FileSystem.documentDirectory}journal-photos/`;
+
+const MOOD_MENU_WIDTH = 216;
+
+/**
+ * Mood picker styled like the view-mode badge: a round tinted face that opens
+ * a small anchored menu (same pattern as FloatingDropdown, with a title row).
+ */
+function MoodDropdown({ value, onChange }: { value: JournalMood; onChange: (mood: JournalMood) => void }) {
+  const { palette, isDark } = useLumo();
+  const [isOpen, setIsOpen] = useState(false);
+  const [rect, setRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const triggerRef = useRef<View>(null);
+  const tint = moodColor(palette, value);
+
+  function open() {
+    triggerRef.current?.measureInWindow((x, y, width, height) => {
+      setRect({ x, y, width, height });
+      setIsOpen(true);
+    });
+  }
+
+  return (
+    <View ref={triggerRef} collapsable={false}>
+      {/* NativeWind's css-interop drops function-valued `style` props on
+          Pressable, so these use plain style arrays. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`How are you feeling today? Currently ${moodOptions.find((option) => option.value === value)?.label}`}
+        accessibilityState={{ expanded: isOpen }}
+        onPress={open}
+        style={[styles.moodBadge, { backgroundColor: alpha(tint, "1F") }]}
+      >
+        <Icon name={moodIcon(value)} size={24} color={tint} weight="bulk" />
+      </Pressable>
+
+      <Modal visible={isOpen} transparent animationType="none" onRequestClose={() => setIsOpen(false)}>
+        <Pressable accessibilityLabel="Close menu" style={StyleSheet.absoluteFillObject} onPress={() => setIsOpen(false)} />
+        {rect ? (
+          <View
+            style={[
+              styles.moodMenu,
+              {
+                top: rect.y + rect.height + 6,
+                left: rect.x + rect.width - MOOD_MENU_WIDTH,
+                backgroundColor: palette.card,
+                shadowColor: isDark ? "transparent" : palette.shadow
+              }
+            ]}
+          >
+            <AppText variant="bodySmall" color={palette.subtle} style={styles.moodMenuTitle}>
+              How are you feeling today?
+            </AppText>
+            {moodOptions.map((option) => {
+              const selected = option.value === value;
+              const optionTint = moodColor(palette, option.value);
+
+              return (
+                <Pressable
+                  key={option.value}
+                  accessibilityRole="button"
+                  accessibilityLabel={option.label}
+                  accessibilityState={{ selected }}
+                  onPress={() => {
+                    onChange(option.value);
+                    setIsOpen(false);
+                  }}
+                  style={[styles.moodOption, { backgroundColor: selected ? alpha(optionTint, "1F") : "transparent" }]}
+                >
+                  <Icon name={option.icon} size={22} color={optionTint} weight="bulk" />
+                  <AppText variant="bodySmall" color={selected ? optionTint : palette.body} style={styles.moodOptionText}>
+                    {option.label}
+                  </AppText>
+                  {selected ? <Icon name="checkCircle" size={18} color={optionTint} weight="bulk" /> : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+      </Modal>
+    </View>
+  );
+}
 
 async function persistPhoto(uri: string, dateKey: string) {
   await FileSystem.makeDirectoryAsync(PHOTO_DIRECTORY, { intermediates: true });
@@ -62,20 +146,20 @@ function loadSpeechRecognition(): SttModule | null {
 export default function JournalEditorScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ date: string }>();
-  const { journals, isReady, isDark, palette, saveJournal, canCreateJournal } = useLumo();
+  const { journals, isReady, isDark, palette, saveJournal } = useLumo();
   const textColor = isDark ? palette.ink : "#1C1B19";
 
   const dateKey = typeof params.date === "string" ? params.date : toDateKey();
   const existing = journals.find((entry) => entry.date === dateKey);
 
-  const [title, setTitle] = useState(existing?.title ?? "");
   const [content, setContent] = useState(existing?.content ?? "");
   const [photoUri, setPhotoUri] = useState<string | undefined>(existing?.photoUri);
+  const [mood, setMood] = useState<JournalMood>(existing?.mood ?? "neutral");
   const [mode, setMode] = useState<"view" | "edit">(existing ? "view" : "edit");
   const [listening, setListening] = useState(false);
 
-  const titleRef = useRef(title);
-  titleRef.current = title;
+  const moodRef = useRef(mood);
+  moodRef.current = mood;
   const contentRef = useRef(content);
   contentRef.current = content;
   const photoRef = useRef(photoUri);
@@ -102,32 +186,35 @@ export default function JournalEditorScreen() {
     };
   }, []);
 
-  const blocked = !existing && !canCreateJournal;
-  if (blocked) {
-    skipSaveRef.current = true;
-  }
-
-  useEffect(() => {
-    if (blocked) {
-      router.replace("/paywall");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blocked]);
-
   useEffect(() => {
     return () => {
       if (!skipSaveRef.current) {
-        saveJournal(dateKey, contentRef.current, photoRef.current, existing?.mood, titleRef.current);
+        // The editor no longer has a title field; carry any previously saved
+        // title through untouched.
+        saveJournal(dateKey, contentRef.current, photoRef.current, moodRef.current, existing?.title);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateKey]);
 
-  if (!isReady || blocked) {
+  if (!isReady) {
     return <LoadingState />;
   }
 
-  const parts = formatHeaderDateParts(dateKey);
+  const entryDate = parseDateKey(dateKey);
+  const weekday = dayNames[entryDate.getDay()];
+  const fullDate = `${String(entryDate.getDate()).padStart(2, "0")} ${entryDate.toLocaleDateString(undefined, { month: "long" })} ${entryDate.getFullYear()}`;
+
+  const dateBlock = (
+    <View style={styles.dateBlock}>
+      <AppText color={palette.ink} style={styles.dateWeekday}>
+        {weekday}
+      </AppText>
+      <AppText variant="bodySmall" color={palette.subtle}>
+        {fullDate}
+      </AppText>
+    </View>
+  );
 
   function toggleMode() {
     setMode((current) => {
@@ -224,33 +311,21 @@ export default function JournalEditorScreen() {
   const toggleAction =
     mode === "view"
       ? ({ icon: "edit", label: "Edit", onPress: toggleMode, iconSize: 21, iconStyle: { transform: [{ translateY: 5 }] } } as const)
-      : ({ icon: "eye", label: "Preview", onPress: toggleMode, iconSize: 22, iconStyle: { transform: [{ translateY: 5 }] } } as const);
+      : ({ icon: "eye", label: "Preview", onPress: toggleMode, iconSize: 25, iconStyle: { transform: [{ translateY: 5 }] } } as const);
 
   return (
     <Screen scroll={false} contentStyle={styles.content} edges={["top", "left", "right", "bottom"]}>
-      <ScreenHeader
-        leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }}
-        centerContent={
-          <AppText variant="bodySmall" color={palette.greenDark} style={styles.headerDate}>
-            {parts.weekday}, {parts.date}
-          </AppText>
-        }
-        rightActions={[toggleAction]}
-      />
+      <ScreenHeader leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }} rightActions={[toggleAction]} />
 
       <KeyboardAvoidingView style={[styles.flex, styles.editorBody]} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={8}>
         {mode === "edit" ? (
           <>
             <ScrollView style={styles.flex} contentContainerStyle={styles.editContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              <TextInput
-                value={title}
-                onChangeText={setTitle}
-                placeholder="Title"
-                placeholderTextColor={`${palette.body}66`}
-                multiline
-                autoFocus={!existing}
-                style={[styles.titleInput, { color: palette.ink }]}
-              />
+              <View style={styles.editHeader}>
+                {dateBlock}
+                <MoodDropdown value={mood} onChange={setMood} />
+              </View>
+
               {photoUri ? (
                 <View style={styles.photoWrap}>
                   <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
@@ -270,6 +345,7 @@ export default function JournalEditorScreen() {
                 placeholder="Write about your day…"
                 placeholderTextColor={`${palette.body}66`}
                 multiline
+                autoFocus={!existing}
                 textAlignVertical="top"
                 style={[styles.bodyInput, { color: textColor }]}
               />
@@ -308,21 +384,22 @@ export default function JournalEditorScreen() {
           </>
         ) : (
           <ScrollView style={styles.flex} contentContainerStyle={styles.viewContent} showsVerticalScrollIndicator={false}>
-            {title.trim() ? (
-              <AppText color={palette.ink} style={styles.titleView}>
-                {title}
-              </AppText>
-            ) : null}
+            <View style={styles.viewHeader}>
+              {dateBlock}
+              <View style={[styles.moodBadge, { backgroundColor: alpha(moodColor(palette, mood), "1F") }]}>
+                <Icon name={moodIcon(mood)} size={24} color={moodColor(palette, mood)} weight="bulk" />
+              </View>
+            </View>
             {photoUri ? <Image source={{ uri: photoUri }} style={styles.photoView} resizeMode="cover" /> : null}
             {content.trim() ? (
               <MarkdownView content={content} textColor={textColor} />
-            ) : !title.trim() ? (
+            ) : (
               <Pressable accessibilityRole="button" accessibilityLabel="Start writing" onPress={toggleMode}>
                 <AppText variant="body" color={palette.muted} style={styles.emptyView}>
                   Nothing written yet. Tap the edit icon to start.
                 </AppText>
               </Pressable>
-            ) : null}
+            )}
           </ScrollView>
         )}
       </KeyboardAvoidingView>
@@ -337,32 +414,82 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1
   },
-  // Pulls the editor up against the Screen container's built-in child gap.
+  // Pulls the editor up against the Screen container's built-in child gap so
+  // the date block sits flush under the header row.
   editorBody: {
-    marginTop: -spacing.xs
+    marginTop: -spacing.md
   },
-  headerDate: {
+  dateBlock: {
+    gap: 2
+  },
+  dateWeekday: {
+    fontFamily: fontFamilies.lexendBold,
+    fontSize: 26,
+    lineHeight: 32
+  },
+  editHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    marginBottom: spacing.xs
+  },
+  viewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    // With the container's sm gap, matches edit mode's 24pt header→text gap.
+    marginBottom: spacing.sm
+  },
+  moodBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  moodMenu: {
+    position: "absolute",
+    width: MOOD_MENU_WIDTH,
+    borderRadius: radius.nav,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    gap: spacing.xxs,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.16,
+    shadowRadius: 28,
+    elevation: 16
+  },
+  moodMenuTitle: {
     fontFamily: fontFamilies.lexendSemiBold,
-    fontSize: 16,
+    fontSize: 15,
     lineHeight: 20,
-    transform: [{ translateY: -8 }]
+    paddingHorizontal: spacing.xs,
+    paddingBottom: spacing.xs
+  },
+  moodOption: {
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.xs
+  },
+  moodOptionText: {
+    flex: 1,
+    fontFamily: fontFamilies.lexendSemiBold
   },
   editContent: {
     paddingHorizontal: spacing.xs,
     paddingTop: spacing.sm,
     paddingBottom: 120
   },
-  titleInput: {
-    fontFamily: "Lexend-Black",
-    fontSize: 30,
-    lineHeight: 38,
-    paddingVertical: spacing.xs
-  },
   bodyInput: {
     fontFamily: fontFamilies.lexend,
     fontSize: 17,
     lineHeight: 26,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.md,
     minHeight: 200
   },
   photoWrap: {
@@ -424,11 +551,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     paddingBottom: spacing.xl,
     gap: spacing.sm
-  },
-  titleView: {
-    fontFamily: fontFamilies.lexendBold,
-    fontSize: 30,
-    lineHeight: 38
   },
   photoView: {
     width: "100%",

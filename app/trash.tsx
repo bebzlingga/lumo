@@ -146,6 +146,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.lexendSemiBold
   },
   deletedAt: {
+    fontFamily: fontFamilies.lexend,
     fontSize: 12,
     lineHeight: 16
   },

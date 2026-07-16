@@ -33,7 +33,8 @@ export function FloatingDropdown<T extends string>({
   variant = "pill",
   menuWidth = 200,
   borderColor,
-  borderWidth
+  borderWidth,
+  disabled = false
 }: {
   options: FloatingDropdownOption<T>[];
   value: T;
@@ -46,6 +47,8 @@ export function FloatingDropdown<T extends string>({
   // resting (closed) color; the focused/open state still uses greenDark.
   borderColor?: string;
   borderWidth?: number;
+  // Locked: shows the active value but can't be opened.
+  disabled?: boolean;
 }) {
   const { palette, isDark } = useLumo();
   const [isOpen, setIsOpen] = React.useState(false);
@@ -87,15 +90,16 @@ export function FloatingDropdown<T extends string>({
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityState={{ expanded: isOpen }}
+        accessibilityState={{ expanded: isOpen, disabled }}
         accessibilityLabel={accessibilityLabel}
+        disabled={disabled}
         onPress={() => (isOpen ? close() : open())}
         style={({ pressed }) => [
           isInput ? styles.inputTrigger : styles.pillTrigger,
           {
             backgroundColor: isInput ? "transparent" : palette.surface,
             borderColor: isInput ? "transparent" : triggerBorderColor,
-            opacity: pressed ? 0.76 : 1
+            opacity: disabled ? 0.55 : pressed ? 0.76 : 1
           }
         ]}
       >
@@ -135,7 +139,11 @@ export function FloatingDropdown<T extends string>({
               styles.menu,
               menuVerticalStyle,
               { left: menuLeft, width: resolvedMenuWidth },
-              { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }
+              // Dark theme: a big black shadow lifts the menu off the equally
+              // dark canvas (the light theme's soft tinted shadow vanishes).
+              isDark
+                ? { backgroundColor: palette.card, shadowColor: "#000000", shadowOpacity: 0.55, shadowRadius: 36 }
+                : { backgroundColor: palette.card, shadowColor: palette.shadow }
             ]}
           >
             <ScrollView style={styles.menuScroll} nestedScrollEnabled showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">

@@ -32,7 +32,11 @@
       "Bash(node /private/tmp/claude-501/-Users-bebzlingga-Documents-GitHub-lumo/b77ac768-1cf1-4fa8-bf28-05cfe01e6c0e/scratchpad/wheel.mjs)",
       "Bash(node /private/tmp/claude-501/-Users-bebzlingga-Documents-GitHub-lumo/b77ac768-1cf1-4fa8-bf28-05cfe01e6c0e/scratchpad/listeners.mjs)",
       "Bash(awk '{print $5, $9}')",
-      "Bash(curl -s -o /dev/null -w \"reload:%{http_code}\" -X POST http://localhost:8081/reload)"
+      "Bash(curl -s -o /dev/null -w \"reload:%{http_code}\" -X POST http://localhost:8081/reload)",
+      "Bash(grep -n \"groupMeta}\\\\|</View>$\" /Users/bebzlingga/Documents/GitHub/lumo/app/\\\\\\(tabs\\\\\\)/friends.tsx)",
+      "Bash(cd ~/.claude/plugins/marketplaces/ponytail && cat .claude-plugin/plugin.json; echo \"---hooks---\"; ls hooks/; cat hooks/hooks.json 2>/dev/null | head -40)",
+      "Read(//Users/bebzlingga/.claude/plugins/marketplaces/ponytail/**)",
+      "Bash(cd ~/.claude/plugins/marketplaces/ponytail && cat hooks/claude-codex-hooks.json | head -50; echo \"---runtime head---\"; head -30 hooks/ponytail-runtime.js; echo \"---network/exec check---\"; grep -rn \"curl\\\\|fetch\\(\\\\|https://\\\\|exec\\\\|spawn\" hooks/*.js | grep -v \"^Binary\" | head -10)"
     ]
   }
 }

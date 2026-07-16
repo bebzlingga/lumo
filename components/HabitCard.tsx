@@ -3,7 +3,7 @@ import { useRouter } from "expo-router";
 import React from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from "react-native-reanimated";
-import { radius, spacing } from "@/constants/theme";
+import { habitAccent, habitColorOption, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { toDateKey } from "@/lib/date";
 import { completionCount, currentStreak, dailyTarget, isDoneOnDate, monthlyCompletionCount, weeklyCompletionCount } from "@/lib/habitMath";
@@ -61,8 +61,12 @@ export function HabitCard({
               : "Open",
     [habit, dateKey, count, target, todayDone]
   );
-  const iconBackgroundColor = isDark ? palette.greenSoft : palette.greenDark;
-  const iconColor = isDark ? palette.greenDark : palette.white;
+  // Habits with a color theme carry it through the card; legacy habits keep
+  // the app theme's greens.
+  const habitColor = habitColorOption(habit.color);
+  const iconBackgroundColor = habitColor ? habitColor.color : isDark ? palette.greenSoft : palette.greenDark;
+  const iconColor = habitColor ? habitColor.onColor : isDark ? palette.greenDark : palette.white;
+  const accentColor = habitAccent(habit.color, isDark) ?? palette.greenDark;
   const canUndoCompletion = !disabledActions && habit.status === "active" && count > 0;
 
   function handleDone() {
@@ -188,7 +192,7 @@ export function HabitCard({
 
           {!compact ? (
             <View style={styles.chartWrap}>
-              <DottedProgressChart habit={habit} days={112} dotSize={10} />
+              <DottedProgressChart habit={habit} days={112} dotSize={10} accentColor={habitColor ? accentColor : undefined} />
             </View>
           ) : null}
 
@@ -196,7 +200,7 @@ export function HabitCard({
             <>
               <View style={styles.actionRow}>
                 <View>
-                  <AppText variant="caption" color={todayDone ? palette.greenDark : palette.muted}>
+                  <AppText variant="caption" color={todayDone ? accentColor : palette.muted}>
                     {goalLabel}
                   </AppText>
                   {habit.status === "paused" ? (
@@ -215,14 +219,14 @@ export function HabitCard({
                     onPressOut={handleHoldEnd}
                     delayLongPress={UNDO_HOLD_DURATION_MS}
                     disabled={disabledActions || habit.status !== "active"}
-                    style={styles.doneButton}
+                    style={[styles.doneButton, habitColor ? { backgroundColor: habitColor.accent, borderColor: habitColor.accent } : null]}
                   />
                 </Animated.View>
               </View>
 
               {todayDone ? (
                 <Pressable disabled={!canUndoCompletion} onPress={() => handleUndoCompletion()} style={styles.undo}>
-                  <AppText variant="caption" color={palette.greenDark}>
+                  <AppText variant="caption" color={accentColor}>
                     Undo completion
                   </AppText>
                 </Pressable>
@@ -239,7 +243,7 @@ const styles = StyleSheet.create({
   compactCard: {
     borderRadius: radius.nav,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg
+    paddingVertical: spacing.md
   },
   header: {
     flexDirection: "row",

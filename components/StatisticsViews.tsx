@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import React from "react";
 import { type DimensionValue, type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
-import { fontFamilies, habitColors, radius, spacing } from "@/constants/theme";
+import { fontFamilies, habitAccent, habitColors, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { addDays, dateRange, dayLabels, daysBetween, parseDateKey, toDateKey } from "@/lib/date";
@@ -211,7 +211,7 @@ function todayScoreForHabits(habits: Habit[], dateKey: string) {
 }
 
 function EmptyStats({ message }: { message: string }) {
-  const { palette, canCreateHabit } = useLumo();
+  const { palette } = useLumo();
   const emptyColor = alpha(palette.subtle, "B8");
 
   return (
@@ -222,7 +222,7 @@ function EmptyStats({ message }: { message: string }) {
       </AppText>
       <Pressable
         accessibilityRole="button"
-        onPress={() => router.push(canCreateHabit ? "/habit/new" : "/paywall")}
+        onPress={() => router.push("/habit/new")}
         style={({ pressed }) => [
           styles.addButton,
           {
@@ -294,7 +294,7 @@ export function StatsSegmentedControl({ value, onChange }: { value: StatsTab; on
 }
 
 export function TodayStatsView({ habits, onOpenOverall }: { habits: Habit[]; onOpenOverall?: () => void }) {
-  const { palette, canCreateHabit } = useLumo();
+  const { palette } = useLumo();
   const todayKey = toDateKey();
   const yesterdayKey = addDays(todayKey, -1);
   const currentHabits = activeHabits(habits);
@@ -368,7 +368,7 @@ export function TodayStatsView({ habits, onOpenOverall }: { habits: Habit[]; onO
       <View style={styles.actionRow}>
         <Pressable
           accessibilityRole="button"
-          onPress={() => router.push(canCreateHabit ? "/habit/new" : "/paywall")}
+          onPress={() => router.push("/habit/new")}
           style={({ pressed }) => [
             styles.addButton,
             {
@@ -640,6 +640,9 @@ export function MonthlyStatsView({ habits }: { habits: Habit[] }) {
 
 function MonthlyHabitCard({ habit }: { habit: Habit }) {
   const { palette, isDark } = useLumo();
+  const accentColor = habitAccent(habit.color, isDark);
+  const doneColor = accentColor ?? palette.greenDark;
+  const emptyColor = accentColor ? alpha(accentColor, "24") : alpha(palette.greenSoft, "3D");
   const [monthGridWidth, setMonthGridWidth] = React.useState(0);
   const todayKey = toDateKey();
   const days = lastThreeMonthRange(todayKey).slice(3);
@@ -658,7 +661,7 @@ function MonthlyHabitCard({ habit }: { habit: Habit }) {
     <View style={[styles.habitCard, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
       <View style={styles.habitHeader}>
         <View style={styles.habitTitle}>
-          <HabitIcon value={habit.emoji} color={palette.ink} size={18} />
+          <HabitIcon value={habit.emoji} color={accentColor ?? palette.green} size={18} />
           <AppText variant="titleSmall" numberOfLines={1} style={styles.habitName}>
             {habit.name}
           </AppText>
@@ -681,10 +684,10 @@ function MonthlyHabitCard({ habit }: { habit: Habit }) {
           const isRowEnd = (index + 1) % monthlyGridColumns === 0;
           const fill =
             status === "done"
-              ? palette.greenDark
+              ? doneColor
               : status === "partial"
-                ? alpha(palette.greenDark, "66")
-                : alpha(palette.greenSoft, "3D");
+                ? alpha(doneColor, "66")
+                : emptyColor;
 
           return (
             <View
@@ -709,6 +712,9 @@ function MonthlyHabitCard({ habit }: { habit: Habit }) {
 
 function WeeklyHabitCard({ habit }: { habit: Habit }) {
   const { palette, isDark } = useLumo();
+  const accentColor = habitAccent(habit.color, isDark);
+  const doneColor = accentColor ?? palette.greenDark;
+  const emptyColor = accentColor ? alpha(accentColor, "24") : alpha(palette.greenSoft, "3D");
   const todayKey = toDateKey();
   const week = mondayWeekRange(todayKey);
 
@@ -716,7 +722,7 @@ function WeeklyHabitCard({ habit }: { habit: Habit }) {
     <View style={[styles.habitCard, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
       <View style={styles.habitHeader}>
         <View style={styles.habitTitle}>
-          <HabitIcon value={habit.emoji} color={palette.ink} size={18} />
+          <HabitIcon value={habit.emoji} color={accentColor ?? palette.green} size={18} />
           <AppText variant="titleSmall" numberOfLines={1} style={styles.habitName}>
             {habit.name}
           </AppText>
@@ -733,9 +739,7 @@ function WeeklyHabitCard({ habit }: { habit: Habit }) {
           const status = dateProgress(habit, dateKey, todayKey);
           const done = status === "done";
           const partial = status === "partial";
-          const missed = status === "missed";
-          const backgroundColor =
-            done ? alpha(palette.greenDark, "CC") : partial ? alpha(palette.greenDark, "66") : missed ? `${palette.danger}1A` : alpha(palette.greenSoft, "3D");
+          const backgroundColor = done ? doneColor : partial ? alpha(doneColor, "66") : emptyColor;
 
           return (
             <View key={dateKey} style={styles.weekDay}>
@@ -747,14 +751,10 @@ function WeeklyHabitCard({ habit }: { habit: Habit }) {
                   styles.weekDot,
                   {
                     backgroundColor,
-                    borderColor: missed ? `${palette.danger}33` : backgroundColor
+                    borderColor: backgroundColor
                   }
                 ]}
-              >
-                {done ? <Icon name="emojiHappy" size={19} color={isDark ? palette.canvas : palette.white} weight="bulk" /> : null}
-                {partial ? <Icon name="emojiNormal" size={19} color={palette.white} weight="bulk" /> : null}
-                {missed ? <Icon name="emojiSad" size={19} color={palette.danger} weight="bulk" /> : null}
-              </View>
+              />
             </View>
           );
         })}
@@ -798,6 +798,9 @@ export function OverallStatsView({ habits }: { habits: Habit[] }) {
 function OverallHabitBarChart({ habits }: { habits: Habit[] }) {
   const { palette, isDark } = useLumo();
   const { width } = useWindowDimensions();
+  // In dark mode chartTrack sits too close to the card color, so the empty
+  // track uses a soft wash of the theme accent instead.
+  const trackColor = isDark ? alpha(palette.greenDark, "1A") : palette.chartTrack;
   const chartHabits = React.useMemo(
     () =>
       [...habits]
@@ -822,29 +825,30 @@ function OverallHabitBarChart({ habits }: { habits: Habit[] }) {
         <View style={[styles.overallBarContent, { width: contentWidth, gap: slotGap }]}>
           {chartHabits.map(({ habit, total }) => {
             const fillHeight: DimensionValue = total > 0 ? `${Math.max(10, (total / maxTotal) * 100)}%` : "0%";
+            const barColor = habitAccent(habit.color, isDark) ?? palette.greenDark;
 
             return (
               <View key={habit.id} style={[styles.overallBarItem, { width: slotWidth }]}>
-                <View style={[styles.overallBarTrack, { backgroundColor: palette.chartTrack }]}>
+                <View style={[styles.overallBarTrack, { backgroundColor: trackColor }]}>
                   <View
                     style={[
                       styles.overallBarFill,
                       {
                         height: fillHeight,
-                        backgroundColor: alpha(palette.greenDark, total > 0 ? "CC" : "00")
+                        backgroundColor: alpha(barColor, total > 0 ? "CC" : "00")
                       }
                     ]}
                   />
                 </View>
                 <View style={styles.overallBarIcon}>
-                  <HabitIcon value={habit.emoji} color={palette.ink} size={21} />
+                  <HabitIcon value={habit.emoji} color={barColor} size={21} />
                 </View>
               </View>
             );
           })}
           {Array.from({ length: placeholderCount }, (_, index) => (
             <View key={`placeholder-${index}`} style={[styles.overallBarItem, { width: slotWidth }]}>
-              <View style={[styles.overallBarTrack, { backgroundColor: palette.chartTrack }]} />
+              <View style={[styles.overallBarTrack, { backgroundColor: trackColor }]} />
               <View style={styles.overallBarIcon} />
             </View>
           ))}
@@ -868,7 +872,7 @@ function OverallHabitBarChart({ habits }: { habits: Habit[] }) {
             ]}
           >
             <View style={styles.habitTitle}>
-              <HabitIcon value={habit.emoji} color={palette.ink} size={18} />
+              <HabitIcon value={habit.emoji} color={habitAccent(habit.color, isDark) ?? palette.ink} size={18} />
               <AppText variant="bodySmall" numberOfLines={1} style={styles.overallHabitName}>
                 {habit.name}
               </AppText>
@@ -885,6 +889,8 @@ function OverallHabitBarChart({ habits }: { habits: Habit[] }) {
 
 function OverallMissPatternCard({ habits }: { habits: Habit[] }) {
   const { palette, isDark } = useLumo();
+  // Same dark-mode track fix as the bar chart above.
+  const trackColor = isDark ? alpha(palette.greenDark, "1A") : palette.chartTrack;
   const pattern = React.useMemo(() => missedPatternByWeekday(habits), [habits]);
   const orderedPattern = weekdayHeatOrder.map((day) => pattern[day]);
   const daysWithData = orderedPattern.filter((item) => item.scheduled > 0);
@@ -924,7 +930,7 @@ function OverallMissPatternCard({ habits }: { habits: Habit[] }) {
 
           return (
             <View key={item.day} style={styles.missBarItem}>
-              <View style={[styles.overallBarTrack, { backgroundColor: palette.chartTrack }]}>
+              <View style={[styles.overallBarTrack, { backgroundColor: trackColor }]}>
                 <View
                   style={[
                     styles.overallBarFill,

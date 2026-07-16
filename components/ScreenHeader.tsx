@@ -31,6 +31,7 @@ type ScreenHeaderAction = {
   onPress: () => void;
   iconWeight?: IconWeight;
   iconSize?: number;
+  iconColor?: string;
   iconStyle?: StyleProp<ViewStyle>;
 };
 
@@ -67,6 +68,7 @@ export function ScreenHeader({
             onPress={leftAction.onPress}
             iconWeight={leftAction.iconWeight ?? "bulk"}
             iconSize={leftAction.iconSize ?? HEADER_VISUAL_ICON_SIZES[leftAction.icon] ?? HEADER_ICON_SIZE}
+            iconColor={leftAction.iconColor}
             buttonSize={HEADER_BUTTON_SIZE}
             iconStyle={HEADER_ICON_OFFSETS[leftAction.icon]}
           />
@@ -98,6 +100,7 @@ export function ScreenHeader({
               onPress={action.onPress}
               iconWeight={action.iconWeight ?? "bulk"}
               iconSize={action.iconSize ?? HEADER_VISUAL_ICON_SIZES[action.icon] ?? HEADER_ICON_SIZE}
+              iconColor={action.iconColor}
               buttonSize={HEADER_BUTTON_SIZE}
               iconStyle={action.iconStyle ?? HEADER_ICON_OFFSETS[action.icon]}
             />

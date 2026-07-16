@@ -21,7 +21,9 @@ import {
   Check,
   Clock,
   CloseCircle,
+  CloudPlus,
   Coffee,
+  Crown1,
   Colorfilter,
   Cup,
   DocumentDownload,
@@ -46,6 +48,7 @@ import {
   Home,
   MagicStar,
   MessageEdit,
+  Messages,
   Milk,
   MinusCirlce,
   Microphone2,
@@ -64,6 +67,7 @@ import {
   TaskSquare,
   TickCircle,
   Timer,
+  UserCirlceAdd,
   Trash,
   Tree,
   Weight,
@@ -102,6 +106,8 @@ export type IconName =
   | "drop"
   | "download"
   | "edit"
+  | "cloudPlus"
+  | "crown1"
   | "elementPlus"
   | "emojiHappy"
   | "emojiNormal"
@@ -119,6 +125,7 @@ export type IconName =
   | "heart"
   | "home"
   | "messageEdit"
+  | "messages"
   | "milk"
   | "minusCircle"
   | "microphone"
@@ -146,6 +153,7 @@ export type IconName =
   | "tree"
   | "trophy"
   | "upload"
+  | "userCircleAdd"
   | "weight"
   | "zap";
 
@@ -174,6 +182,8 @@ const iconMap: Record<IconName, IconsaxIcon> = {
   drop: Drop,
   download: DocumentDownload,
   edit: Edit,
+  cloudPlus: CloudPlus,
+  crown1: Crown1,
   elementPlus: ElementPlus,
   emojiHappy: EmojiHappy,
   emojiNormal: EmojiNormal,
@@ -209,6 +219,7 @@ const iconMap: Record<IconName, IconsaxIcon> = {
   smiley: Smileys,
   sparkle: MagicStar,
   messageEdit: MessageEdit,
+  messages: Messages,
   star: Star,
   // Placeholder mapping — "streakFire" short-circuits to the FireIcon SVG in
   // the Icon component and never reaches the iconsax map.
@@ -220,6 +231,7 @@ const iconMap: Record<IconName, IconsaxIcon> = {
   tree: Tree,
   trophy: Cup,
   upload: DocumentUpload,
+  userCircleAdd: UserCirlceAdd,
   weight: Weight,
   zap: Flash
 };

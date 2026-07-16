@@ -3,15 +3,15 @@ import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { HabitCard } from "@/components/HabitCard";
 import { Icon } from "@/components/Icon";
-import { AppText, Button, LoadingState, Screen } from "@/components/ui";
+import { AppText, LoadingState, Screen } from "@/components/ui";
 import { fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { habitCategories } from "@/types/habit";
 
 export default function HabitsScreen() {
   const router = useRouter();
-  const { habits, isReady, isDark, palette, canCreateHabit } = useLumo();
-  const buttonFill = isDark ? palette.green : palette.greenDark;
+  const { habits, isReady, palette } = useLumo();
+  const [addPressed, setAddPressed] = React.useState(false);
   const [showArchived, setShowArchived] = React.useState(false);
   const visibleHabits = habits.filter((habit) => habit.status !== "archived");
   const archivedHabits = habits.filter((habit) => habit.status === "archived");
@@ -48,16 +48,16 @@ export default function HabitsScreen() {
             Keep every routine easy to find.
           </AppText>
         </View>
-        <Button
-          label="New"
-          icon="elementPlus"
-          iconWeight="bulk"
-          variant="primary"
-          shape="pill"
-          onPress={() => router.push(canCreateHabit ? "/habit/new" : "/paywall")}
-          className="min-h-[40px] min-w-[92px] flex-row items-center justify-center gap-1.5 rounded-[22px] px-3 py-1"
-          style={{ backgroundColor: buttonFill, borderWidth: 0 }}
-        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="New habit"
+          onPress={() => router.push("/habit/new")}
+          onPressIn={() => setAddPressed(true)}
+          onPressOut={() => setAddPressed(false)}
+          style={[styles.addButton, { backgroundColor: palette.greenSoft, opacity: addPressed ? 0.75 : 1 }]}
+        >
+          <Icon name="elementPlus" size={20} color={palette.greenDark} weight="bulk" />
+        </Pressable>
       </View>
 
       <View style={styles.categoryList}>
@@ -128,6 +128,13 @@ const styles = StyleSheet.create({
   },
   screenHeader: {
     marginBottom: spacing.sm
+  },
+  addButton: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center"
   },
   categorySection: {
     gap: spacing.sm

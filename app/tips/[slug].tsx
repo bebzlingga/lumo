@@ -28,12 +28,7 @@ export default function TipSectionScreen() {
           </View>
 
           {section.tips.map((tip, index) => (
-            <View
-              key={tip.title}
-              style={[
-                index > 0 && { marginTop: spacing.xl, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.hairline, paddingTop: spacing.xl }
-              ]}
-            >
+            <View key={tip.title} style={[index > 0 && { marginTop: spacing.xl }]}>
               <AppText variant="bodySmall" color={palette.ink} style={styles.tipTitle}>
                 {tip.title}
               </AppText>
@@ -75,7 +70,7 @@ const styles = StyleSheet.create({
   },
   tipTitle: {
     fontFamily: fontFamilies.lexendBold,
-    fontSize: 16,
+    fontSize: 17,
     lineHeight: 22,
     marginBottom: spacing.md
   },

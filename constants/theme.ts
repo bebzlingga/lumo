@@ -356,6 +356,22 @@ const themeSubtleColors = {
   }
 } satisfies Record<ThemeColorScheme, { light: string; dark: string }>;
 
+/**
+ * Contrasting pop color per theme (quick-done TO DO badge, board vote
+ * counts) — deliberately NOT the theme's own hue, the way amber pops on the
+ * black theme. All are light enough to carry near-black text in both modes.
+ */
+export const progressAccents: Record<ThemeColorScheme, string> = {
+  black: "#FFC94D", // amber
+  green: "#EE8B6C", // terracotta
+  blue: "#F09B7A", // peach coral
+  indigo: "#F0928A", // coral
+  orange: "#E5C685", // cream / sand
+  pink: "#F7BE45", // deep gold
+  purple: "#F2A08C" // salmon
+};
+export const progressAccentText = "#141413";
+
 export function getPalette(isDark: boolean, colorScheme: ThemeColorScheme = "green"): LumoPalette {
   const basePalette = isDark ? darkPalette : lightPalette;
   const accent = themeAccentPalettes[colorScheme] ?? themeAccentPalettes.green;
@@ -464,6 +480,23 @@ export const type = {
   } satisfies TextStyle
 };
 
+/**
+ * Type is designed at a 390pt-wide screen (iPhone 14 / Pro). Narrower devices
+ * scale text down so the same point sizes don't read oversized on smaller
+ * phones — a 375pt device renders at ~0.92, floored at 0.8. Wider (Pro Max)
+ * screens scale up slightly instead, capped at 1.04 (430pt ≈ 1.04). Note:
+ * device-to-device differences at the SAME width come from the iOS Text Size
+ * setting, which AppText caps via maxFontSizeMultiplier instead.
+ * AppText / LumoInput apply this globally.
+ */
+export function fontScaleForWidth(width: number) {
+  if (width >= 390) {
+    return Math.min(1.04, 1 + ((width - 390) / 390) * 0.4);
+  }
+
+  return Math.max(0.8, 1 - ((390 - width) / 390) * 2);
+}
+
 export const habitColors = [
   "#335E3B",
   "#6EA66E",
@@ -472,3 +505,71 @@ export const habitColors = [
   "#FFC94D",
   "#FFB313"
 ];
+
+/**
+ * Per-habit color themes, named after places known for the hue.
+ * - `color`: the swatch itself — icon bubbles, chart fills, hero surfaces.
+ * - `onColor`: content drawn on top of `color` (white on bold swatches, the
+ *   deep family hue on pale ones).
+ * - `accent`: a card-safe version of the hue for text accents and small fills;
+ *   equals `color` for bold swatches, the deep family hue for pale ones.
+ */
+export type HabitColorOption = {
+  key: string;
+  label: string;
+  color: string;
+  accent: string;
+  /** Dark-mode replacement for `accent` — needed when the accent itself is
+   * too dark to read on dark cards (e.g. the Ink/black option). */
+  accentDark?: string;
+  onColor: string;
+};
+
+export const habitColorOptions: HabitColorOption[] = [
+  { key: "skyBlue", label: "Sky Blue", color: "#1D74E4", accent: "#1D74E4", onColor: "#FFFFFF" },
+  { key: "monteverde", label: "Monteverde", color: "#17A38F", accent: "#17A38F", onColor: "#FFFFFF" },
+  { key: "glencoe", label: "Glencoe", color: "#74CDC4", accent: "#2E9E90", onColor: "#FFFFFF" },
+  { key: "sagano", label: "Sagano", color: "#CDEAE1", accent: "#17A38F", onColor: "#17A38F" },
+  { key: "kolkata", label: "Kolkata", color: "#F9941E", accent: "#F9941E", onColor: "#FFFFFF" },
+  { key: "erfoud", label: "Erfoud", color: "#FBB25C", accent: "#E8871A", onColor: "#FFFFFF" },
+  { key: "bagan", label: "Bagan", color: "#FCEACD", accent: "#F9941E", onColor: "#F9941E" },
+  { key: "bunol", label: "Buñol", color: "#FC7A5E", accent: "#FC7A5E", onColor: "#FFFFFF" },
+  { key: "petra", label: "Petra", color: "#FCA78F", accent: "#E8654A", onColor: "#FFFFFF" },
+  { key: "nara", label: "Nara", color: "#FCE3DA", accent: "#FC7A5E", onColor: "#FC7A5E" },
+  { key: "abisko", label: "Abisko", color: "#5A4B9C", accent: "#5A4B9C", onColor: "#FFFFFF" },
+  { key: "valensole", label: "Valensole", color: "#A29FC9", accent: "#7A6FB0", onColor: "#FFFFFF" },
+  { key: "tochigi", label: "Tochigi", color: "#DEDDEB", accent: "#5A4B9C", onColor: "#5A4B9C" },
+  { key: "panjin", label: "Panjin", color: "#D0405E", accent: "#D0405E", onColor: "#FFFFFF" },
+  { key: "hillier", label: "Hillier", color: "#DE8898", accent: "#C9506B", onColor: "#FFFFFF" },
+  { key: "harbour", label: "Harbour", color: "#F2DBDF", accent: "#D0405E", onColor: "#D0405E" },
+  { key: "ink", label: "Ink", color: "#2F302B", accent: "#2F302B", accentDark: "#E8EADF", onColor: "#FFFFFF" }
+];
+
+export const defaultHabitColor = habitColorOptions[0].color;
+
+/** Curated subset shown in the habit form's color picker — one swatch per hue
+ * family. The full option list above stays resolvable so habits saved with a
+ * retired swatch keep their colors. */
+const habitColorPickerKeys = ["skyBlue", "monteverde", "kolkata", "bunol", "abisko", "valensole", "panjin", "hillier", "ink"];
+
+export const habitColorPickerOptions = habitColorOptions.filter((option) => habitColorPickerKeys.includes(option.key));
+
+/** Resolve a habit's stored color to its palette option. Habits created before
+ * color themes (or with legacy greens) return undefined, and the UI falls back
+ * to the app theme's colors. */
+export function habitColorOption(color?: string): HabitColorOption | undefined {
+  return habitColorOptions.find((option) => option.color === color);
+}
+
+/** Mode-aware accent for a habit's stored color: dark mode swaps in
+ * `accentDark` when the option defines one. Use this (not `.accent`) wherever
+ * the accent is drawn on cards/canvas. */
+export function habitAccent(color: string | undefined, isDark: boolean): string | undefined {
+  const option = habitColorOption(color);
+
+  if (!option) {
+    return undefined;
+  }
+
+  return isDark ? option.accentDark ?? option.accent : option.accent;
+}

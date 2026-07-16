@@ -94,11 +94,36 @@ export function formatHeaderDateParts(dateKey: string) {
   };
 }
 
-export function formatHistoryDateParts(dateKey: string) {
-  const date = parseDateKey(dateKey);
+/** Compact relative time for feeds/lists: "Just now", "5m ago", "3h ago",
+ * "Yesterday", "4d ago". */
+export function timeAgo(iso: string) {
+  const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
 
-  return {
-    weekday: date.toLocaleDateString(undefined, { weekday: "long" }),
-    date: date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })
-  };
+  if (minutes < 1) {
+    return "Just now";
+  }
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
+
+  const days = Math.floor(hours / 24);
+
+  return days === 1 ? "Yesterday" : `${days}d ago`;
+}
+
+// "Sunday, 05 Jun 2026" — day/month/year assembled by hand so the order
+// doesn't flip with the device locale.
+export function formatHistoryDate(dateKey: string) {
+  const date = parseDateKey(dateKey);
+  const weekday = date.toLocaleDateString(undefined, { weekday: "long" });
+  const month = date.toLocaleDateString(undefined, { month: "short" });
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${weekday}, ${day} ${month} ${date.getFullYear()}`;
 }

@@ -149,8 +149,8 @@ const styles = StyleSheet.create({
 	},
 	cardTitle: {
 		fontFamily: fontFamilies.lexendBold,
-		fontSize: 15,
-		lineHeight: 20,
+		fontSize: 17,
+		lineHeight: 22,
 	},
 	cardFocus: {
 		fontFamily: 'Lexend-Regular',

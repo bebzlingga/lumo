@@ -810,6 +810,7 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    minWidth: 0
+    minWidth: 0,
+    borderRadius: radius.pill
   }
 });

@@ -1,182 +1,124 @@
-import { useRouter } from "expo-router";
-import * as FileSystem from "expo-file-system";
-import * as ImagePicker from "expo-image-picker";
-import React, { useMemo, useState } from "react";
-import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from "react-native-svg";
+import { Href, useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { AppText, Button, Card, LoadingState, LumoInput, Screen } from "@/components/ui";
-import { fontFamilies, radius, spacing } from "@/constants/theme";
+import { SubscriptionGate } from "@/components/SubscriptionGate";
+import { AppText, Card, LoadingState, Screen } from "@/components/ui";
+import { fontFamilies, progressAccents, progressAccentText, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
-import { FeatureRequest, FeatureRequestStatus } from "@/types/habit";
+import { featureBoardService } from "@/lib/featureBoard";
+import { FeatureRequest, FeatureRequestType } from "@/types/habit";
 
-// Free users get a teaser of the board; the rest is behind the Pro fade.
-const FREE_PREVIEW_COUNT = 3;
+type BoardTab = FeatureRequestType | "mine";
 
-const PHOTO_DIRECTORY = `${FileSystem.documentDirectory}feature-photos/`;
-
-// Copy the picked image into the app's document directory so it survives the OS
-// clearing the picker cache.
-async function persistPhoto(uri: string) {
-  await FileSystem.makeDirectoryAsync(PHOTO_DIRECTORY, { intermediates: true });
-  const extension = uri.split("?")[0].split(".").pop() || "jpg";
-  const destination = `${PHOTO_DIRECTORY}${new Date().getTime()}.${extension}`;
-  await FileSystem.copyAsync({ from: uri, to: destination });
-  return destination;
-}
-
-async function removePhotoFile(uri?: string) {
-  if (!uri || !uri.startsWith(PHOTO_DIRECTORY)) {
-    return;
-  }
-  await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => undefined);
-}
-
-
-type SortMode = "top" | "newest" | "completed";
-
-const sortTabs: { value: SortMode; label: string }[] = [
-  { value: "top", label: "Top" },
-  { value: "newest", label: "Newest" },
-  { value: "completed", label: "Completed" }
+const boardTabs: { value: BoardTab; label: string }[] = [
+  { value: "feature", label: "Features" },
+  { value: "bug", label: "Bugs" },
+  { value: "mine", label: "My Post" }
 ];
 
 export default function FeatureRequestsScreen() {
   const router = useRouter();
-  const { featureRequests, isReady, isDark, palette, canUseFeatureBoard, submitFeatureRequest, toggleFeatureVote } = useLumo();
-  const buttonFill = isDark ? palette.green : palette.greenDark;
-  const [composerOpen, setComposerOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [photoUri, setPhotoUri] = useState<string | undefined>(undefined);
-  const [sortMode, setSortMode] = useState<SortMode>("top");
-  // The order toggle (right-side arrow). Meaning depends on the active tab.
+  const { isReady, isDark, palette, canUseFeatureBoard } = useLumo();
+  const [featureRequests, setFeatureRequests] = useState<FeatureRequest[]>([]);
+  const [boardLoading, setBoardLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<BoardTab>("feature");
+  // The order toggle (right-side arrow): most-voted first by default.
   const [reversed, setReversed] = useState(false);
 
+  const loadBoard = useCallback(async () => {
+    const loaded = await featureBoardService.listRequests();
+    setFeatureRequests(loaded);
+    setBoardLoading(false);
+  }, []);
+
+  // Refresh on focus so a request submitted on the dedicated screen shows up.
+  useFocusEffect(
+    useCallback(() => {
+      loadBoard();
+    }, [loadBoard])
+  );
+
   const sorted = useMemo(() => {
-    // Completed tab: in-progress + shipped, grouped; arrow toggles which group
-    // leads (completed-first by default, ongoing-first when reversed).
-    if (sortMode === "completed") {
-      const items = featureRequests.filter((r) => r.status === "in_progress" || r.status === "done");
-      const leads = (r: FeatureRequest) => (reversed ? r.status === "in_progress" : r.status === "done");
-      return items.sort((a, b) => (leads(b) ? 1 : 0) - (leads(a) ? 1 : 0) || b.votes - a.votes || b.createdAt.localeCompare(a.createdAt));
+    const createdMs = (request: FeatureRequest) => Date.parse(request.createdAt) || 0;
+    const newestFirst = (a: FeatureRequest, b: FeatureRequest) => createdMs(b) - createdMs(a);
+    const byOrder = (a: FeatureRequest, b: FeatureRequest) =>
+      reversed ? a.votes - b.votes || -newestFirst(a, b) : b.votes - a.votes || newestFirst(a, b);
+    const typeOf = (request: FeatureRequest) => request.type ?? "feature";
+
+    // "Mine": everything I submitted, grouped by category.
+    if (activeTab === "mine") {
+      const mine = featureRequests.filter((request) => request.mine);
+      return {
+        features: mine.filter((request) => typeOf(request) === "feature").sort(byOrder),
+        bugs: mine.filter((request) => typeOf(request) === "bug").sort(byOrder),
+        list: [] as FeatureRequest[]
+      };
     }
 
-    // Top / Newest: everything not yet shipped (completed lives on its own tab).
-    const active = featureRequests.filter((r) => r.status !== "done");
-    if (sortMode === "newest") {
-      return active.sort((a, b) => (reversed ? a.createdAt.localeCompare(b.createdAt) : b.createdAt.localeCompare(a.createdAt)));
-    }
-    return active.sort((a, b) =>
-      reversed ? a.votes - b.votes || a.createdAt.localeCompare(b.createdAt) : b.votes - a.votes || b.createdAt.localeCompare(a.createdAt)
-    );
-  }, [featureRequests, sortMode, reversed]);
+    return {
+      features: [] as FeatureRequest[],
+      bugs: [] as FeatureRequest[],
+      list: featureRequests.filter((request) => typeOf(request) === activeTab).sort(byOrder)
+    };
+  }, [featureRequests, activeTab, reversed]);
 
-  const countLabel = `${sorted.length} ${sortMode === "completed" ? "Completed" : sorted.length === 1 ? "Request" : "Requests"}`;
-  // Free users see a capped preview; Pro sees the whole board.
-  const visible = canUseFeatureBoard ? sorted : sorted.slice(0, FREE_PREVIEW_COUNT);
+  const mineCount = sorted.features.length + sorted.bugs.length;
+  const countLabel =
+    activeTab === "mine"
+      ? `${mineCount} ${mineCount === 1 ? "Submission" : "Submissions"}`
+      : `${sorted.list.length} ${activeTab === "bug" ? (sorted.list.length === 1 ? "Bug" : "Bugs") : sorted.list.length === 1 ? "Request" : "Requests"}`;
 
-  if (!isReady) {
+  if (!isReady || (boardLoading && !featureRequests.length)) {
     return <LoadingState />;
   }
 
-  function requirePro() {
-    router.push("/paywall");
+  // The whole board is subscriber-only — show the "Better together" gate.
+  if (!canUseFeatureBoard) {
+    return <SubscriptionGate />;
   }
 
-  function handleVote(id: string) {
-    if (!canUseFeatureBoard) {
-      requirePro();
-      return;
-    }
-    toggleFeatureVote(id);
+  function openSubmit() {
+    router.push(`/submit-request?type=${activeTab === "bug" ? "bug" : "feature"}` as Href);
   }
-
-  function openComposer() {
-    if (!canUseFeatureBoard) {
-      requirePro();
-      return;
-    }
-    setComposerOpen(true);
-  }
-
-  function closeComposer() {
-    // Drop a picked-but-unsubmitted photo so it doesn't orphan on disk.
-    removePhotoFile(photoUri);
-    setPhotoUri(undefined);
-    setComposerOpen(false);
-  }
-
-  async function pickPhoto() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert("Photo access needed", "Allow photo access to attach a screenshot.");
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsMultipleSelection: false,
-      quality: 0.8
-    });
-
-    if (result.canceled || !result.assets?.length) {
-      return;
-    }
-
-    try {
-      const previous = photoUri;
-      const stored = await persistPhoto(result.assets[0].uri);
-      setPhotoUri(stored);
-      if (previous && previous !== stored) {
-        removePhotoFile(previous);
-      }
-    } catch {
-      Alert.alert("Couldn't attach photo", "Something went wrong saving that image. Please try again.");
-    }
-  }
-
-  function removePhoto() {
-    const current = photoUri;
-    setPhotoUri(undefined);
-    removePhotoFile(current);
-  }
-
-  function submit() {
-    submitFeatureRequest(title, description, photoUri);
-    setTitle("");
-    setDescription("");
-    setPhotoUri(undefined);
-    setComposerOpen(false);
-  }
-
-  const orderLabel =
-    sortMode === "top" ? (reversed ? "Lowest" : "Highest") : sortMode === "newest" ? (reversed ? "Oldest" : "Newest") : reversed ? "Ongoing" : "Completed";
 
   return (
     <Screen scroll={false} contentStyle={styles.content}>
+      {/* Header, tabs, and info row scroll together with the list. */}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[styles.list, styles.listPadPro]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            tintColor={palette.greenDark}
+            onRefresh={async () => {
+              setRefreshing(true);
+              await loadBoard();
+              setRefreshing(false);
+            }}
+          />
+        }
+      >
       <ScreenHeader
         leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }}
-        centerContent={
-          <AppText variant="titleSmall" color={palette.ink} style={styles.headerTitle}>
-            Feature Board
-          </AppText>
-        }
-        rightActions={[{ icon: "elementPlus", label: "Suggest a feature", onPress: openComposer, iconSize: 22, iconStyle: { transform: [{ translateY: 6 }] } }]}
+        rightActions={[{ icon: "elementPlus", label: "Submit a request", onPress: openSubmit, iconSize: 22, iconStyle: { transform: [{ translateY: 6 }] } }]}
       />
 
       <View style={[styles.segmented, { backgroundColor: isDark ? palette.chartTrack : alpha(palette.chartTrack, "99"), shadowColor: isDark ? "transparent" : palette.shadow }]}>
-        {sortTabs.map((tab) => {
-          const active = sortMode === tab.value;
+        {boardTabs.map((tab) => {
+          const active = activeTab === tab.value;
           return (
             <Pressable
               key={tab.value}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
               onPress={() => {
-                setSortMode(tab.value);
+                setActiveTab(tab.value);
                 setReversed(false);
               }}
               style={styles.segment}
@@ -198,7 +140,12 @@ export default function FeatureRequestsScreen() {
                     : { backgroundColor: "transparent" }
                 ]}
               >
-                <AppText variant="button" color={active ? (isDark ? palette.onAccent : palette.greenDark) : palette.subtle} numberOfLines={1} style={styles.segmentText}>
+                <AppText
+                  variant="button"
+                  color={active ? (isDark ? palette.onAccent : palette.greenDark) : palette.subtle}
+                  numberOfLines={1}
+                  style={[styles.segmentText, active ? styles.segmentTextActive : styles.segmentTextInactive]}
+                >
                   {tab.label}
                 </AppText>
               </View>
@@ -207,198 +154,143 @@ export default function FeatureRequestsScreen() {
         })}
       </View>
 
-      <View style={styles.infoRow}>
-        <AppText variant="bodySmall" color={palette.ink} style={styles.infoCount}>
-          {countLabel}
-        </AppText>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Order: ${orderLabel}. Tap to change.`}
-          hitSlop={8}
-          onPress={() => setReversed((v) => !v)}
-          style={({ pressed }) => [styles.orderToggle, { backgroundColor: palette.surface, opacity: pressed ? 0.7 : 1 }]}
-        >
-          <AppText variant="caption" color={palette.greenDark} style={styles.orderLabel}>
-            {orderLabel}
+      {/* Mine tab: the section headers carry their own counts, and sorting
+          your own handful of posts isn't useful — hide the whole row. */}
+      {activeTab !== "mine" ? (
+        <View style={styles.infoRow}>
+          <AppText variant="bodySmall" color={palette.ink} style={styles.infoCount}>
+            {countLabel}
           </AppText>
-          <Icon name={reversed ? "arrowUp" : "arrowDown"} size={16} color={palette.greenDark} weight="bulk" />
-        </Pressable>
-      </View>
-
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.list, canUseFeatureBoard ? styles.listPadPro : styles.listPadFree]}
-        showsVerticalScrollIndicator={false}
-      >
-        {visible.length ? (
-          visible.map((request) => (
-            <RequestRow key={request.id} request={request} onVote={() => handleVote(request.id)} />
-          ))
-        ) : (
-          <AppText variant="bodySmall" color={palette.subtle} style={styles.empty}>
-            {sortMode === "completed" ? "Nothing here yet." : "No requests yet."}
-          </AppText>
-        )}
-      </ScrollView>
-
-      {!canUseFeatureBoard ? (
-        <View pointerEvents="box-none" style={styles.bottomFade}>
-          <Svg pointerEvents="none" style={StyleSheet.absoluteFill} width="100%" height="100%">
-            <Defs>
-              <SvgLinearGradient id="featureFade" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor={palette.canvas} stopOpacity={0} />
-                <Stop offset="0.5" stopColor={palette.canvas} stopOpacity={1} />
-                <Stop offset="1" stopColor={palette.canvas} stopOpacity={1} />
-              </SvgLinearGradient>
-            </Defs>
-            <Rect x="0" y="0" width="100%" height="100%" fill="url(#featureFade)" />
-          </Svg>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Unlock Pro to submit and vote"
-            onPress={requirePro}
-            style={({ pressed }) => [styles.upsell, { backgroundColor: buttonFill, opacity: pressed ? 0.85 : 1 }]}
+            accessibilityLabel={`Order: ${reversed ? "Lowest" : "Highest"} votes. Tap to change.`}
+            hitSlop={8}
+            onPress={() => setReversed((v) => !v)}
+            style={({ pressed }) => [styles.orderToggle, { backgroundColor: palette.surface, opacity: pressed ? 0.7 : 1 }]}
           >
-            <Icon name="sparkle" size={20} color={palette.white} weight="bulk" />
-            <AppText variant="bodySmall" color={palette.white} style={styles.upsellText}>
-              Unlock Pro to submit ideas and vote
+            <AppText variant="caption" color={palette.greenDark} style={styles.orderLabel}>
+              {reversed ? "Lowest" : "Highest"}
             </AppText>
-            <Icon name="chevronDown" size={18} color={palette.white} weight="bulk" style={styles.upsellChevron} />
+            <Icon name={reversed ? "arrowUp" : "arrowDown"} size={16} color={palette.greenDark} weight="bulk" />
           </Pressable>
         </View>
       ) : null}
 
-      <Modal transparent animationType="fade" visible={composerOpen} onRequestClose={closeComposer}>
-        <View style={styles.backdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={closeComposer} />
-          <View style={[styles.sheet, { backgroundColor: palette.card }]}>
-            <AppText variant="titleSmall" color={palette.ink} style={styles.sheetTitle}>
-              Suggest a feature
-            </AppText>
-            <LumoInput
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Short title"
-              style={[styles.input, { borderColor: alpha(palette.greenDark, "33") }]}
-            />
-            <LumoInput
-              value={description}
-              onChangeText={setDescription}
-              placeholder="What should it do? (optional)"
-              multiline
-              style={[styles.input, styles.inputMultiline, { borderColor: alpha(palette.greenDark, "33") }]}
-            />
-
-            {photoUri ? (
-              <View style={styles.photoWrap}>
-                <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Remove photo"
-                  onPress={removePhoto}
-                  style={({ pressed }) => [styles.photoRemove, { backgroundColor: alpha("#000000", "8C"), opacity: pressed ? 0.7 : 1 }]}
-                >
-                  <Icon name="close" size={16} color={palette.white} weight="bulk" />
-                </Pressable>
-              </View>
-            ) : (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Attach a photo"
-                onPress={pickPhoto}
-                style={({ pressed }) => [styles.photoAttach, { borderColor: alpha(palette.greenDark, "33"), opacity: pressed ? 0.7 : 1 }]}
-              >
-                <Icon name="gallery" size={18} color={palette.greenDark} weight="bulk" />
-                <AppText variant="bodySmall" color={palette.greenDark} style={styles.photoAttachText}>
-                  Attach a photo
-                </AppText>
-              </Pressable>
-            )}
-
-            <View style={[styles.ctaShell, styles.submitShell, { backgroundColor: buttonFill, shadowColor: isDark ? "transparent" : palette.greenDark }]}>
-              <Button
-                label="Submit"
-                variant="primary"
-                disabled={!title.trim()}
-                onPress={submit}
-                className="min-h-[48px] w-full flex-row items-center justify-center rounded-[18px] px-4 py-2"
-                style={{ backgroundColor: buttonFill, borderRadius: 18, borderWidth: 0 }}
-                labelStyle={{ fontSize: 16 }}
-              />
+        {activeTab === "mine" ? (
+          mineCount ? (
+            <>
+              {sorted.features.length ? (
+                <View style={styles.mineSection}>
+                  <View style={styles.mineHeader}>
+                    <AppText variant="titleSmall" color={palette.ink} style={styles.mineTitle}>
+                      Features
+                    </AppText>
+                    <AppText variant="bodySmall" color={palette.subtle} style={styles.mineCountText}>
+                      {sorted.features.length} {sorted.features.length === 1 ? "Request" : "Requests"}
+                    </AppText>
+                  </View>
+                  {sorted.features.map((request) => (
+                    <RequestRow key={request.id} request={request} />
+                  ))}
+                </View>
+              ) : null}
+              {sorted.bugs.length ? (
+                <View style={styles.mineSection}>
+                  <View style={styles.mineHeader}>
+                    <AppText variant="titleSmall" color={palette.ink} style={styles.mineTitle}>
+                      Bug reports
+                    </AppText>
+                    <AppText variant="bodySmall" color={palette.subtle} style={styles.mineCountText}>
+                      {sorted.bugs.length} {sorted.bugs.length === 1 ? "Report" : "Reports"}
+                    </AppText>
+                  </View>
+                  {sorted.bugs.map((request) => (
+                    <RequestRow key={request.id} request={request} />
+                  ))}
+                </View>
+              ) : null}
+            </>
+          ) : (
+            <View style={[styles.emptyCard, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
+              <Icon name="messageEdit" size={22} color={palette.muted} weight="bulk" />
+              <AppText variant="bodySmall" color={palette.subtle} style={styles.emptyText}>
+                Nothing here yet — your feature ideas and bug reports will show up here. Tap + to submit your first!
+              </AppText>
             </View>
+          )
+        ) : sorted.list.length ? (
+          sorted.list.map((request) => (
+            <RequestRow key={request.id} request={request} />
+          ))
+        ) : (
+          <View style={[styles.emptyCard, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
+            <Icon name={activeTab === "bug" ? "zap" : "star"} size={22} color={palette.muted} weight="bulk" />
+            <AppText variant="bodySmall" color={palette.subtle} style={styles.emptyText}>
+              {activeTab === "bug"
+                ? "No bugs reported — smooth sailing! Spotted something off? Tap + and help us squash it."
+                : "No requests yet. Be the first to suggest a feature and shape what Lumo builds next!"}
+            </AppText>
           </View>
-        </View>
-      </Modal>
+        )}
+      </ScrollView>
     </Screen>
   );
 }
 
-function RequestRow({
-  request,
-  onVote
-}: {
-  request: FeatureRequest;
-  onVote: () => void;
-}) {
-  const { palette } = useLumo();
-  const voted = request.votedByMe;
+function RequestRow({ request }: { request: FeatureRequest }) {
+  const router = useRouter();
+  const { palette, settings } = useLumo();
+  const isBug = (request.type ?? "feature") === "bug";
+  // Same pop accent as the home screen's TO DO badge.
+  const voteBadgeColor = progressAccents[settings.colorScheme ?? "green"] ?? palette.glow;
 
   return (
-    <Card style={styles.row}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${voted ? "Remove vote from" : "Vote for"} ${request.title}. ${request.votes} votes.`}
-        accessibilityState={{ selected: voted }}
-        onPress={onVote}
-        style={({ pressed }) => [
-          styles.voteButton,
-          {
-            backgroundColor: voted ? palette.greenDark : alpha(palette.greenDark, "10"),
-            opacity: pressed ? 0.8 : 1
-          }
-        ]}
-      >
-        <Icon name="chevronDown" size={16} color={voted ? palette.white : palette.greenDark} weight="bulk" style={styles.voteCaret} />
-        <AppText variant="caption" color={voted ? palette.white : palette.greenDark} style={styles.voteCount}>
-          {request.votes}
-        </AppText>
-      </Pressable>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${request.title}. ${request.votes} ${request.votes === 1 ? "vote" : "votes"}.`}
+      onPress={() => router.push(`/request/${request.id}` as Href)}
+    >
+      <Card style={styles.row}>
+        {request.photoUri ? <Image source={{ uri: request.photoUri }} style={styles.thumbnail} resizeMode="cover" /> : null}
 
-      <View style={styles.rowText}>
-        <View style={styles.rowHead}>
-          <AppText variant="titleSmall" color={palette.ink} numberOfLines={2} style={styles.rowTitle}>
-            {request.title}
-          </AppText>
-          {request.status === "in_progress" ? (
-            <View style={[styles.tag, { backgroundColor: alpha(palette.chartPartial, "22") }]}>
-              <AppText variant="caption" color={palette.chartPartial}>
-                Ongoing
+        <View style={styles.rowText}>
+          <View style={styles.rowHead}>
+            <AppText variant="titleSmall" color={palette.ink} numberOfLines={2} style={styles.rowTitle}>
+              {request.title}
+            </AppText>
+            <View style={[styles.voteBadge, { backgroundColor: voteBadgeColor }]}>
+              <AppText variant="caption" color={progressAccentText} style={styles.voteBadgeText}>
+                {request.votes} {request.votes === 1 ? "Vote" : "Votes"}
               </AppText>
             </View>
+          </View>
+          {request.description ? (
+            <AppText variant="bodySmall" color={palette.subtle} numberOfLines={2} style={styles.rowBody}>
+              {request.description}
+            </AppText>
           ) : null}
-          {request.status === "done" ? (
-            <View style={[styles.tag, { backgroundColor: alpha(palette.greenDark, "12") }]}>
-              <AppText variant="caption" color={palette.greenDark}>
-                Shipped
-              </AppText>
-            </View>
-          ) : null}
-          {request.mine ? (
-            <View style={[styles.tag, { backgroundColor: alpha(palette.greenDark, "12") }]}>
-              <AppText variant="caption" color={palette.greenDark}>
-                Yours
-              </AppText>
+
+          {request.status === "in_progress" || request.status === "done" ? (
+            <View style={styles.badgeRow}>
+              {request.status === "in_progress" ? (
+                <View style={[styles.tag, { backgroundColor: alpha(palette.chartPartial, "22") }]}>
+                  <AppText variant="caption" color={palette.chartPartial}>
+                    Ongoing
+                  </AppText>
+                </View>
+              ) : null}
+              {request.status === "done" ? (
+                <View style={[styles.tag, { backgroundColor: alpha(palette.greenDark, "12") }]}>
+                  <AppText variant="caption" color={palette.greenDark}>
+                    {isBug ? "Fixed" : "Shipped"}
+                  </AppText>
+                </View>
+              ) : null}
             </View>
           ) : null}
         </View>
-        {request.description ? (
-          <AppText variant="bodySmall" color={palette.subtle} numberOfLines={3} style={styles.rowBody}>
-            {request.description}
-          </AppText>
-        ) : null}
-        {request.photoUri ? <Image source={{ uri: request.photoUri }} style={styles.rowPhoto} resizeMode="cover" /> : null}
-      </View>
-    </Card>
+      </Card>
+    </Pressable>
   );
 }
 
@@ -406,12 +298,6 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     gap: spacing.md
-  },
-  headerTitle: {
-    fontFamily: fontFamilies.lexendBold,
-    fontSize: 17,
-    lineHeight: 22,
-    transform: [{ translateY: -6 }]
   },
   infoRow: {
     flexDirection: "row",
@@ -434,10 +320,16 @@ const styles = StyleSheet.create({
   orderLabel: {
     fontFamily: fontFamilies.lexendSemiBold
   },
+  // Matches the FriendsTabs segmented control: pill container, pill segments,
+  // semibold active / medium inactive labels.
   segmented: {
     flexDirection: "row",
-    borderRadius: radius.xl,
-    padding: spacing.xs,
+    // With no header title, tuck the tabs up against the header buttons
+    // (the scroll container's sm gap already sits between them).
+    marginTop: -spacing.xxs,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
     shadowOffset: { width: 0, height: 7 },
     shadowOpacity: 0.09,
     shadowRadius: 22,
@@ -449,20 +341,54 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2
   },
   segmentSurface: {
-    minHeight: 40,
-    borderRadius: radius.lg,
-    paddingVertical: spacing.xs,
+    minHeight: 44,
+    borderRadius: radius.pill,
+    paddingVertical: spacing.sm,
     alignItems: "center",
     justifyContent: "center"
   },
   segmentText: {
-    textAlign: "center",
+    textAlign: "center"
+  },
+  segmentTextActive: {
     fontFamily: fontFamilies.lexendSemiBold
   },
-  empty: {
-    textAlign: "center",
-    paddingVertical: spacing.xl,
-    lineHeight: 21
+  segmentTextInactive: {
+    fontFamily: fontFamilies.lexendMedium
+  },
+  // "Mine" tab sections — header style mirrors the Habits screen categories.
+  mineSection: {
+    gap: spacing.sm
+  },
+  mineHeader: {
+    minHeight: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md
+  },
+  mineTitle: {
+    fontFamily: fontFamilies.lexendSemiBold
+  },
+  mineCountText: {
+    fontFamily: fontFamilies.lexendSemiBold,
+    opacity: 0.5
+  },
+  // Same empty-state treatment as the Friends screen: centered icon + copy.
+  emptyCard: {
+    alignItems: "center",
+    gap: spacing.sm,
+    padding: spacing.lg,
+    marginTop: spacing.xs,
+    borderRadius: radius.nav,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2
+  },
+  emptyText: {
+    lineHeight: 19,
+    textAlign: "center"
   },
   scroll: {
     flex: 1,
@@ -475,52 +401,15 @@ const styles = StyleSheet.create({
   listPadPro: {
     paddingBottom: spacing.xxl
   },
-  listPadFree: {
-    // Room so the last preview row isn't fully hidden under the fade + CTA.
-    paddingBottom: 140
-  },
-  bottomFade: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingTop: spacing.xxl,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xl,
-    justifyContent: "flex-end"
-  },
-  upsell: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    padding: spacing.md,
-    borderRadius: radius.nav
-  },
-  upsellText: {
-    flex: 1,
-    fontFamily: fontFamilies.lexendSemiBold
-  },
-  upsellChevron: {
-    transform: [{ rotate: "-90deg" }]
-  },
   row: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: spacing.md
   },
-  voteButton: {
-    width: 52,
-    borderRadius: radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: spacing.sm,
-    gap: 2
-  },
-  voteCaret: {
-    transform: [{ rotate: "180deg" }]
-  },
-  voteCount: {
-    fontFamily: fontFamilies.lexendBold
+  thumbnail: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.lg
   },
   rowText: {
     flex: 1,
@@ -535,6 +424,14 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: fontFamilies.lexendSemiBold
   },
+  voteBadge: {
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5
+  },
+  voteBadgeText: {
+    fontFamily: fontFamilies.lexendSemiBold
+  },
   tag: {
     borderRadius: radius.pill,
     paddingHorizontal: spacing.xs,
@@ -543,86 +440,11 @@ const styles = StyleSheet.create({
   rowBody: {
     lineHeight: 20
   },
-  statusText: {
-    fontFamily: fontFamilies.lexendSemiBold,
-    textTransform: "uppercase",
-    letterSpacing: 0.4
-  },
-  backdrop: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing.lg,
-    backgroundColor: "rgba(0, 0, 0, 0.35)"
-  },
-  sheet: {
-    width: "100%",
-    maxWidth: 420,
-    borderRadius: radius.xl,
-    padding: spacing.xl,
-    gap: spacing.md
-  },
-  sheetTitle: {
-    fontFamily: fontFamilies.lexendBold
-  },
-  input: {
-    borderWidth: 0,
-    borderBottomWidth: 1,
-    borderRadius: 0,
-    backgroundColor: "transparent",
-    paddingHorizontal: 0,
-    fontFamily: fontFamilies.lexendSemiBold
-  },
-  inputMultiline: {
-    minHeight: 72,
-    textAlignVertical: "top"
-  },
-  ctaShell: {
-    borderRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
-    elevation: 8
-  },
-  submitShell: {
-    marginTop: spacing.sm
-  },
-  photoAttach: {
+  badgeRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-end",
     gap: spacing.xs,
-    paddingVertical: spacing.md,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderStyle: "dashed"
-  },
-  photoAttachText: {
-    fontFamily: fontFamilies.lexendSemiBold
-  },
-  photoWrap: {
-    borderRadius: radius.lg,
-    overflow: "hidden"
-  },
-  photo: {
-    width: "100%",
-    height: 160,
-    borderRadius: radius.lg
-  },
-  photoRemove: {
-    position: "absolute",
-    top: spacing.xs,
-    right: spacing.xs,
-    width: 30,
-    height: 30,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  rowPhoto: {
-    width: "100%",
-    height: 120,
-    borderRadius: radius.md,
-    marginTop: spacing.xxs
+    marginTop: spacing.xs
   }
 });

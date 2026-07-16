@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 import { WheelTimePicker } from "./WheelTimePicker";
-import { fontFamilies, habitColors, radius, spacing } from "@/constants/theme";
+import { defaultHabitColor, fontFamilies, habitColorPickerOptions, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { dayLabels, dayNames, parseDateKey, toDateKey } from "@/lib/date";
@@ -32,7 +32,7 @@ function createDefaultDraft(): HabitDraft {
     name: "",
     category: "General",
     emoji: DEFAULT_HABIT_ICON,
-    color: habitColors[0],
+    color: defaultHabitColor,
     createdAt: toDateKey(),
     reminderEnabled: false,
     reminderMode: "time",
@@ -44,19 +44,20 @@ function createDefaultDraft(): HabitDraft {
   };
 }
 
-const repeatScheduleOptions: { label: string; value: RepeatSchedule["type"] }[] = [
-  { label: "Daily", value: "daily" },
+// One merged "How often?" axis: day-bound schedules and any-day period
+// targets are alternatives, so conflicting combos (e.g. "weekends only" +
+// "20× a month") are inexpressible by construction. "Times per day" applies
+// only to the day-bound choices.
+export type HabitCadence = RepeatSchedule["type"] | "weekly" | "monthly";
+
+const cadenceOptions: { label: string; value: HabitCadence }[] = [
+  { label: "Every day", value: "daily" },
   { label: "Weekdays", value: "weekdays" },
   { label: "Weekends", value: "weekends" },
   { label: "Specific days", value: "specific" },
-  { label: "Custom interval", value: "interval" }
-];
-
-const goalOptions: { label: string; value: GoalType["type"] }[] = [
-  { label: "Once per day", value: "once" },
-  { label: "Multiple times", value: "multiple" },
-  { label: "Weekly target", value: "weekly" },
-  { label: "Monthly target", value: "monthly" }
+  { label: "Custom interval", value: "interval" },
+  { label: "Times per week", value: "weekly" },
+  { label: "Times per month", value: "monthly" }
 ];
 
 function FormSection({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
@@ -233,7 +234,8 @@ export function HabitForm({
     if (draft.goal.type === "weekly" || draft.goal.type === "monthly") {
       return String(draft.goal.target);
     }
-    return "3";
+    // "once" reads as 1 time per day in the merged control.
+    return "1";
   });
   const [startDateInput, setStartDateInput] = useState(() => dateKeyToMasked(draft.createdAt));
   // Reminder times kept as 24h "HH:MM". A single time covers once/weekly/monthly
@@ -300,27 +302,49 @@ export function HabitForm({
     return draft.repeatSchedule.type === "specific" ? draft.repeatSchedule.days : ([1, 2, 3, 4, 5] as Weekday[]);
   }, [draft.repeatSchedule]);
 
-  function setSchedule(type: RepeatSchedule["type"]) {
-    if (type === "specific") {
-      setDraft((current) => ({ ...current, repeatSchedule: { type: "specific", days: selectedDays } }));
-    } else if (type === "interval") {
-      setDraft((current) => ({
-        ...current,
-        repeatSchedule: { type: "interval", every: Math.max(1, Number(customInterval) || 1) }
-      }));
-    } else {
-      setDraft((current) => ({ ...current, repeatSchedule: { type } as RepeatSchedule }));
-    }
+  // Period (weekly/monthly) targets replace the day schedule ("any day").
+  const periodGoal = draft.goal.type === "weekly" || draft.goal.type === "monthly";
+  const cadence: HabitCadence = draft.goal.type === "weekly" || draft.goal.type === "monthly" ? draft.goal.type : draft.repeatSchedule.type;
+
+  function dayBoundGoal(): GoalType {
+    const count = Math.max(1, Number(goalAmount) || 1);
+
+    return count > 1 ? { type: "multiple", count } : { type: "once" };
   }
 
-  function setGoal(type: GoalType["type"]) {
-    if (type === "multiple") {
-      setDraft((current) => ({ ...current, goal: { type, count: Math.max(2, Number(goalAmount) || 2) } }));
-    } else if (type === "weekly" || type === "monthly") {
-      setDraft((current) => ({ ...current, goal: { type, target: Math.max(1, Number(goalAmount) || 1) } }));
-    } else {
-      setDraft((current) => ({ ...current, goal: { type } }));
+  function setCadence(value: HabitCadence) {
+    if (value === "weekly" || value === "monthly") {
+      // Period targets can happen any day, so the schedule resets to daily.
+      setDraft((current) => ({
+        ...current,
+        repeatSchedule: { type: "daily" },
+        goal: { type: value, target: Math.max(1, Number(goalAmount) || 1) }
+      }));
+      return;
     }
+
+    const repeatSchedule: RepeatSchedule =
+      value === "specific"
+        ? { type: "specific", days: selectedDays }
+        : value === "interval"
+          ? { type: "interval", every: Math.max(1, Number(customInterval) || 1) }
+          : { type: value };
+
+    setDraft((current) => ({ ...current, repeatSchedule, goal: dayBoundGoal() }));
+  }
+
+  // Amount edits update the goal live (the reminder section keys off it).
+  function setAmount(text: string) {
+    setGoalAmount(text);
+    const amount = Math.max(1, Number(text) || 1);
+
+    setDraft((current) => {
+      if (current.goal.type === "weekly" || current.goal.type === "monthly") {
+        return { ...current, goal: { type: current.goal.type, target: amount } };
+      }
+
+      return { ...current, goal: amount > 1 ? { type: "multiple", count: amount } : { type: "once" } };
+    });
   }
 
   function toggleSpecificDay(day: Weekday) {
@@ -360,8 +384,11 @@ export function HabitForm({
       reminderIntervalValue: Math.max(1, Number(draft.reminderIntervalValue) || 1),
       reminderTime: wantsMultiple ? reminderTimeValues[0] ?? "09:00" : normalizeTime(singleTime),
       reminderTimes: wantsMultiple ? reminderTimeValues : undefined,
-      repeatSchedule:
-        draft.repeatSchedule.type === "interval"
+      // Period targets always save as any-day (also normalizes habits created
+      // before the frequency lock existed).
+      repeatSchedule: periodGoal
+        ? { type: "daily" }
+        : draft.repeatSchedule.type === "interval"
           ? { type: "interval", every: Math.max(1, Number(customInterval) || 1) }
           : draft.repeatSchedule,
       goal:
@@ -489,6 +516,30 @@ export function HabitForm({
           </ScrollView>
         </Field>
 
+        <Field>
+          <FieldLabel>Color</FieldLabel>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorChipRow}>
+            {habitColorPickerOptions.map((option) => {
+              const isSelected = draft.color === option.color;
+
+              return (
+                <Pressable
+                  key={option.key}
+                  accessibilityRole="button"
+                  accessibilityLabel={option.label}
+                  accessibilityState={{ selected: isSelected }}
+                  onPress={() => setDraft((current) => ({ ...current, color: option.color }))}
+                  style={[styles.colorChipOuter, { borderColor: isSelected ? option.accent : "transparent" }]}
+                >
+                  <View style={[styles.colorChip, { backgroundColor: option.color, borderColor: palette.hairline }]}>
+                    {isSelected ? <Icon name="checkCircle" size={16} color={option.onColor} weight="bulk" /> : null}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </Field>
+
       </FormSection>
 
       <FormSection>
@@ -497,21 +548,26 @@ export function HabitForm({
             Frequency & goal
           </AppText>
           <AppText variant="bodySmall" color={palette.subtle}>
-            Choose how often this habit repeats and how many check-ins count as done.
+            Pick the days this habit repeats — or a weekly/monthly target you can hit on any day.
           </AppText>
         </View>
         <View style={[styles.sectionDivider, { backgroundColor: palette.hairline }]} />
 
         <Field>
-          <FieldLabel>Frequency</FieldLabel>
+          <FieldLabel>How often?</FieldLabel>
           <FloatingDropdown
             variant="input"
-            options={repeatScheduleOptions}
-            value={draft.repeatSchedule.type}
-            onChange={setSchedule}
-            accessibilityLabel="Repeat schedule"
+            options={cadenceOptions}
+            value={cadence}
+            onChange={setCadence}
+            accessibilityLabel="How often"
             borderColor={fieldBorderColor}
           />
+          {periodGoal ? (
+            <AppText variant="caption" color={palette.subtle}>
+              Hit your target on any days that suit you.
+            </AppText>
+          ) : null}
         </Field>
 
         {draft.repeatSchedule.type === "specific" ? (
@@ -562,30 +618,16 @@ export function HabitForm({
         ) : null}
 
         <Field>
-          <FieldLabel>Target</FieldLabel>
-          <FloatingDropdown
-            variant="input"
-            options={goalOptions}
-            value={draft.goal.type}
-            onChange={setGoal}
-            accessibilityLabel="Habit target"
-            borderColor={fieldBorderColor}
+          <FieldLabel>
+            {draft.goal.type === "weekly" ? "Times per week" : draft.goal.type === "monthly" ? "Times per month" : "Times per day"}
+          </FieldLabel>
+          <LumoInput
+            value={goalAmount}
+            onChangeText={setAmount}
+            keyboardType="number-pad"
+            style={[styles.flatInput, { borderColor: fieldBorderColor }]}
           />
         </Field>
-
-        {draft.goal.type !== "once" ? (
-          <Field>
-            <FieldLabel>
-              {draft.goal.type === "multiple" ? "Times per day" : draft.goal.type === "weekly" ? "Times per week" : "Times per month"}
-            </FieldLabel>
-            <LumoInput
-              value={goalAmount}
-              onChangeText={setGoalAmount}
-              keyboardType="number-pad"
-              style={[styles.flatInput, { borderColor: fieldBorderColor }]}
-            />
-          </Field>
-        ) : null}
       </FormSection>
 
       <FormSection>
@@ -781,6 +823,28 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: ICON_PICKER_BOX_SIZE,
     height: ICON_PICKER_BOX_SIZE
+  },
+  colorChipRow: {
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+    paddingRight: spacing.lg
+  },
+  colorChipOuter: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  colorChip: {
+    width: 26,
+    height: 26,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center"
   },
   dayList: {
     flexDirection: "row",

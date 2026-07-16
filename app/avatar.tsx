@@ -26,7 +26,7 @@ import {
 
 type CategoryKey = "hair" | "headwear" | "eyes" | "eyebrows" | "mouth" | "facialHair" | "glasses" | "clothes" | "skin";
 
-const THUMB_SIZE = 52;
+const THUMB_COLUMNS = 6;
 const THUMB_PADDING = 5;
 const COLOR_COLUMNS = 8;
 const COLOR_GAP = spacing.xs;
@@ -86,6 +86,9 @@ function ThumbRow({
   onSelect: (value: string) => void;
   palette: Palette;
 }) {
+  const { width } = useWindowDimensions();
+  // Thumbs fill the width in equal columns, like the color swatches.
+  const thumbSize = Math.floor((width - spacing.lg * 2 - spacing.sm * (THUMB_COLUMNS - 1)) / THUMB_COLUMNS);
   const thumbs = useMemo(
     () => options.map((option) => ({ option, svg: buildAvatarSvg(overrideFor(base, category, option)) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -102,9 +105,9 @@ function ThumbRow({
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
             onPress={() => onSelect(option)}
-            style={[styles.thumb, selectionStyle(active, palette)]}
+            style={[styles.thumb, { width: thumbSize, height: thumbSize }, selectionStyle(active, palette)]}
           >
-            <Avatar svg={svg} size={THUMB_SIZE - THUMB_PADDING * 2} rounded={false} />
+            <Avatar svg={svg} size={thumbSize - THUMB_PADDING * 2} rounded={false} />
           </Pressable>
         );
       })}
@@ -149,7 +152,7 @@ function SwatchRow({
 export default function AvatarScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { avatar, setAvatar, palette } = useLumo();
+  const { avatar, setAvatar, palette, isDark } = useLumo();
   const [draft, setDraft] = useState<AvatarConfig>(avatar);
   const [category, setCategory] = useState<CategoryKey>("hair");
 
@@ -275,7 +278,11 @@ export default function AvatarScreen() {
               onPress={() => setCategory(cat.key)}
               style={[styles.tab, active ? styles.tabActive : null, active ? { backgroundColor: palette.greenDark } : null]}
             >
-              <AppText variant="bodySmall" color={active ? palette.white : alpha(palette.subtle, "99")} style={[styles.tabText, active ? null : styles.tabTextInactive]}>
+              <AppText
+                variant="bodySmall"
+                color={active ? (isDark ? palette.onAccent : palette.white) : alpha(palette.subtle, "99")}
+                style={[styles.tabText, active ? null : styles.tabTextInactive]}
+              >
                 {cat.label}
               </AppText>
             </Pressable>
@@ -426,8 +433,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm
   },
   thumb: {
-    width: THUMB_SIZE,
-    height: THUMB_SIZE,
     padding: THUMB_PADDING,
     borderRadius: radius.xl,
     alignItems: "center",

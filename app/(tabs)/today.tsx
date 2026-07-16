@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router'
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useFocusEffect, useRouter } from 'expo-router'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState, FlatList, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native'
 import ConfettiCannon from 'react-native-confetti-cannon'
 import Svg, { Circle as SvgCircle, Path as SvgPath } from 'react-native-svg'
@@ -7,6 +7,7 @@ import { fontFamilies, layout, radius, spacing } from '@/constants/theme'
 import { useLumo } from '@/context/LumoContext'
 import { alpha } from '@/lib/color'
 import { addDays, formatHeaderDateParts, parseDateKey, toDateKey } from '@/lib/date'
+import { friendsService } from '@/lib/friends'
 import { bestStreakAcrossHabits, isDoneOnDate, isScheduledOnDate } from '@/lib/habitMath'
 import { Habit } from '@/types/habit'
 import { Avatar } from '@/components/Avatar'
@@ -217,7 +218,7 @@ function ResourceCard({
 			]}
 		>
 			<ResourceCardBackdrop motif={motif} />
-			<Icon name={icon} size={22} color={palette.greenDark} weight='bulk' />
+			<Icon name={icon} size={24} color={palette.green} weight='bulk' />
 			<AppText variant='bodySmall' color={palette.ink} style={styles.resourceLabel}>
 				{label}
 			</AppText>
@@ -238,6 +239,24 @@ export default function TodayScreen() {
 	const bestStreak = bestStreakAcrossHabits(habits)
 	const selectedHabits = activeHabits.filter((habit) => isScheduledOnDate(habit, selectedDateKey))
 	const resourceCardWidth = (width - SCREEN_PADDING * 2) * 0.7
+
+	// Habits that belong to a friends group get a small marker on their cards.
+	const [groupHabitIds, setGroupHabitIds] = useState<Set<string>>(() => new Set())
+	useFocusEffect(
+		useCallback(() => {
+			let active = true
+
+			friendsService.listGroups().then((groups) => {
+				if (active) {
+					setGroupHabitIds(new Set(groups.flatMap((group) => group.habits.map((habit) => habit.id))))
+				}
+			})
+
+			return () => {
+				active = false
+			}
+		}, []),
+	)
 
 	// Page-wide confetti when every habit for the selected day gets completed.
 	// Only fires on the transition to all-done while staying on the same day —
@@ -302,8 +321,8 @@ export default function TodayScreen() {
 						<View style={styles.profileRow}>
 							<Pressable
 								accessibilityRole='button'
-								accessibilityLabel='Customize avatar'
-								onPress={() => router.push('/avatar')}
+								accessibilityLabel='Open profile'
+								onPress={() => router.push('/profile')}
 								style={({ pressed }) => [styles.avatarFrame, { opacity: pressed ? 0.75 : 1 }]}
 							>
 								<View style={[styles.avatarCircle, { backgroundColor: alpha(palette.greenDark, '10') }]} pointerEvents='none' />
@@ -376,6 +395,7 @@ export default function TodayScreen() {
 			<QuickDoneWidgets
 				habits={selectedHabits}
 				dateKey={selectedDateKey}
+				groupHabitIds={groupHabitIds}
 			/>
 
 			<View style={styles.resourceSection}>
@@ -477,8 +497,8 @@ const styles = StyleSheet.create({
 	},
 	nickname: {
 		fontFamily: fontFamilies.lexendBold,
-		fontSize: 18,
-		lineHeight: 23,
+		fontSize: 21,
+		lineHeight: 26,
 	},
 	dateText: {
 		fontSize: 13,

@@ -24,7 +24,7 @@ const FAQS: Faq[] = [
 	{
 		question: 'Where is my data stored?',
 		answer:
-			'Everything stays on this device. Lumo does not send your habits, journal entries, or photos to any server, and there is no account to sign in to. Your routines remain completely private to you.',
+			'Everything stays on this device by default. If you enable Share with Friends, only your nickname, avatar, and progress numbers sync — your habits, journal entries, and photos never leave your device.',
 	},
 	{
 		question: 'How do I create a habit?',
@@ -32,8 +32,9 @@ const FAQS: Faq[] = [
 			'Open the Habits tab and tap the plus button. Give the habit a name, pick an icon and category, choose how often it should happen, and set an optional reminder. You can edit or delete it any time.',
 	},
 	{
-		question: 'How many habits can I track for free?',
-		answer: 'The free version lets you track up to three active habits. Lumo Pro unlocks unlimited habits with a single one-time purchase — no subscription.',
+		question: 'How much does Lumo cost?',
+		answer:
+			'Habits, journals, stats, and themes are all free with no caps. Only the social features — Friends and the Feature Board — need a ₱49/month subscription, which covers their server costs. Cancel anytime in the App Store.',
 	},
 	{
 		question: 'How do streaks work?',

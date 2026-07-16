@@ -10,15 +10,30 @@ import {
   TextInputProps,
   TextStyle,
   View,
-  ViewStyle
+  ViewStyle,
+  useWindowDimensions
 } from "react-native";
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
-import { control, fontFamilies, radius, spacing, type } from "@/constants/theme";
+import { control, fontFamilies, fontScaleForWidth, radius, spacing, type } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { Icon, IconName, IconWeight } from "./Icon";
 
 type TextVariant = keyof typeof type;
+
+// Scales fontSize/lineHeight in an already-flattened text style; leaves every
+// other property untouched. scale === 1 short-circuits to the same object.
+function scaleTextStyle(flat: TextStyle, scale: number): TextStyle {
+  if (scale === 1) {
+    return flat;
+  }
+
+  return {
+    ...flat,
+    fontSize: typeof flat.fontSize === "number" ? Math.round(flat.fontSize * scale) : flat.fontSize,
+    lineHeight: typeof flat.lineHeight === "number" ? Math.round(flat.lineHeight * scale) : flat.lineHeight
+  };
+}
 type ChipOption = {
   label: string;
   value: string;
@@ -28,12 +43,15 @@ export function Screen({
   children,
   scroll = true,
   contentStyle,
-  edges = ["top", "left", "right"]
+  edges = ["top", "left", "right"],
+  refreshControl
 }: {
   children: ReactNode;
   scroll?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
   edges?: Edge[];
+  // Pull-to-refresh for scrolling screens (ignored when scroll is false).
+  refreshControl?: React.ComponentProps<typeof ScrollView>["refreshControl"];
 }) {
   const { palette, isDark } = useLumo();
 
@@ -46,6 +64,7 @@ export function Screen({
           automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.screenContent, contentStyle]}
+          refreshControl={refreshControl}
         >
           {children}
         </ScrollView>
@@ -71,10 +90,20 @@ export function AppText({
   className?: string;
   numberOfLines?: number;
 }) {
-  const { palette, isDark } = useLumo();
+  const { palette } = useLumo();
+  const { width } = useWindowDimensions();
+  // Flatten first so explicit fontSize overrides passed via `style` scale too.
+  const flat = StyleSheet.flatten([type[variant], { color: color ?? palette.ink }, style]) as TextStyle;
 
   return (
-    <Text className={className} numberOfLines={numberOfLines} style={[type[variant], { color: color ?? palette.ink }, style]}>
+    <Text
+      className={className}
+      numberOfLines={numberOfLines}
+      // Ignore the OS Dynamic Type multiplier upward — otherwise the same
+      // device size renders bigger text when iOS Text Size is raised.
+      maxFontSizeMultiplier={1}
+      style={scaleTextStyle(flat, fontScaleForWidth(width))}
+    >
       {children}
     </Text>
   );
@@ -228,6 +257,7 @@ export function IconButton({
   onPress,
   label,
   iconSize = 18,
+  iconColor,
   buttonSize,
   iconWeight = "regular",
   iconStyle,
@@ -237,6 +267,7 @@ export function IconButton({
   onPress?: () => void;
   label: string;
   iconSize?: number;
+  iconColor?: string;
   buttonSize?: number;
   iconWeight?: IconWeight;
   iconStyle?: StyleProp<ViewStyle>;
@@ -261,17 +292,17 @@ export function IconButton({
       ]}
     >
       <View pointerEvents="none" style={iconStyle}>
-        <Icon name={icon} size={iconSize} color={palette.ink} weight={iconWeight} />
+        <Icon name={icon} size={iconSize} color={iconColor ?? palette.ink} weight={iconWeight} />
       </View>
     </Pressable>
   );
 }
 
-export function FieldLabel({ children }: { children: ReactNode }) {
+export function FieldLabel({ children, style }: { children: ReactNode; style?: StyleProp<TextStyle> }) {
   const { palette } = useLumo();
 
   return (
-    <AppText variant="caption" color={palette.subtle} style={styles.label}>
+    <AppText variant="caption" color={palette.subtle} style={[styles.label, style]}>
       {children}
     </AppText>
   );
@@ -313,13 +344,24 @@ export function controlBorderColor(palette: ReturnType<typeof useLumo>["palette"
 
 export function LumoInput(props: TextInputProps) {
   const { palette, isDark, settings } = useLumo();
+  const { width } = useWindowDimensions();
   const [focused, setFocused] = React.useState(false);
   // The green theme uses a soft green-tinted field instead of the cream surface.
   const fieldBackground = settings.colorScheme === "green" ? alpha(palette.greenDark, "14") : palette.surface;
+  const flat = StyleSheet.flatten([
+    styles.input,
+    {
+      backgroundColor: fieldBackground,
+      borderColor: controlBorderColor(palette, isDark, focused),
+      color: palette.ink
+    },
+    props.style
+  ]) as TextStyle;
 
   return (
     <TextInput
       placeholderTextColor={`${palette.body}99`}
+      maxFontSizeMultiplier={1}
       {...props}
       onFocus={(event) => {
         setFocused(true);
@@ -329,15 +371,7 @@ export function LumoInput(props: TextInputProps) {
         setFocused(false);
         props.onBlur?.(event);
       }}
-      style={[
-        styles.input,
-        {
-          backgroundColor: fieldBackground,
-          borderColor: controlBorderColor(palette, isDark, focused),
-          color: palette.ink
-        },
-        props.style
-      ]}
+      style={scaleTextStyle(flat, fontScaleForWidth(width))}
     />
   );
 }

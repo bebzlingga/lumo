@@ -19,6 +19,9 @@ type Props = {
   rows?: number;
   /** Align week columns Monday–Sunday instead of the default Sunday start. */
   weekStartsOnMonday?: boolean;
+  /** Habit color theme accent. When set, filled dots use it instead of the
+   * app theme's green (ignored by the hero tone, which stays white). */
+  accentColor?: string;
 };
 
 function startOfWeekMonday(dateKey: string) {
@@ -32,13 +35,15 @@ function Dot({
   size,
   isInactive,
   isTodayPending,
-  tone
+  tone,
+  accentColor
 }: {
   status: "empty" | "partial" | "complete" | "strong";
   size: number;
   isInactive: boolean;
   isTodayPending: boolean;
   tone: NonNullable<Props["tone"]>;
+  accentColor?: string;
 }) {
   const { palette, isDark } = useLumo();
   const scale = useSharedValue(status === "empty" ? 0.92 : 1);
@@ -51,8 +56,10 @@ function Dot({
     transform: [{ scale: scale.value }]
   }));
 
+  const fillColor = accentColor ?? palette.greenDark;
+  const emptyColor = accentColor ? alpha(accentColor, "24") : alpha(palette.greenSoft, "3D");
   const backgroundColor = isTodayPending
-    ? palette.danger
+    ? "transparent"
     : tone === "hero"
       ? status === "empty"
         ? `${palette.white}${isDark ? "33" : "44"}`
@@ -60,10 +67,10 @@ function Dot({
           ? `${palette.white}99`
           : palette.white
       : status === "empty"
-        ? alpha(palette.greenSoft, "3D")
+        ? emptyColor
         : status === "partial"
-          ? alpha(palette.greenDark, "66")
-          : palette.greenDark;
+          ? alpha(fillColor, "66")
+          : fillColor;
 
   return (
     <Animated.View
@@ -76,7 +83,15 @@ function Dot({
           borderRadius: Math.min(radius.xs, size / 2),
           backgroundColor,
           opacity: isInactive && !isTodayPending ? 0.72 : 1
-        }
+        },
+        // Today-but-not-done reads as an outlined placeholder, not an alert.
+        isTodayPending
+          ? {
+              borderWidth: 1.5,
+              borderStyle: "dotted" as const,
+              borderColor: tone === "hero" ? `${palette.white}CC` : alpha(fillColor, "AA")
+            }
+          : null
       ]}
     />
   );
@@ -119,7 +134,8 @@ export function DottedProgressChart({
   layout = "weekly",
   tone = "default",
   rows = 7,
-  weekStartsOnMonday = false
+  weekStartsOnMonday = false,
+  accentColor
 }: Props) {
   const todayKey = toDateKey();
   const scrollRef = React.useRef<ScrollView>(null);
@@ -166,6 +182,7 @@ export function DottedProgressChart({
                   isInactive={status === "empty"}
                   isTodayPending={isTodayPending}
                   tone={tone}
+                  accentColor={accentColor}
                 />
               );
             })}

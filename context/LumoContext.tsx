@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { useColorScheme } from "react-native";
+import { AppState, useColorScheme } from "react-native";
 import { getPalette, LumoPalette, ThemeColorScheme } from "@/constants/theme";
 import { toDateKey } from "@/lib/date";
 import { completionCount } from "@/lib/habitMath";
@@ -13,13 +13,22 @@ import {
   scheduleHabitReminder
 } from "@/lib/notifications";
 import { AvatarConfig, defaultAvatar, normalizeAvatar } from "@/lib/avatar";
+import { friendsService } from "@/lib/friends";
+import { fetchServerEntitlement, purchaseFriendsSubscription, restoreFriendsSubscription } from "@/lib/iap";
+import { formatLumoId, generateLumoSuffix } from "@/lib/lumoId";
+import { updateTodayWidget } from "@/lib/widget";
 import { AppSettings, BackupFrequency, CompletionEntry, FeatureRequest, Habit, HabitCategory, habitCategories, HabitDraft, JournalEntry, JournalMood } from "@/types/habit";
 
+// Persisted local state key. Do not change — it would orphan existing
+// installs' local data.
 const STORAGE_KEY = "@lumo/state/v1";
+// DEV ONLY: when true, unlocks Friends + the Feature Board without a
+// subscription. MUST stay false in production.
+const BYPASS_SUBSCRIPTION = false;
 // Free users can keep this many habits / journal entries; the one-time purchase
 // lifts both caps.
 export const FREE_HABIT_LIMIT = 3;
-export const FREE_JOURNAL_LIMIT = 3;
+export const FREE_JOURNAL_LIMIT = 5;
 const BACKUP_DIRECTORY_NAME = "Lumo/Backup/";
 const BACKUP_INTERVAL_MS: Record<BackupFrequency, number> = {
   daily: 24 * 60 * 60 * 1000,
@@ -44,6 +53,10 @@ type StoredState = {
   settings: AppSettings;
   hasOnboarded: boolean;
   nickname: string;
+  // Stable Lumo ID suffix (displayed as `nickname#SUFFIX`) and the optional
+  // recovery email. Both stay local until the user enables Friends sync.
+  lumoIdSuffix: string;
+  email: string;
   featureRequests: FeatureRequest[];
   avatar: AvatarConfig;
 };
@@ -105,6 +118,7 @@ type LumoContextValue = StoredState & {
   toggleFeatureVote: (id: string) => void;
   setHasOnboarded: (value: boolean) => void;
   setNickname: (value: string) => void;
+  setEmail: (value: string) => void;
   setAvatar: (config: AvatarConfig) => void;
   setThemeMode: (mode: AppSettings["themeMode"]) => void;
   setColorScheme: (colorScheme: ThemeColorScheme) => void;
@@ -133,8 +147,10 @@ type LumoContextValue = StoredState & {
 };
 
 const defaultSettings: AppSettings = {
-  themeMode: "system",
-  colorScheme: "green",
+  // Fresh installs start on the light "black" look (monochrome onboarding);
+  // users can switch mode and color scheme in Settings.
+  themeMode: "light",
+  colorScheme: "black",
   notificationStatus: "unknown",
   notificationsEnabled: true,
   autoBackupEnabled: false,
@@ -148,6 +164,8 @@ const defaultState: StoredState = {
   settings: defaultSettings,
   hasOnboarded: false,
   nickname: "",
+  lumoIdSuffix: generateLumoSuffix(),
+  email: "",
   featureRequests: DEFAULT_FEATURE_REQUESTS,
   avatar: defaultAvatar()
 };
@@ -191,9 +209,19 @@ function normalizeState(parsed: StoredState): StoredState {
     settings.backupFrequency = defaultSettings.backupFrequency;
   }
 
+  // Until onboarding completes the user never chose a theme — any stored
+  // values are stale defaults, so keep pre-onboarding installs on the current
+  // default look (light black).
+  if (!(parsed.hasOnboarded ?? false)) {
+    settings.themeMode = defaultSettings.themeMode;
+    settings.colorScheme = defaultSettings.colorScheme;
+  }
+
   return {
     hasOnboarded: parsed.hasOnboarded ?? false,
     nickname: parsed.nickname ?? "",
+    lumoIdSuffix: parsed.lumoIdSuffix ?? generateLumoSuffix(),
+    email: parsed.email ?? "",
     settings,
     habits: (parsed.habits ?? []).map(normalizeHabit),
     journals: (parsed.journals ?? []).filter((entry) => entry && typeof entry.date === "string"),
@@ -430,13 +458,80 @@ export function LumoProvider({ children }: { children: ReactNode }) {
       .catch(() => undefined);
   }, [isReady]);
 
+  // Keep the cloud profile in sync for the Friends feature — fire-and-forget;
+  // when Supabase is unconfigured or unreachable the app stays local-only.
+  // Runs at launch, when profile fields change, and every time the app comes
+  // back to the foreground so a failed sync (backend down, auth not yet
+  // enabled) heals itself without an app restart.
+  useEffect(() => {
+    if (!isReady) {
+      return;
+    }
+
+    const sync = () => {
+      friendsService
+        .syncProfile({
+          lumoId: formatLumoId(stateRef.current.lumoIdSuffix),
+          nickname: stateRef.current.nickname,
+          avatar: stateRef.current.avatar,
+          email: stateRef.current.email
+        })
+        .then((result) => {
+          // Another user already claimed this Lumo ID (unique in the cloud) —
+          // regenerate; the changed suffix re-triggers this effect to resync.
+          if (result === "conflict") {
+            setState((current) => ({ ...current, lumoIdSuffix: generateLumoSuffix() }));
+          }
+        })
+        .catch(() => undefined);
+    };
+
+    sync();
+    const subscription = AppState.addEventListener("change", (status) => {
+      if (status === "active") {
+        sync();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [isReady, state.lumoIdSuffix, state.nickname, state.avatar, state.email]);
+
+  // Re-check the subscription on launch: the server-verified entitlement
+  // (Supabase, written by receipt validation) is authoritative, with the App
+  // Store's own answer as fallback while the webhook hasn't caught up yet.
+  // Both unknown (offline / native module not built) → leave the flag as-is.
+  useEffect(() => {
+    if (!isReady) {
+      return;
+    }
+
+    Promise.all([fetchServerEntitlement(), restoreFriendsSubscription()]).then(([server, store]) => {
+      if (server === null && store === null) {
+        return;
+      }
+
+      const active = server === true || store === true;
+
+      setState((current) =>
+        current.settings.isPro === active ? current : { ...current, settings: { ...current.settings, isPro: active } }
+      );
+    });
+  }, [isReady]);
+
+  // Keep the iOS home-screen widget in sync with today's habits/completions.
+  useEffect(() => {
+    if (isReady) {
+      updateTodayWidget(state.habits);
+    }
+  }, [isReady, state.habits]);
+
   const value = useMemo<LumoContextValue>(() => {
     // Active + paused habits count toward the free limit; archived and trashed
     // habits don't occupy a slot.
     const ownedHabitCount = state.habits.filter(
       (habit) => habit.status === "active" || habit.status === "paused"
     ).length;
-    const isPro = state.settings.isPro;
+    const isPro = state.settings.isPro || BYPASS_SUBSCRIPTION;
 
     return {
       ...state,
@@ -453,10 +548,12 @@ export function LumoProvider({ children }: { children: ReactNode }) {
       isPro,
       habitLimit: FREE_HABIT_LIMIT,
       ownedHabitCount,
-      canCreateHabit: isPro || ownedHabitCount < FREE_HABIT_LIMIT,
+      // Core features are free for everyone; the subscription (`isPro`) only
+      // gates the social features: Friends and the Feature Board.
+      canCreateHabit: true,
       journalLimit: FREE_JOURNAL_LIMIT,
       journalCount: state.journals.length,
-      canCreateJournal: isPro || state.journals.length < FREE_JOURNAL_LIMIT,
+      canCreateJournal: true,
       canUseFeatureBoard: isPro,
       submitFeatureRequest(title, description, photoUri) {
         const cleanTitle = title.trim();
@@ -500,25 +597,44 @@ export function LumoProvider({ children }: { children: ReactNode }) {
           settings: { ...current.settings, isPro: unlocked }
         }));
       },
-      // TODO(iap): replace with react-native-iap requestPurchase() + receipt
-      // handling. For now this unlocks locally so the flow is testable.
+      // Apple IAP: auto-renewable Friends subscription (lib/iap.ts). The
+      // entitlement persists locally in settings.isPro and is re-checked
+      // against the store on launch.
       async purchasePro() {
+        const purchased = await purchaseFriendsSubscription();
+
+        if (purchased) {
+          setState((current) => ({
+            ...current,
+            settings: { ...current.settings, isPro: true }
+          }));
+        }
+
+        return purchased;
+      },
+      async restorePurchases() {
+        const active = await restoreFriendsSubscription();
+
+        // Store unreachable — keep whatever entitlement we already have.
+        if (active === null) {
+          return stateRef.current.settings.isPro;
+        }
+
         setState((current) => ({
           ...current,
-          settings: { ...current.settings, isPro: true }
+          settings: { ...current.settings, isPro: active }
         }));
-        return true;
-      },
-      // TODO(iap): replace with react-native-iap getAvailablePurchases() to
-      // restore the non-consumable entitlement.
-      async restorePurchases() {
-        return stateRef.current.settings.isPro;
+
+        return active;
       },
       setHasOnboarded(value) {
         setState((current) => ({ ...current, hasOnboarded: value }));
       },
       setNickname(value) {
         setState((current) => ({ ...current, nickname: value }));
+      },
+      setEmail(value) {
+        setState((current) => ({ ...current, email: value.trim() }));
       },
       setAvatar(config) {
         setState((current) => ({ ...current, avatar: config }));
@@ -667,6 +783,13 @@ export function LumoProvider({ children }: { children: ReactNode }) {
           ...current,
           habits: current.habits.map((habit) => (habit.id === id ? withCompletionOnDate(habit, dateKey) : habit))
         }));
+
+        // Mirror to the group backend (no-op for personal habits).
+        const habit = stateRef.current.habits.find((item) => item.id === id);
+        if (habit) {
+          const next = withCompletionOnDate(habit, dateKey);
+          friendsService.syncCompletion(id, dateKey, completionCount(next, dateKey)).catch(() => undefined);
+        }
       },
       undoHabit(id, dateKey = toDateKey()) {
         setLastMessage("");
@@ -674,6 +797,12 @@ export function LumoProvider({ children }: { children: ReactNode }) {
           ...current,
           habits: current.habits.map((habit) => (habit.id === id ? withoutCompletionOnDate(habit, dateKey) : habit))
         }));
+
+        const habit = stateRef.current.habits.find((item) => item.id === id);
+        if (habit) {
+          const next = withoutCompletionOnDate(habit, dateKey);
+          friendsService.syncCompletion(id, dateKey, completionCount(next, dateKey)).catch(() => undefined);
+        }
       },
       async pauseHabit(id) {
         const habit = state.habits.find((item) => item.id === id);
@@ -767,12 +896,6 @@ export function LumoProvider({ children }: { children: ReactNode }) {
 
           const now = new Date().toISOString();
           const existing = current.journals.find((entry) => entry.date === date);
-
-          // Enforce the free journal cap: don't let a brand-new entry push a
-          // free user past the limit (the UI routes them to the paywall first).
-          if (!existing && !current.settings.isPro && current.journals.length >= FREE_JOURNAL_LIMIT) {
-            return current;
-          }
           const nextEntry: JournalEntry = existing
             ? { ...existing, title: trimmedTitle, content, photoUri, mood, updatedAt: now }
             : { date, title: trimmedTitle, content, photoUri, mood, createdAt: now, updatedAt: now };
