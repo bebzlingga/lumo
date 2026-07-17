@@ -60,6 +60,17 @@ target 'Lumo' do
         end
       end
     end
+
+    # Xcode 26 (required by the App Store) ships a stricter Clang that rejects
+    # the fmt library's consteval format-string checks used by RN 0.79's
+    # logging (glog / RCT-Folly). FMT_USE_CONSTEVAL=0 makes fmt validate format
+    # strings at runtime instead, which compiles cleanly.
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'FMT_USE_CONSTEVAL=0'
+      end
+    end
   end
 end
 
