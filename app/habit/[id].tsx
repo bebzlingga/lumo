@@ -150,9 +150,9 @@ export default function HabitDetailScreen() {
             <AppText variant="titleSmall" color={palette.greenDark} numberOfLines={1} style={styles.headerStatus}>
               Habit On Pause
             </AppText>
-          ) : summary.currentStreak > 0 ? (
+          ) : summary.currentStreak >= 3 ? (
             <View style={styles.headerStreak}>
-              {summary.currentStreak >= 3 ? <FireIcon size={20} /> : null}
+              <FireIcon size={20} />
               <AppText variant="titleSmall" color={palette.greenDark} numberOfLines={1}>
                 {summary.currentStreak} day streak
               </AppText>
@@ -160,7 +160,7 @@ export default function HabitDetailScreen() {
           ) : null
         }
         centerLabel={currentHabit.status === "archived" ? "Completed habit" : currentHabit.status === "paused" ? "Habit paused" : "Show streak details"}
-        onCenterPress={currentHabit.status === "active" && summary.currentStreak > 0 ? () => setIsStreakModalVisible(true) : undefined}
+        onCenterPress={currentHabit.status === "active" && summary.currentStreak >= 3 ? () => setIsStreakModalVisible(true) : undefined}
         leftAction={{
           icon: "back",
           label: "Back",

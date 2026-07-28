@@ -123,6 +123,16 @@ export function bestStreakAcrossHabits(habits: Habit[], todayKey = toDateKey()) 
   return habits.reduce((max, habit) => Math.max(max, bestStreak({ ...habit, status: "active" }, todayKey)), 0);
 }
 
+/**
+ * Longest *current* streak across every habit, as of `todayKey`. Unlike
+ * bestStreakAcrossHabits (best ever), this reflects the run ending on the given
+ * day — so looking back a day yields a smaller number and streaks never carry
+ * over to earlier dates.
+ */
+export function bestCurrentStreakAcrossHabits(habits: Habit[], todayKey = toDateKey()) {
+  return habits.reduce((max, habit) => Math.max(max, currentStreak({ ...habit, status: "active" }, todayKey)), 0);
+}
+
 export function completionRate(habit: Habit, todayKey = toDateKey()) {
   const days = Math.min(MAX_HISTORY_DAYS, Math.max(1, daysBetween(habit.createdAt, todayKey) + 1));
   const scheduled = dateRange(days, todayKey).filter((dateKey) => isScheduledOnDate(habit, dateKey));

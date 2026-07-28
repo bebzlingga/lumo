@@ -5,6 +5,7 @@ import { fontFamilies, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { completionCount, dailyTarget, isDoneOnDate } from "@/lib/habitMath";
 import { Habit } from "@/types/habit";
+import { FireIcon } from "./FireIcon";
 import { AppText } from "./ui";
 
 const RING_SIZE = 64;
@@ -126,14 +127,19 @@ export function DailyProgressCard({
                   {total === 1 ? "Habit" : "Habits"}
                 </AppText>
               </View>
-              <View style={styles.stat}>
-                <AppText variant="titleSmall" color={titleColor} style={styles.statValue}>
-                  {streak}
-                </AppText>
-                <AppText variant="caption" color={subColor} style={styles.statLabel}>
-                  {streak === 1 ? "Day streak" : "Days streak"}
-                </AppText>
-              </View>
+              {streak >= 3 ? (
+                <View style={styles.stat}>
+                  <View style={styles.streakValueRow}>
+                    <FireIcon size={18} />
+                    <AppText variant="titleSmall" color={titleColor} style={styles.statValue}>
+                      {streak}
+                    </AppText>
+                  </View>
+                  <AppText variant="caption" color={subColor} style={styles.statLabel}>
+                    Days streak
+                  </AppText>
+                </View>
+              ) : null}
             </View>
           </View>
 
@@ -193,6 +199,11 @@ const styles = StyleSheet.create({
   },
   stat: {
     gap: 2
+  },
+  streakValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xxs
   },
   statValue: {
     fontFamily: fontFamilies.lexendBold,

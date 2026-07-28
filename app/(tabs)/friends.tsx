@@ -131,7 +131,7 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }) {
             {group.members.length === 1 ? "member" : "members"}
           </AppText>
         </View>
-        {group.streak > 0 ? (
+        {group.streak >= 3 ? (
           <View style={[styles.groupStreakBadge, { backgroundColor: palette.glowSoft }]}>
             <FireIcon size={12} />
             <AppText variant="caption" color={palette.ink} style={styles.groupStreakText}>

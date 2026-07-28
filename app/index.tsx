@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Animated, Easing, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { CategoryChips, categoryNamePlaceholders } from "@/components/CategoryChips";
 import { FloatingDropdown } from "@/components/FloatingDropdown";
-import { IconName } from "@/components/Icon";
+import { Icon, IconName } from "@/components/Icon";
 import { IconPicker, categoryIconOptions } from "@/components/IconPicker";
 import { OnboardingIllustration } from "@/components/OnboardingIllustrations";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -37,7 +37,7 @@ const slides = [
   }
 ];
 
-type OnboardingStep = "welcome" | "profile" | "habit";
+type OnboardingStep = "welcome" | "profile" | "habit" | "notify";
 
 // Onboarding always renders the light "black" look — the user hasn't picked a
 // theme yet, so it must not depend on whatever settings happen to be stored.
@@ -118,7 +118,7 @@ function OnboardingCta({
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { createHabit, isReady, hasOnboarded, nickname, setNickname, setEmail } = useLumo();
+  const { createHabit, isReady, hasOnboarded, nickname, setNickname, setEmail, setNotificationsEnabled } = useLumo();
   const { width, height: windowHeight } = useWindowDimensions();
   const slideScrollRef = useRef<ScrollView>(null);
   const palette = onboardingPalette;
@@ -135,6 +135,7 @@ export default function OnboardingScreen() {
   const [firstHabitGoalType, setFirstHabitGoalType] = useState<GoalType["type"]>("once");
   const [firstHabitGoalAmount, setFirstHabitGoalAmount] = useState("3");
   const [isSavingHabit, setIsSavingHabit] = useState(false);
+  const [notifyBusy, setNotifyBusy] = useState(false);
 
   // Artwork scales with both screen axes (320:250 aspect kept) so small phones
   // keep room for the copy and CTA instead of overflowing.
@@ -221,6 +222,32 @@ export default function OnboardingScreen() {
     setNickname(cleanNickname);
     setEmail(cleanEmail);
     setStep("habit");
+  }
+
+  function goToNotify() {
+    if (!firstHabitName.trim()) {
+      Alert.alert("First habit needed", "Start with one small habit you can repeat.");
+      return;
+    }
+
+    setStep("notify");
+  }
+
+  async function handleEnableNotifications() {
+    if (notifyBusy || isSavingHabit) {
+      return;
+    }
+
+    setNotifyBusy(true);
+
+    try {
+      await setNotificationsEnabled(true);
+      // Keep the busy state through habit creation + redirect so the label
+      // doesn't flicker; on success the screen unmounts before it matters.
+      await finishOnboarding();
+    } catch {
+      setNotifyBusy(false);
+    }
   }
 
   async function finishOnboarding() {
@@ -353,8 +380,8 @@ export default function OnboardingScreen() {
                 placeholder={categoryNamePlaceholders[firstHabitCategory]}
                 autoCapitalize="sentences"
                 autoFocus
-                returnKeyType="done"
-                onSubmitEditing={finishOnboarding}
+                returnKeyType="next"
+                onSubmitEditing={goToNotify}
                 style={[styles.flatInput, { borderColor: fieldBorderColor }]}
               />
             </View>
@@ -405,11 +432,49 @@ export default function OnboardingScreen() {
         </Animated.View>
 
         <View style={styles.bottomAction}>
+          <OnboardingCta label="NEXT" onPress={goToNotify} disabled={!firstHabitName.trim()} />
+        </View>
+      </Screen>
+    );
+  }
+
+  if (step === "notify") {
+    return (
+      <Screen contentStyle={styles.screen}>
+        <ScreenHeader leftAction={{ icon: "back", label: "Back", onPress: () => setStep("habit") }} />
+        <View style={styles.formMainContent}>
+          <View style={styles.notifyHero}>
+            <View style={[styles.notifyIconCircle, { backgroundColor: alpha(palette.greenDark, "12") }]}>
+              <Icon name="notifications" size={52} color={palette.greenDark} weight="bulk" />
+            </View>
+          </View>
+
+          <View style={[styles.copy, styles.copyLeft]}>
+            <AppText variant="displaySmall" style={[styles.title, styles.titleLeft]}>
+              Stay on track
+            </AppText>
+            <AppText variant="body" color={palette.subtle} style={[styles.body, styles.bodyLeft]}>
+              Turn on notifications for gentle reminders that keep your streaks alive — plus cheers when friends check in. No spam, ever.
+            </AppText>
+          </View>
+        </View>
+
+        <View style={styles.bottomAction}>
           <OnboardingCta
-            label={isSavingHabit ? "CREATING..." : "CREATE HABIT"}
-            onPress={finishOnboarding}
-            disabled={!firstHabitName.trim() || isSavingHabit}
+            label={notifyBusy ? "ENABLING..." : "ENABLE NOTIFICATIONS"}
+            onPress={handleEnableNotifications}
+            disabled={notifyBusy || isSavingHabit}
           />
+          <Pressable
+            accessibilityRole="button"
+            disabled={notifyBusy || isSavingHabit}
+            onPress={finishOnboarding}
+            style={({ pressed }) => [styles.skipButton, { opacity: notifyBusy || isSavingHabit ? 0.45 : pressed ? 0.6 : 1 }]}
+          >
+            <AppText variant="button" color={palette.subtle}>
+              {isSavingHabit ? "Finishing..." : "Maybe later"}
+            </AppText>
+          </Pressable>
         </View>
       </Screen>
     );
@@ -565,11 +630,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: fontFamilies.lexendBold
   },
+  notifyHero: {
+    alignItems: "center",
+    marginTop: spacing.lg,
+    marginBottom: spacing.xl
+  },
+  notifyIconCircle: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 116,
+    height: 116,
+    borderRadius: 58
+  },
   bottomAction: {
     alignItems: "stretch",
     alignSelf: "stretch",
     paddingTop: spacing.lg,
     marginBottom: spacing.xl
+  },
+  skipButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing.md,
+    marginTop: spacing.xs
   },
   onboardingButtonPressable: {
     alignSelf: "stretch"

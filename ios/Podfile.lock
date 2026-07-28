@@ -323,6 +323,10 @@ PODS:
     - ExpoModulesCore
   - ExpoSpeechRecognition (2.1.5):
     - ExpoModulesCore
+  - ExpoSplashScreen (0.30.10):
+    - ExpoModulesCore
+  - ExpoVideo (2.2.3):
+    - ExpoModulesCore
   - ExtensionStorage (1.0.0):
     - ExpoModulesCore
   - EXUpdatesInterface (1.1.0):
@@ -2461,6 +2465,8 @@ DEPENDENCIES:
   - ExpoModulesCore (from `../node_modules/expo-modules-core`)
   - ExpoSharing (from `../node_modules/expo-sharing/ios`)
   - ExpoSpeechRecognition (from `../node_modules/expo-speech-recognition/ios`)
+  - ExpoSplashScreen (from `../node_modules/expo-splash-screen/ios`)
+  - ExpoVideo (from `../node_modules/expo-video/ios`)
   - "ExtensionStorage (from `../node_modules/@bacons/apple-targets/ios`)"
   - EXUpdatesInterface (from `../node_modules/expo-updates-interface/ios`)
   - fast_float (from `../node_modules/react-native/third-party-podspecs/fast_float.podspec`)
@@ -2602,6 +2608,10 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-sharing/ios"
   ExpoSpeechRecognition:
     :path: "../node_modules/expo-speech-recognition/ios"
+  ExpoSplashScreen:
+    :path: "../node_modules/expo-splash-screen/ios"
+  ExpoVideo:
+    :path: "../node_modules/expo-video/ios"
   ExtensionStorage:
     :path: "../node_modules/@bacons/apple-targets/ios"
   EXUpdatesInterface:
@@ -2794,6 +2804,8 @@ SPEC CHECKSUMS:
   ExpoModulesCore: 00a1b5c73248465bd0b93f59f8538c4573dac579
   ExpoSharing: b0377be82430d07398c6a4cd60b5a15696accbd3
   ExpoSpeechRecognition: c927769c7bec19204fc0bfe28355487fbc87f871
+  ExpoSplashScreen: 0ad5acac1b5d2953c6e00d4319f16d616f70d4dd
+  ExpoVideo: ecded6b0b802be921fcf85c8d831cc086c362fb4
   ExtensionStorage: 5796de20bf181317c376d693fedb64c6781a33ba
   EXUpdatesInterface: 7ff005b7af94ee63fa452ea7bb95d7a8ff40277a
   fast_float: 06eeec4fe712a76acc9376682e4808b05ce978b6
@@ -2801,9 +2813,9 @@ SPEC CHECKSUMS:
   fmt: a40bb5bd0294ea969aaaba240a927bd33d878cdd
   glog: 5683914934d5b6e4240e497e0f4a3b42d1854183
   hermes-engine: 44bb6fe76a6eb400d3a992e2d0b21946ae999fa9
-  NitroIap: b5ce9a0476e2ad1ca23c91a40c98ad849113f326
+  NitroIap: b0c5137345efae508c99bbae04bfcf3e9590c6b7
   NitroModules: fe7084d26cd7aa83c91ada87bfbbf25e0d82f3eb
-  openiap: f8a7da5c4cffb046addbdfaccb77223ebc916093
+  openiap: 9dffe727dc566ff7577a45a2429834c4dddecdb0
   RCT-Folly: e78785aa9ba2ed998ea4151e314036f6c49e6d82
   RCTDeprecation: 9bc64754b40b86fa5e32f293ab3ea8eea2248339
   RCTRequired: ee36c1ce9a5e65a3f629c13f38a85308eb8eebda
@@ -2879,6 +2891,6 @@ SPEC CHECKSUMS:
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   Yoga: dc7c21200195acacb62fa920c588e7c2106de45e
 
-PODFILE CHECKSUM: 76a9f78e141d8af8a059e1ad8f265f0fa16af353
+PODFILE CHECKSUM: 94b038039eb68a2407c17bd9450db1e3e805f38a
 
 COCOAPODS: 1.16.2

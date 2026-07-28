@@ -17,6 +17,7 @@ import {
   Broom,
   Brush,
   Calendar,
+  Chart2,
   ChartSquare,
   Check,
   Clock,
@@ -96,6 +97,7 @@ export type IconName =
   | "brush"
   | "calendar"
   | "chart"
+  | "chart2"
   | "check"
   | "checkCircle"
   | "chevronDown"
@@ -172,6 +174,7 @@ const iconMap: Record<IconName, IconsaxIcon> = {
   brush: Brush,
   calendar: Calendar,
   chart: ChartSquare,
+  chart2: Chart2,
   check: Check,
   checkCircle: TickCircle,
   chevronDown: ArrowDown2,

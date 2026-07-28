@@ -66,10 +66,16 @@ target 'Lumo' do
     # logging (glog / RCT-Folly). fmt 11's base.h defines FMT_USE_CONSTEVAL
     # unconditionally (not #ifndef-guarded), so a -D flag can't override it —
     # patch the header directly so it never uses consteval.
-    Dir.glob(File.join(installer.sandbox.root, '**', 'fmt', 'base.h')).each do |header|
+    # The glob also matches the Pods/Headers symlink that points back at the
+    # same source file, so resolve real paths and de-dupe. fmt installs its
+    # headers read-only (0444), so make the file writable before patching or
+    # File.write raises "Permission denied".
+    Dir.glob(File.join(installer.sandbox.root, '**', 'fmt', 'base.h')).map { |header| File.realpath(header) }.uniq.each do |header|
       contents = File.read(header)
       patched = contents.gsub('#  define FMT_USE_CONSTEVAL 1', '#  define FMT_USE_CONSTEVAL 0')
-      File.write(header, patched) if patched != contents
+      next if patched == contents
+      File.chmod(0644, header)
+      File.write(header, patched)
     end
   end
 end

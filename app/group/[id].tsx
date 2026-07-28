@@ -1,10 +1,11 @@
 import * as Haptics from "expo-haptics";
 import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import React from "react";
-import { Alert, Modal, Pressable, RefreshControl, Share, StyleSheet, View } from "react-native";
+import { Alert, Animated, Modal, NativeScrollEvent, NativeSyntheticEvent, Pressable, RefreshControl, Share, StyleSheet, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { Avatar } from "@/components/Avatar";
 import { FireIcon } from "@/components/FireIcon";
+import { HoldProgressRing } from "@/components/HoldProgressRing";
 import { Icon } from "@/components/Icon";
 import { SegmentedRing } from "@/components/QuickDoneWidgets";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -14,8 +15,8 @@ import { fontFamilies, habitAccent, habitColorOption, progressAccents, progressA
 import { useLumo } from "@/context/LumoContext";
 import { buildGroupAvatarSvg, defaultAvatar } from "@/lib/avatar";
 import { alpha } from "@/lib/color";
-import { parseDateKey, toDateKey } from "@/lib/date";
-import { friendsService, type Friendship, type Group, type GroupMember, type GroupReaction, type MemberDayStatus } from "@/lib/friends";
+import { addDays, parseDateKey, toDateKey } from "@/lib/date";
+import { friendsService, type Friendship, type Group, type GroupActivity, type GroupMember, type GroupReaction, type MemberDayStatus } from "@/lib/friends";
 import { formatLumoId } from "@/lib/lumoId";
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -23,15 +24,33 @@ const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const CROWN_GOLD = "#F0B429";
 const EMPTY_WEEK: MemberDayStatus[] = ["none", "none", "none", "none", "none", "none", "none"];
 
-type GroupTab = "habits" | "members" | "stats";
+type GroupTab = "habits" | "members" | "stats" | "logs";
+
+// "Today" / "Yesterday" / "Monday, Jul 21" heading for a day of log entries.
+function formatLogDay(iso: string): string {
+  const dayKey = toDateKey(new Date(iso));
+  const todayKey = toDateKey();
+  if (dayKey === todayKey) {
+    return "Today";
+  }
+  if (dayKey === addDays(todayKey, -1)) {
+    return "Yesterday";
+  }
+  return parseDateKey(dayKey).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+}
+
+function formatLogTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
 
 // Mirrors the Friends/Insights segmented control styling.
 function GroupTabs({ value, onChange }: { value: GroupTab; onChange: (value: GroupTab) => void }) {
   const { palette, isDark } = useLumo();
   const options: { label: string; value: GroupTab }[] = [
-    { label: "Activities", value: "habits" },
-    { label: "Members", value: "members" },
-    { label: "Stats", value: "stats" }
+    { label: "Habits", value: "habits" },
+    { label: "Stats", value: "stats" },
+    { label: "Team", value: "members" },
+    { label: "Logs", value: "logs" }
   ];
 
   return (
@@ -205,7 +224,7 @@ function HistoryGrid({
         return (
           <View key={member.profile.lumoId} style={styles.weekRow}>
             <View style={[styles.weekAvatar, { backgroundColor: alpha(palette.greenDark, "10") }]}>
-              <Avatar config={member.profile.avatar ?? defaultAvatar()} size={20} rounded={false} />
+              <Avatar config={member.profile.avatar ?? defaultAvatar()} size={30} rounded={false} />
             </View>
             {gridDays.map((day, dayIndex) => {
               const status = history[dayIndex] ?? "none";
@@ -221,21 +240,19 @@ function HistoryGrid({
   );
 }
 
-// Same TO DO / DONE badge as the home screen's quick-done rows. Checking in
-// is a tap; undoing takes a long press so it can't happen by accident.
-function ActivityStatusBadge({
-  name,
-  done,
-  doneColor,
-  onPress,
-  onLongPress
-}: {
-  name: string;
-  done: boolean;
-  doneColor: string;
-  onPress: () => void;
-  onLongPress: () => void;
-}) {
+// Undo takes a deliberate hold (matches the home quick-done rows) so it can't
+// happen by accident, and a progress ring fills over the hold.
+const ACTIVITY_UNDO_HOLD_MS = 1500;
+// Logs tab starts by showing this many days, revealing more as you scroll down.
+const LOG_DAYS_PAGE = 3;
+// Only reveal a hold-progress ring after this much holding, so a quick tap never
+// flashes it. The ring then fills over the remaining hold time.
+const HOLD_REVEAL_DELAY_MS = 500;
+
+// The TO DO check-in button, shown only while an activity is still pending.
+// Once done, the tick-circle on the row's left icon becomes the hold-to-undo
+// target instead (mirrors the home quick-done rows moving the state left).
+function ActivityStatusBadge({ name, onPress }: { name: string; onPress: () => void }) {
   const { palette, settings } = useLumo();
   const [pressed, setPressed] = React.useState(false);
   const todoColor = progressAccents[settings.colorScheme ?? "green"] ?? palette.glow;
@@ -243,17 +260,14 @@ function ActivityStatusBadge({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ selected: done }}
-      accessibilityLabel={done ? `${name} done today — long press to undo` : `Check in ${name}`}
-      onPress={done ? undefined : onPress}
-      onLongPress={done ? onLongPress : undefined}
-      delayLongPress={500}
+      accessibilityLabel={`Check in ${name}`}
+      onPress={onPress}
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
-      style={[styles.statusBadge, { backgroundColor: done ? alpha(doneColor, "26") : todoColor, opacity: pressed ? 0.8 : 1 }]}
+      style={[styles.statusBadge, { backgroundColor: todoColor, opacity: pressed ? 0.8 : 1 }]}
     >
-      <AppText variant="caption" color={done ? doneColor : progressAccentText} style={styles.statusBadgeText}>
-        {done ? "DONE" : "TO DO"}
+      <AppText variant="caption" color={progressAccentText} style={styles.statusBadgeText}>
+        TO DO
       </AppText>
     </Pressable>
   );
@@ -323,17 +337,300 @@ function NudgeButton({ name, onPress }: { name: string; onPress: () => void }) {
   );
 }
 
+const MEMBER_REMOVE_HOLD_MS = 1500;
+
+/**
+ * A member row in the Members tab. For the group owner, pressing and holding the
+ * avatar/name reveals a delete button whose ring fills over the hold; completing
+ * the hold removes the member (the hold is the confirmation). Only the
+ * membership is removed — their history stays and returns if they're re-added.
+ */
+function MemberRow({
+  member,
+  index,
+  isLast,
+  isMvp,
+  cheers,
+  isSelf,
+  canRemove,
+  outOfCheers,
+  onNudge,
+  onCheer,
+  onRemove
+}: {
+  member: GroupMember;
+  index: number;
+  isLast: boolean;
+  isMvp: boolean;
+  cheers: number;
+  isSelf: boolean;
+  canRemove: boolean;
+  outOfCheers: boolean;
+  onNudge: () => void;
+  onCheer: () => void;
+  onRemove: () => void;
+}) {
+  const { palette } = useLumo();
+  const holdProgress = React.useRef(new Animated.Value(0)).current;
+  const [holding, setHolding] = React.useState(false);
+  // Guards the press-out handler from resetting after a completed hold has
+  // already fired the removal.
+  const completedRef = React.useRef(false);
+
+  function startHold() {
+    if (!canRemove) {
+      return;
+    }
+    completedRef.current = false;
+    setHolding(true);
+    holdProgress.stopAnimation();
+    holdProgress.setValue(0);
+    Animated.timing(holdProgress, {
+      toValue: 1,
+      delay: HOLD_REVEAL_DELAY_MS,
+      duration: MEMBER_REMOVE_HOLD_MS - HOLD_REVEAL_DELAY_MS,
+      easing: (value) => value,
+      useNativeDriver: false
+    }).start(({ finished }) => {
+      if (finished) {
+        completedRef.current = true;
+        // Reset the row and hand off to the confirmation dialog (onRemove) — the
+        // hold arms the removal, the dialog confirms it.
+        setHolding(false);
+        holdProgress.setValue(0);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+        onRemove();
+      }
+    });
+  }
+
+  function endHold() {
+    if (completedRef.current) {
+      return;
+    }
+    holdProgress.stopAnimation();
+    Animated.timing(holdProgress, { toValue: 0, duration: 180, useNativeDriver: false }).start();
+    setHolding(false);
+  }
+
+  // Fade the delete overlay in as the hold starts so a quick tap leaves no mark.
+  const overlayOpacity = holdProgress.interpolate({ inputRange: [0, 0.08, 1], outputRange: [0, 1, 1] });
+
+  return (
+    <View
+      style={[
+        styles.memberRow,
+        index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.hairline },
+        index === 0 && styles.memberRowFirst,
+        isLast && styles.memberRowLast
+      ]}
+    >
+      <AppText variant="caption" color={palette.muted} style={styles.memberRank}>
+        {index + 1}
+      </AppText>
+      <Pressable
+        disabled={!canRemove}
+        onPressIn={startHold}
+        onPressOut={endHold}
+        delayLongPress={MEMBER_REMOVE_HOLD_MS + 500}
+        accessibilityRole={canRemove ? "button" : undefined}
+        accessibilityLabel={canRemove ? `Hold to remove ${member.profile.nickname || "member"} from the group` : undefined}
+        style={[styles.memberPressArea, holding && styles.memberPressAreaHolding]}
+      >
+        <View style={[styles.memberAvatar, { backgroundColor: alpha(palette.greenDark, "10") }]}>
+          <Avatar config={member.profile.avatar ?? defaultAvatar()} size={32} rounded={false} />
+        </View>
+        <View style={styles.memberText}>
+          <View style={styles.memberNameRow}>
+            <AppText variant="titleSmall" color={palette.ink} numberOfLines={1} style={styles.memberName}>
+              {member.profile.nickname || "Lumo user"}
+            </AppText>
+            {isMvp ? <Icon name="crown1" size={14} color={CROWN_GOLD} weight="bulk" /> : null}
+          </View>
+          <View style={styles.cheerCountRow}>
+            <AppText variant="caption" color={palette.subtle} numberOfLines={1}>
+              {member.contribution} {member.contribution === 1 ? "completion" : "completions"}
+            </AppText>
+            {cheers > 0 ? (
+              <>
+                <FireIcon size={10} />
+                <AppText variant="caption" color={palette.subtle}>
+                  ×{cheers}
+                </AppText>
+              </>
+            ) : null}
+          </View>
+        </View>
+      </Pressable>
+      {!isSelf ? (
+        <View style={styles.memberActions}>
+          {holding && canRemove ? (
+            // Delete indicator: no fill, just the trash icon with a ring that
+            // fills over the hold. Same slot/size as the nudge & cheer buttons.
+            <Animated.View style={[styles.cheerButton, { opacity: overlayOpacity }]} pointerEvents="none">
+              <Icon name="trash" size={16} color={palette.danger} weight="bulk" />
+              <HoldProgressRing progress={holdProgress} size={34} stroke={2.5} color={palette.danger} trackColor={alpha(palette.danger, "24")} />
+            </Animated.View>
+          ) : (
+            <>
+              {!member.checkedInToday ? <NudgeButton name={member.profile.nickname || "friend"} onPress={onNudge} /> : null}
+              <CheerButton name={member.profile.nickname || "friend"} dimmed={outOfCheers} onPress={onCheer} />
+            </>
+          )}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * One activity row in the Habits tab. Tapping checks in (or adds a rep); holding
+ * the check-in control undoes — a ring fills around the activity icon over the
+ * hold so you can see how long to keep pressing, then a confirmation dialog
+ * (onUndo) asks before anything is removed. Mirrors the home quick-done rows.
+ */
+function GroupActivityRow({
+  habit,
+  me,
+  members,
+  memberCount,
+  gridDays,
+  onCheckIn,
+  onIncrement,
+  onUndo
+}: {
+  habit: Group["habits"][number];
+  me: GroupMember | undefined;
+  members: GroupMember[];
+  memberCount: number;
+  gridDays: string[];
+  onCheckIn: () => void;
+  onIncrement: () => void;
+  onUndo: () => void;
+}) {
+  const { palette, isDark } = useLumo();
+  const holdProgress = React.useRef(new Animated.Value(0)).current;
+  const colorOption = habitColorOption(habit.color);
+  const accentColor = habitAccent(habit.color, isDark) ?? palette.greenDark;
+  const doneMembers = members.filter((member) => member.completedTodayHabitIds.includes(habit.id));
+  const doneRatio = memberCount > 0 ? doneMembers.length / memberCount : 0;
+
+  const count = me?.todayCountByHabit?.[habit.id] ?? 0;
+  const done = me ? me.completedTodayHabitIds.includes(habit.id) : false;
+  const canUndo = count > 0;
+
+  function startHold() {
+    if (!canUndo) {
+      return;
+    }
+    holdProgress.stopAnimation();
+    holdProgress.setValue(0);
+    Animated.timing(holdProgress, {
+      toValue: 1,
+      delay: HOLD_REVEAL_DELAY_MS,
+      duration: ACTIVITY_UNDO_HOLD_MS - HOLD_REVEAL_DELAY_MS,
+      easing: (value) => value,
+      useNativeDriver: false
+    }).start();
+  }
+
+  function endHold() {
+    holdProgress.stopAnimation();
+    Animated.timing(holdProgress, { toValue: 0, duration: 180, useNativeDriver: false }).start();
+  }
+
+  function handleUndo() {
+    endHold();
+    onUndo();
+  }
+
+  return (
+    <View style={[styles.habitCard, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
+      {/* 3 columns, mirroring the home to-do rows: icon · name/details · status. */}
+      <View style={styles.habitHeaderRow}>
+        {done ? (
+          // Done: the tick-circle icon is the hold-to-undo target (ring fills over the hold).
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: true }}
+            accessibilityLabel={`${habit.name} done today — hold to undo`}
+            onLongPress={handleUndo}
+            onPressIn={startHold}
+            onPressOut={endHold}
+            delayLongPress={ACTIVITY_UNDO_HOLD_MS}
+            style={styles.habitIconWrap}
+          >
+            <View style={[styles.habitIcon, { backgroundColor: colorOption ? colorOption.color : isDark ? palette.greenSoft : palette.greenDark }]}>
+              <Icon name="checkCircle" size={22} color={colorOption ? colorOption.onColor : isDark ? palette.greenDark : palette.white} weight="bulk" />
+            </View>
+            {canUndo ? (
+              <HoldProgressRing progress={holdProgress} size={50} stroke={3} color={accentColor} trackColor={alpha(accentColor, "24")} />
+            ) : null}
+          </Pressable>
+        ) : (
+          <View style={styles.habitIconWrap}>
+            <View style={[styles.habitIcon, { backgroundColor: colorOption ? colorOption.color : isDark ? palette.greenSoft : palette.greenDark }]}>
+              <Icon name={habit.icon} size={20} color={colorOption ? colorOption.onColor : isDark ? palette.greenDark : palette.white} weight="bulk" />
+            </View>
+            {canUndo ? (
+              <HoldProgressRing progress={holdProgress} size={50} stroke={3} color={accentColor} trackColor={alpha(accentColor, "24")} />
+            ) : null}
+          </View>
+        )}
+        <View style={styles.habitText}>
+          <AppText variant="titleSmall" color={palette.ink} numberOfLines={1} style={styles.habitName}>
+            {habit.name}
+          </AppText>
+          <AppText variant="caption" color={palette.subtle} numberOfLines={1}>
+            {habit.goal.type === "weekly" || habit.goal.type === "monthly"
+              ? goalLabel(habit.goal)
+              : `${frequencyLabel(habit.repeatSchedule)} · ${goalLabel(habit.goal)}`}
+          </AppText>
+        </View>
+        {me && !done ? (
+          habit.goal.type === "multiple" ? (
+            // In-progress multi-count: segmented ring, tap adds a rep, hold undoes one.
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Check in ${habit.name}, ${count} of ${habit.goal.count} today — hold to undo one`}
+              onPress={onIncrement}
+              onLongPress={handleUndo}
+              onPressIn={startHold}
+              onPressOut={endHold}
+              delayLongPress={ACTIVITY_UNDO_HOLD_MS}
+              style={styles.ringWrap}
+            >
+              <SegmentedRing total={habit.goal.count} filled={Math.min(count, habit.goal.count)} fillColor={accentColor} />
+            </Pressable>
+          ) : (
+            <ActivityStatusBadge name={habit.name} onPress={onCheckIn} />
+          )
+        ) : null}
+      </View>
+
+      <View style={[styles.habitTrack, { backgroundColor: isDark ? alpha(palette.subtle, "26") : palette.chartTrack }]}>
+        <View style={[styles.habitFill, { width: `${doneRatio * 100}%`, backgroundColor: accentColor }]} />
+      </View>
+
+      <HistoryGrid habit={habit} members={members} gridDays={gridDays} />
+    </View>
+  );
+}
+
 export default function GroupDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { palette, isDark, lumoIdSuffix } = useLumo();
   const [group, setGroup] = React.useState<Group | null>(null);
   const [reactions, setReactions] = React.useState<GroupReaction[]>([]);
+  const [activity, setActivity] = React.useState<GroupActivity[]>([]);
   const [loaded, setLoaded] = React.useState(false);
   const [leavePressed, setLeavePressed] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<GroupTab>("habits");
   const [refreshing, setRefreshing] = React.useState(false);
   const [cheersBannerVisible, setCheersBannerVisible] = React.useState(true);
+  const [streakBannerVisible, setStreakBannerVisible] = React.useState(true);
+  const [visibleLogDays, setVisibleLogDays] = React.useState(LOG_DAYS_PAGE);
   // Invite modal: accepted friends, with per-row sent state.
   const [inviteVisible, setInviteVisible] = React.useState(false);
   const [friends, setFriends] = React.useState<Friendship[]>([]);
@@ -344,6 +641,45 @@ export default function GroupDetailScreen() {
     [group?.avatarSeed, group?.id]
   );
 
+  // Log entries (newest first) bucketed into consecutive day groups for the Logs tab.
+  const activityByDay = React.useMemo(() => {
+    const days: { key: string; label: string; items: GroupActivity[] }[] = [];
+    for (const entry of activity) {
+      const key = toDateKey(new Date(entry.at));
+      const current = days[days.length - 1];
+      if (!current || current.key !== key) {
+        days.push({ key, label: formatLogDay(entry.at), items: [entry] });
+      } else {
+        current.items.push(entry);
+      }
+    }
+    return days;
+  }, [activity]);
+
+  // Re-collapse the logs to the first page whenever we leave the Logs tab, so
+  // returning to it starts fresh at LOG_DAYS_PAGE days again.
+  React.useEffect(() => {
+    if (activeTab !== "logs") {
+      setVisibleLogDays(LOG_DAYS_PAGE);
+    }
+  }, [activeTab]);
+
+  // Infinite scroll for the Logs tab: reveal more days as the page nears the
+  // bottom. All activity is already loaded, so this is purely client-side.
+  const handleScroll = React.useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (activeTab !== "logs") {
+        return;
+      }
+      const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+      const distanceToBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+      if (distanceToBottom < 320) {
+        setVisibleLogDays((current) => (current < activityByDay.length ? current + LOG_DAYS_PAGE : current));
+      }
+    },
+    [activeTab, activityByDay.length]
+  );
+
   const loadAll = React.useCallback(async () => {
     if (typeof id !== "string") {
       return;
@@ -352,14 +688,16 @@ export default function GroupDetailScreen() {
     // Record this visit first so the roll-call streak reflects today's check-in
     // in the data we're about to load.
     await friendsService.recordGroupCheckin(id);
-    const [loadedGroup, todayReactions, loadedFriends] = await Promise.all([
+    const [loadedGroup, todayReactions, loadedFriends, loadedActivity] = await Promise.all([
       friendsService.getGroup(id),
       friendsService.listTodayReactions(id),
-      friendsService.listFriends()
+      friendsService.listFriends(),
+      friendsService.listGroupActivity(id)
     ]);
     setGroup(loadedGroup);
     setReactions(todayReactions);
     setFriends(loadedFriends.filter((friendship) => friendship.status === "accepted"));
+    setActivity(loadedActivity);
     setLoaded(true);
   }, [id]);
 
@@ -569,6 +907,34 @@ export default function GroupDetailScreen() {
     );
   }
 
+  function handleRemoveMember(member: GroupMember) {
+    if (!group || !member.profile.id) {
+      return;
+    }
+
+    const memberId = member.profile.id;
+    const name = member.profile.nickname || "this member";
+    Alert.alert(
+      "Remove member?",
+      `Remove ${name} from the group? Their progress stays saved and comes back if you add them again.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            const ok = await friendsService.removeMember(group.id, memberId);
+            if (ok) {
+              loadAll();
+            } else {
+              Alert.alert("Couldn't remove", "Please check your connection and try again.");
+            }
+          }
+        }
+      ]
+    );
+  }
+
   // Members check activities off right here — group activities live only in
   // the group, so there's no personal habit copy to complete instead.
   async function toggleCheckIn(habit: Group["habits"][number]) {
@@ -620,6 +986,29 @@ export default function GroupDetailScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       loadAll();
     }
+  }
+
+  // Completing the hold arms the undo; this dialog confirms it before anything
+  // is removed.
+  function confirmUndoCheckIn(habit: Group["habits"][number]) {
+    if (!me) {
+      return;
+    }
+
+    const current = me.todayCountByHabit?.[habit.id] ?? 0;
+    if (current <= 0) {
+      return;
+    }
+
+    const multiple = habit.goal.type === "multiple";
+    Alert.alert(
+      "Undo check-in?",
+      multiple && current > 1 ? `Remove one check-in from ${habit.name}?` : `Undo ${habit.name} for today?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Undo", style: "destructive", onPress: () => undoCheckIn(habit) }
+      ]
+    );
   }
 
   function shareRecap() {
@@ -678,8 +1067,8 @@ export default function GroupDetailScreen() {
       {
         text: "Leave",
         style: "destructive",
-        onPress: () => {
-          friendsService.leaveGroup(group!.id);
+        onPress: async () => {
+          await friendsService.leaveGroup(group!.id);
           router.back();
         }
       }
@@ -700,6 +1089,8 @@ export default function GroupDetailScreen() {
           }}
         />
       }
+      onScroll={handleScroll}
+      scrollEventThrottle={16}
     >
       <ScreenHeader
         leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }}
@@ -735,6 +1126,25 @@ export default function GroupDetailScreen() {
         {group.ownedByMe && hasInvitableFriends ? <InviteHeaderButton onPress={handleInvite} /> : null}
       </View>
 
+      {/* Group streak: pinned top-most, shown once the streak reaches 3 days,
+          and dismissible for the rest of the visit. */}
+      {group.streak >= 3 && streakBannerVisible ? (
+        <View style={[styles.streakBanner, { backgroundColor: palette.glowSoft }]}>
+          <FireIcon size={20} />
+          <AppText variant="bodySmall" color={palette.ink} style={styles.streakText}>
+            {group.streak}-day group streak — don't be the one who drops it!
+          </AppText>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss group streak message"
+            hitSlop={8}
+            onPress={() => setStreakBannerVisible(false)}
+          >
+            <Icon name="close" size={16} color={palette.muted} weight="bulk" />
+          </Pressable>
+        </View>
+      ) : null}
+
       {/* Cheers received today — dismissible for the rest of the visit. */}
       {myCheers > 0 && cheersBannerVisible ? (
         <Card style={styles.cheersCard}>
@@ -766,7 +1176,7 @@ export default function GroupDetailScreen() {
 
         {/* Roll-call streak: everyone just has to show up (open the group) each
             day — separate from completing activities. */}
-        {group.rollCallStreak > 0 ? (
+        {group.rollCallStreak >= 3 ? (
           <View style={[styles.rollCallStreakRow, { backgroundColor: palette.glowSoft }]}>
             <FireIcon size={16} />
             <AppText variant="caption" color={palette.ink} style={styles.rollCallStreakText}>
@@ -825,150 +1235,43 @@ export default function GroupDetailScreen() {
         </View>
       </Card>
 
-      {group.streak > 0 ? (
-        <View style={[styles.streakBanner, { backgroundColor: palette.glowSoft }]}>
-          <FireIcon size={20} />
-          <AppText variant="bodySmall" color={palette.ink} style={styles.streakText}>
-            {group.streak}-day group streak — don't be the one who drops it!
-          </AppText>
-        </View>
-      ) : null}
-
-
       <GroupTabs value={activeTab} onChange={setActiveTab} />
 
       {activeTab === "habits" ? (
         <View style={styles.habitList}>
-          {group.habits.map((habit) => {
-            const doneMembers = group.members.filter((member) => member.completedTodayHabitIds.includes(habit.id));
-            const doneRatio = memberCount > 0 ? doneMembers.length / memberCount : 0;
-            const colorOption = habitColorOption(habit.color);
-            const accentColor = habitAccent(habit.color, isDark) ?? palette.greenDark;
-
-            return (
-              <View
-                key={habit.id}
-                style={[
-                  styles.habitCard,
-                  { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }
-                ]}
-              >
-                {/* 3 columns, mirroring the home to-do rows: icon · name/details · status. */}
-                <View style={styles.habitHeaderRow}>
-                  <View
-                    style={[
-                      styles.habitIcon,
-                      { backgroundColor: colorOption ? colorOption.color : isDark ? palette.greenSoft : palette.greenDark }
-                    ]}
-                  >
-                    <Icon
-                      name={habit.icon}
-                      size={20}
-                      color={colorOption ? colorOption.onColor : isDark ? palette.greenDark : palette.white}
-                      weight="bulk"
-                    />
-                  </View>
-                  <View style={styles.habitText}>
-                    <AppText variant="titleSmall" color={palette.ink} numberOfLines={1} style={styles.habitName}>
-                      {habit.name}
-                    </AppText>
-                    <AppText variant="caption" color={palette.subtle} numberOfLines={1}>
-                      {habit.goal.type === "weekly" || habit.goal.type === "monthly"
-                        ? goalLabel(habit.goal)
-                        : `${frequencyLabel(habit.repeatSchedule)} · ${goalLabel(habit.goal)}`}
-                    </AppText>
-                  </View>
-                  {me ? (
-                    habit.goal.type === "multiple" && !me.completedTodayHabitIds.includes(habit.id) ? (
-                      // In-progress multi-count: segmented ring, tap adds a rep.
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Check in ${habit.name}, ${me.todayCountByHabit?.[habit.id] ?? 0} of ${habit.goal.count} today — long press to undo one`}
-                        onPress={() => incrementCheckIn(habit)}
-                        onLongPress={() => undoCheckIn(habit)}
-                        delayLongPress={500}
-                        style={styles.ringWrap}
-                      >
-                        <SegmentedRing
-                          total={habit.goal.count}
-                          filled={Math.min(me.todayCountByHabit?.[habit.id] ?? 0, habit.goal.count)}
-                          fillColor={accentColor}
-                        />
-                      </Pressable>
-                    ) : (
-                      <ActivityStatusBadge
-                        name={habit.name}
-                        done={me.completedTodayHabitIds.includes(habit.id)}
-                        doneColor={accentColor}
-                        onPress={() => toggleCheckIn(habit)}
-                        onLongPress={() => undoCheckIn(habit)}
-                      />
-                    )
-                  ) : null}
-                </View>
-
-                <View style={[styles.habitTrack, { backgroundColor: isDark ? alpha(palette.subtle, "26") : palette.chartTrack }]}>
-                  <View style={[styles.habitFill, { width: `${doneRatio * 100}%`, backgroundColor: accentColor }]} />
-                </View>
-
-                <HistoryGrid habit={habit} members={group.members} gridDays={group.gridDays} />
-
-              </View>
-            );
-          })}
+          {group.habits.map((habit) => (
+            <GroupActivityRow
+              key={habit.id}
+              habit={habit}
+              me={me}
+              members={group.members}
+              memberCount={memberCount}
+              gridDays={group.gridDays}
+              onCheckIn={() => toggleCheckIn(habit)}
+              onIncrement={() => incrementCheckIn(habit)}
+              onUndo={() => confirmUndoCheckIn(habit)}
+            />
+          ))}
         </View>
       ) : null}
 
       {activeTab === "members" ? (
       <Card style={styles.sectionCard}>
         {sortedMembers.map((member, index) => (
-          <View
+          <MemberRow
             key={member.profile.lumoId}
-            style={[
-              styles.memberRow,
-              index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.hairline },
-              index === 0 && styles.memberRowFirst,
-              index === sortedMembers.length - 1 && styles.memberRowLast
-            ]}
-          >
-            <AppText variant="caption" color={palette.muted} style={styles.memberRank}>
-              {index + 1}
-            </AppText>
-            <View style={[styles.memberAvatar, { backgroundColor: alpha(palette.greenDark, "10") }]}>
-              <Avatar config={member.profile.avatar ?? defaultAvatar()} size={32} rounded={false} />
-            </View>
-            <View style={styles.memberText}>
-              <View style={styles.memberNameRow}>
-                <AppText variant="titleSmall" color={palette.ink} numberOfLines={1} style={styles.memberName}>
-                  {member.profile.nickname || "Lumo user"}
-                </AppText>
-                {mvp?.profile.lumoId === member.profile.lumoId ? (
-                  <Icon name="crown1" size={14} color={CROWN_GOLD} weight="bulk" />
-                ) : null}
-              </View>
-              <View style={styles.cheerCountRow}>
-                <AppText variant="caption" color={palette.subtle} numberOfLines={1}>
-                  {member.contribution} {member.contribution === 1 ? "completion" : "completions"}
-                </AppText>
-                {cheersFor(member) > 0 ? (
-                  <>
-                    <FireIcon size={10} />
-                    <AppText variant="caption" color={palette.subtle}>
-                      ×{cheersFor(member)}
-                    </AppText>
-                  </>
-                ) : null}
-              </View>
-            </View>
-            {member.profile.lumoId !== myLumoId ? (
-              <View style={styles.memberActions}>
-                {!member.checkedInToday ? (
-                  <NudgeButton name={member.profile.nickname || "friend"} onPress={() => sendNudge(member)} />
-                ) : null}
-                <CheerButton name={member.profile.nickname || "friend"} dimmed={outOfCheers} onPress={() => sendCheer(member)} />
-              </View>
-            ) : null}
-          </View>
+            member={member}
+            index={index}
+            isLast={index === sortedMembers.length - 1}
+            isMvp={mvp?.profile.lumoId === member.profile.lumoId}
+            cheers={cheersFor(member)}
+            isSelf={member.profile.lumoId === myLumoId}
+            canRemove={group.ownedByMe && member.profile.lumoId !== myLumoId}
+            outOfCheers={outOfCheers}
+            onNudge={() => sendNudge(member)}
+            onCheer={() => sendCheer(member)}
+            onRemove={() => handleRemoveMember(member)}
+          />
         ))}
       </Card>
       ) : null}
@@ -981,40 +1284,6 @@ export default function GroupDetailScreen() {
             <StatTile label="Weekly rate" value={`${weeklyRate}%`} icon="chart" />
             <StatTile label="Perfect days this week" value={`${perfectDays}`} icon="sun" />
           </View>
-
-          {group.lastWeek ? (
-            <Card style={styles.sectionCard}>
-              <View style={styles.recapHeader}>
-                <AppText variant="titleSmall" color={palette.ink} style={styles.statsCardTitle}>
-                  Last week's recap
-                </AppText>
-                <Pressable accessibilityRole="button" accessibilityLabel="Share last week's recap" hitSlop={8} onPress={shareRecap}>
-                  <Icon name="upload" size={18} color={palette.greenDark} weight="bulk" />
-                </Pressable>
-              </View>
-              {group.lastWeek.mvpName ? (
-                <View style={styles.recapRow}>
-                  <Icon name="crown1" size={16} color={CROWN_GOLD} weight="bulk" />
-                  <AppText variant="bodySmall" color={palette.ink} style={styles.recapLine}>
-                    MVP: <AppText variant="bodySmall" color={palette.ink} style={styles.recapStrong}>{group.lastWeek.mvpName}</AppText> with{" "}
-                    {group.lastWeek.mvpCount} {group.lastWeek.mvpCount === 1 ? "completion" : "completions"}
-                  </AppText>
-                </View>
-              ) : null}
-              <View style={styles.recapRow}>
-                <Icon name="checkCircle" size={16} color={palette.greenDark} weight="bulk" />
-                <AppText variant="bodySmall" color={palette.body} style={styles.recapLine}>
-                  {group.lastWeek.total} {group.lastWeek.total === 1 ? "completion" : "completions"} together
-                </AppText>
-              </View>
-              <View style={styles.recapRow}>
-                <Icon name="star" size={16} color={CROWN_GOLD} weight="bulk" />
-                <AppText variant="bodySmall" color={palette.body} style={styles.recapLine}>
-                  {group.lastWeek.perfectDays} perfect {group.lastWeek.perfectDays === 1 ? "day" : "days"} — everyone, every habit
-                </AppText>
-              </View>
-            </Card>
-          ) : null}
 
           <Card style={styles.sectionCard}>
             <View style={styles.barsRow}>
@@ -1094,7 +1363,86 @@ export default function GroupDetailScreen() {
               </AppText>
             </View>
           </Card>
+
+          {group.lastWeek ? (
+            <Card style={styles.sectionCard}>
+              <View style={styles.recapHeader}>
+                <AppText variant="titleSmall" color={palette.ink} style={styles.statsCardTitle}>
+                  Last week's recap
+                </AppText>
+                <Pressable accessibilityRole="button" accessibilityLabel="Share last week's recap" hitSlop={8} onPress={shareRecap}>
+                  <Icon name="upload" size={18} color={palette.greenDark} weight="bulk" />
+                </Pressable>
+              </View>
+              {group.lastWeek.mvpName ? (
+                <View style={styles.recapRow}>
+                  <Icon name="crown1" size={16} color={CROWN_GOLD} weight="bulk" />
+                  <AppText variant="bodySmall" color={palette.ink} style={styles.recapLine}>
+                    MVP: <AppText variant="bodySmall" color={palette.ink} style={styles.recapStrong}>{group.lastWeek.mvpName}</AppText> with{" "}
+                    {group.lastWeek.mvpCount} {group.lastWeek.mvpCount === 1 ? "completion" : "completions"}
+                  </AppText>
+                </View>
+              ) : null}
+              <View style={styles.recapRow}>
+                <Icon name="checkCircle" size={16} color={palette.greenDark} weight="bulk" />
+                <AppText variant="bodySmall" color={palette.body} style={styles.recapLine}>
+                  {group.lastWeek.total} {group.lastWeek.total === 1 ? "completion" : "completions"} together
+                </AppText>
+              </View>
+              <View style={styles.recapRow}>
+                <Icon name="star" size={16} color={CROWN_GOLD} weight="bulk" />
+                <AppText variant="bodySmall" color={palette.body} style={styles.recapLine}>
+                  {group.lastWeek.perfectDays} perfect {group.lastWeek.perfectDays === 1 ? "day" : "days"} — everyone, every habit
+                </AppText>
+              </View>
+            </Card>
+          ) : null}
         </>
+      ) : null}
+
+      {activeTab === "logs" ? (
+        activityByDay.length ? (
+          <View style={styles.logList}>
+            {activityByDay.slice(0, visibleLogDays).map((day) => (
+              <View key={day.key} style={styles.logDay}>
+                <AppText variant="caption" color={palette.muted} style={styles.logDayLabel}>
+                  {day.label}
+                </AppText>
+                <Card style={[styles.sectionCard, styles.logCard]}>
+                  {day.items.map((entry, index) => (
+                    <View
+                      key={`${entry.profile.lumoId}-${entry.at}-${index}`}
+                      style={[styles.logRow, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.hairline }]}
+                    >
+                      <View style={[styles.logAvatar, { backgroundColor: alpha(palette.greenDark, "10") }]}>
+                        <Avatar config={entry.profile.avatar ?? defaultAvatar()} size={32} rounded={false} />
+                      </View>
+                      <AppText variant="bodySmall" color={palette.body} numberOfLines={1} style={styles.logText}>
+                        <AppText variant="bodySmall" color={palette.ink} style={styles.logName}>
+                          {entry.profile.nickname || "Someone"}
+                        </AppText>{" "}
+                        completed{" "}
+                        <AppText variant="bodySmall" color={palette.ink} style={styles.logName}>
+                          {entry.habitName}
+                        </AppText>
+                      </AppText>
+                      <AppText variant="caption" color={palette.muted} style={styles.logTime}>
+                        {formatLogTime(entry.at)}
+                      </AppText>
+                    </View>
+                  ))}
+                </Card>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.logEmpty}>
+            <Icon name="activity" size={24} color={palette.muted} weight="bulk" />
+            <AppText variant="bodySmall" color={palette.subtle} style={styles.logEmptyText}>
+              No activity yet. Check-ins will show up here as members complete activities.
+            </AppText>
+          </View>
+        )
       ) : null}
 
       {!group.ownedByMe && activeTab === "members" ? (
@@ -1329,6 +1677,55 @@ const styles = StyleSheet.create({
   recapStrong: {
     fontFamily: fontFamilies.lexendSemiBold
   },
+  logList: {
+    gap: spacing.md
+  },
+  logDay: {
+    gap: spacing.sm
+  },
+  logCard: {
+    paddingVertical: spacing.sm
+  },
+  logDayLabel: {
+    fontFamily: fontFamilies.lexendSemiBold,
+    marginLeft: spacing.xs
+  },
+  logRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  logAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden"
+  },
+  logText: {
+    flex: 1,
+    minWidth: 0,
+    lineHeight: 19
+  },
+  logName: {
+    fontFamily: fontFamilies.lexendSemiBold
+  },
+  logTime: {
+    flexShrink: 0,
+    fontFamily: fontFamilies.lexend
+  },
+  logEmpty: {
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.xxl
+  },
+  logEmptyText: {
+    textAlign: "center",
+    maxWidth: 260,
+    lineHeight: 20
+  },
   streakBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -1396,6 +1793,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginBottom: spacing.xxs
   },
+  habitIconWrap: {
+    width: 42,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center"
+  },
   habitIcon: {
     width: 42,
     height: 42,
@@ -1446,10 +1849,10 @@ const styles = StyleSheet.create({
   weekHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5
+    gap: 4
   },
   weekAvatarSpacer: {
-    width: 24,
+    width: 30,
     marginRight: spacing.xs
   },
   weekDayLabel: {
@@ -1461,12 +1864,12 @@ const styles = StyleSheet.create({
   weekRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
     marginTop: 5
   },
   weekAvatar: {
-    width: 24,
-    height: 24,
+    width: 30,
+    height: 30,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
@@ -1497,6 +1900,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6
+  },
+  memberPressArea: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm
+  },
+  memberPressAreaHolding: {
+    opacity: 0.4
   },
   memberRowFirst: {
     paddingTop: 0

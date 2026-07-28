@@ -6,15 +6,10 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "icon": "./assets/lumo-logo.png",
-    "splash": {
-      "image": "./assets/lumo-logo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF"
-    },
+    "icon": "./assets/logo/png/lumo-app-icon-opaque-1024.png",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.lumo.habits",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -50,6 +45,16 @@
         {
           "microphonePermission": "Lumo needs the microphone to dictate your journal.",
           "speechRecognitionPermission": "Lumo uses speech recognition to turn your voice into text."
+        }
+      ],
+      "expo-video",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#17140F",
+          "dark": {
+            "backgroundColor": "#17140F"
+          }
         }
       ]
     ],

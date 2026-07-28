@@ -44,7 +44,9 @@ export function Screen({
   scroll = true,
   contentStyle,
   edges = ["top", "left", "right"],
-  refreshControl
+  refreshControl,
+  onScroll,
+  scrollEventThrottle
 }: {
   children: ReactNode;
   scroll?: boolean;
@@ -52,6 +54,9 @@ export function Screen({
   edges?: Edge[];
   // Pull-to-refresh for scrolling screens (ignored when scroll is false).
   refreshControl?: React.ComponentProps<typeof ScrollView>["refreshControl"];
+  // Optional scroll passthrough (e.g. for infinite-scroll pagination).
+  onScroll?: React.ComponentProps<typeof ScrollView>["onScroll"];
+  scrollEventThrottle?: number;
 }) {
   const { palette, isDark } = useLumo();
 
@@ -65,6 +70,8 @@ export function Screen({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.screenContent, contentStyle]}
           refreshControl={refreshControl}
+          onScroll={onScroll}
+          scrollEventThrottle={scrollEventThrottle}
         >
           {children}
         </ScrollView>

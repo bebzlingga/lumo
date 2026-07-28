@@ -433,6 +433,23 @@ function notifyCompletionsChanged() {
   completionListeners.forEach((listener) => listener());
 }
 
+// Fired after any change to which groups the user belongs to (leave, delete,
+// create, accept an invite) so live UI like the home "Your groups" row can
+// refresh in real time instead of only on screen focus.
+const membershipListeners = new Set<() => void>();
+
+export function onGroupMembershipChanged(listener: () => void): () => void {
+  membershipListeners.add(listener);
+
+  return () => {
+    membershipListeners.delete(listener);
+  };
+}
+
+function notifyMembershipChanged() {
+  membershipListeners.forEach((listener) => listener());
+}
+
 export const friendsService = {
   status(): FriendsServiceStatus {
     return isSupabaseConfigured ? "ready" : "offline";
@@ -518,6 +535,16 @@ export const friendsService = {
     if (!targetId || targetId === userId) {
       return false;
     }
+
+    // Clear a prior request in this direction (e.g. one that was declined or
+    // cancelled) so the (requester, addressee) primary key doesn't block a new
+    // one. An accepted friendship is left untouched — they're already friends.
+    await supabase
+      .from("friendships")
+      .delete()
+      .eq("requester", userId)
+      .eq("addressee", targetId)
+      .eq("status", "pending");
 
     const { error } = await supabase.from("friendships").insert({ requester: userId, addressee: targetId });
 
@@ -671,7 +698,7 @@ export const friendsService = {
       .select("completed_at, profiles(id, lumo_id, nickname, avatar), group_habits(name)")
       .eq("group_id", groupId)
       .order("completed_at", { ascending: false })
-      .limit(12);
+      .limit(100);
 
     type ActivityRow = { completed_at: string; profiles: ProfileRow; group_habits: { name: string } };
 
@@ -833,7 +860,34 @@ export const friendsService = {
 
     const { error } = await supabase.from("group_members").delete().eq("group_id", groupId).eq("member", userId);
 
+    if (!error) {
+      notifyMembershipChanged();
+    }
+
     return !error;
+  },
+
+  /**
+   * Owner removes a member from the group. Only the group_members row is deleted —
+   * the member's completion and check-in history stays in the database (those
+   * tables key off profile + group, not membership), so re-adding them later
+   * brings all their progress back into view.
+   */
+  async removeMember(groupId: string, memberId: string): Promise<boolean> {
+    const userId = await ensureSignedIn();
+    if (!userId || !memberId || memberId === userId) {
+      return false;
+    }
+
+    // RLS silently skips rows the caller can't delete — verify one was removed.
+    const { data, error } = await supabase
+      .from("group_members")
+      .delete()
+      .eq("group_id", groupId)
+      .eq("member", memberId)
+      .select("group_id");
+
+    return !error && ((data ?? []) as unknown[]).length > 0;
   },
 
   async createGroup(draft: GroupDraft): Promise<Group> {
@@ -858,6 +912,7 @@ export const friendsService = {
         members: []
       };
       offlineGroups.unshift(group);
+      notifyMembershipChanged();
 
       return group;
     }
@@ -898,6 +953,8 @@ export const friendsService = {
       .from("group_members")
       .insert(memberIds.map((member) => ({ group_id: groupId, member, status: member === userId ? "accepted" : "pending" })));
 
+    notifyMembershipChanged();
+
     return {
       id: groupId,
       name: draft.name,
@@ -928,13 +985,23 @@ export const friendsService = {
       return "error";
     }
 
+    // Clear a prior pending invite (e.g. one that was declined or cancelled) so
+    // the (group_id, member) primary key doesn't block re-inviting. An accepted
+    // membership stays put — they're already in the group.
+    await supabase
+      .from("group_members")
+      .delete()
+      .eq("group_id", groupId)
+      .eq("member", memberId)
+      .eq("status", "pending");
+
     const { error } = await supabase.from("group_members").insert({ group_id: groupId, member: memberId, status: "pending" });
 
     if (!error) {
       return "ok";
     }
 
-    // Primary-key conflict: they're already a member or already invited.
+    // Primary-key conflict: they're already an accepted member.
     return error.code === "23505" ? "already" : "error";
   },
 
@@ -997,7 +1064,12 @@ export const friendsService = {
     // RLS silently skips rows the caller doesn't own — verify one was removed.
     const { data, error } = await supabase.from("groups").delete().eq("id", groupId).select("id");
 
-    return !error && ((data ?? []) as { id: string }[]).length > 0;
+    const removed = !error && ((data ?? []) as { id: string }[]).length > 0;
+    if (removed) {
+      notifyMembershipChanged();
+    }
+
+    return removed;
   },
 
   /** Pending group invitations for this user, for the profile screen. */
@@ -1042,6 +1114,11 @@ export const friendsService = {
       ? await supabase.from("group_members").update({ status: "accepted" }).eq("group_id", groupId).eq("member", userId).select("group_id")
       : await supabase.from("group_members").delete().eq("group_id", groupId).eq("member", userId).select("group_id");
 
-    return !error && ((data ?? []) as unknown[]).length > 0;
+    const changed = !error && ((data ?? []) as unknown[]).length > 0;
+    if (changed) {
+      notifyMembershipChanged();
+    }
+
+    return changed;
   }
 };

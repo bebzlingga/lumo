@@ -7,11 +7,14 @@ import { fontFamilies, layout, radius, spacing } from '@/constants/theme'
 import { useLumo } from '@/context/LumoContext'
 import { alpha } from '@/lib/color'
 import { addDays, formatHeaderDateParts, parseDateKey, toDateKey } from '@/lib/date'
-import { friendsService } from '@/lib/friends'
-import { bestStreakAcrossHabits, isDoneOnDate, isScheduledOnDate } from '@/lib/habitMath'
+import { friendsService, onGroupMembershipChanged, type Group } from '@/lib/friends'
+import { bestCurrentStreakAcrossHabits, isDoneOnDate, isScheduledOnDate } from '@/lib/habitMath'
+import { buildGroupAvatarSvg } from '@/lib/avatar'
+import { formatLumoId } from '@/lib/lumoId'
 import { Habit } from '@/types/habit'
 import { Avatar } from '@/components/Avatar'
 import { DailyProgressCard } from '@/components/DailyProgressCard'
+import { FireIcon } from '@/components/FireIcon'
 import { Icon, IconName } from '@/components/Icon'
 import { QuickDoneWidgets } from '@/components/QuickDoneWidgets'
 import { AppText, LoadingState, Screen } from '@/components/ui'
@@ -229,34 +232,89 @@ function ResourceCard({
 	)
 }
 
+// Full-width group card for the home screen's horizontal group row — matches
+// the date card's width and rounding. Two columns (avatar · details), centered,
+// with the important bit up front: how many activities you still owe today.
+function HomeGroupCard({ group, width, myLumoId, onPress }: { group: Group; width: number; myLumoId: string; onPress: () => void }) {
+	const { palette, isDark } = useLumo()
+	const [pressed, setPressed] = useState(false)
+	const avatarSvg = useMemo(() => buildGroupAvatarSvg(group.avatarSeed ?? group.id), [group.avatarSeed, group.id])
+	const me = group.members.find((member) => member.profile.lumoId === myLumoId)
+	const remaining = me ? group.habits.filter((habit) => !me.completedTodayHabitIds.includes(habit.id)).length : group.habits.length
+	const allDone = remaining === 0
+
+	return (
+		<Pressable
+			accessibilityRole='button'
+			accessibilityLabel={`Open group ${group.name}, ${allDone ? 'all activities done today' : `${remaining} activities to complete today`}`}
+			onPress={onPress}
+			onPressIn={() => setPressed(true)}
+			onPressOut={() => setPressed(false)}
+			style={[styles.homeGroupCard, { width, backgroundColor: palette.card, shadowColor: isDark ? 'transparent' : palette.shadow, opacity: pressed ? 0.85 : 1 }]}
+		>
+			<View style={[styles.homeGroupAvatar, { backgroundColor: alpha(palette.greenDark, '10') }]}>
+				<Avatar svg={avatarSvg} size={52} rounded={false} />
+			</View>
+			<View style={styles.homeGroupInfo}>
+				<View style={styles.homeGroupNameRow}>
+					<AppText variant='titleSmall' color={palette.ink} numberOfLines={1} style={styles.homeGroupName}>
+						{group.name}
+					</AppText>
+					{group.streak >= 3 ? (
+						<View style={[styles.homeGroupStreak, { backgroundColor: palette.glowSoft }]}>
+							<FireIcon size={11} />
+							<AppText variant='caption' color={palette.ink} style={styles.homeGroupStreakText}>
+								{group.streak}d
+							</AppText>
+						</View>
+					) : null}
+				</View>
+				<AppText variant='caption' color={alpha(palette.subtle, 'AA')} numberOfLines={1}>
+					{group.members.length} {group.members.length === 1 ? 'member' : 'members'} · {group.habits.length}{' '}
+					{group.habits.length === 1 ? 'activity' : 'activities'}
+				</AppText>
+			</View>
+			<View style={[styles.homeGroupTodo, { backgroundColor: alpha(palette.greenDark, '12') }]}>
+				<Icon name={allDone ? 'checkCircle' : 'chart2'} size={13} color={palette.greenDark} weight='bulk' />
+				{allDone ? (
+					<AppText variant='caption' color={palette.greenDark} numberOfLines={1} style={styles.homeGroupTodoDone}>
+						All done
+					</AppText>
+				) : (
+					<AppText variant='caption' color={palette.greenDark} numberOfLines={1} style={styles.homeGroupTodoNumber}>
+						{remaining}
+					</AppText>
+				)}
+			</View>
+		</Pressable>
+	)
+}
+
 export default function TodayScreen() {
 	const router = useRouter()
 	const { width } = useWindowDimensions()
-	const { habits, isReady, nickname, palette, avatar } = useLumo()
+	const { habits, isReady, nickname, palette, avatar, lumoIdSuffix, isPro } = useLumo()
+	const myLumoId = formatLumoId(lumoIdSuffix)
 	const todayKey = toDateKey()
 	const [selectedDateKey, setSelectedDateKey] = useState(todayKey)
 	const activeHabits = habits.filter((habit) => habit.status === 'active')
-	const bestStreak = bestStreakAcrossHabits(habits)
 	const selectedHabits = activeHabits.filter((habit) => isScheduledOnDate(habit, selectedDateKey))
 	const resourceCardWidth = (width - SCREEN_PADDING * 2) * 0.7
 
-	// Habits that belong to a friends group get a small marker on their cards.
+	// The user's friends groups, shown as a horizontal card row below. Habits
+	// that belong to a group also get a small marker on their cards.
+	const [groups, setGroups] = useState<Group[]>([])
 	const [groupHabitIds, setGroupHabitIds] = useState<Set<string>>(() => new Set())
-	useFocusEffect(
-		useCallback(() => {
-			let active = true
-
-			friendsService.listGroups().then((groups) => {
-				if (active) {
-					setGroupHabitIds(new Set(groups.flatMap((group) => group.habits.map((habit) => habit.id))))
-				}
-			})
-
-			return () => {
-				active = false
-			}
-		}, []),
-	)
+	const refreshGroups = useCallback(() => {
+		friendsService.listGroups().then((loadedGroups) => {
+			setGroups(loadedGroups)
+			setGroupHabitIds(new Set(loadedGroups.flatMap((group) => group.habits.map((habit) => habit.id))))
+		})
+	}, [])
+	// Refresh on focus, and live whenever group membership changes (e.g. leaving
+	// or deleting a group) so the "Your groups" row updates in real time.
+	useFocusEffect(refreshGroups)
+	useEffect(() => onGroupMembershipChanged(refreshGroups), [refreshGroups])
 
 	// Page-wide confetti when every habit for the selected day gets completed.
 	// Only fires on the transition to all-done while staying on the same day —
@@ -385,7 +443,7 @@ export default function TodayScreen() {
 							<DailyProgressCard
 								habits={dayHabits}
 								dateKey={item}
-								streak={bestStreak}
+								streak={bestCurrentStreakAcrossHabits(activeHabits, item)}
 							/>
 						</View>
 					)
@@ -397,6 +455,30 @@ export default function TodayScreen() {
 				dateKey={selectedDateKey}
 				groupHabitIds={groupHabitIds}
 			/>
+
+			{isPro && groups.length > 0 ? (
+				<View style={styles.groupSection}>
+					<AppText variant='titleSmall' color={palette.ink} style={styles.groupSectionHeader}>
+						Your groups
+					</AppText>
+					<ScrollView
+						horizontal
+						showsHorizontalScrollIndicator={false}
+						snapToInterval={snapInterval}
+						snapToAlignment='start'
+						disableIntervalMomentum
+						decelerationRate='fast'
+						style={styles.groupScroller}
+						contentContainerStyle={styles.groupCards}
+					>
+						{groups.map((group) => (
+							<View key={group.id} style={styles.groupCardPage}>
+								<HomeGroupCard group={group} width={cardWidth} myLumoId={myLumoId} onPress={() => router.push(`/group/${group.id}`)} />
+							</View>
+						))}
+					</ScrollView>
+				</View>
+			) : null}
 
 			<View style={styles.resourceSection}>
 				<AppText
@@ -417,7 +499,9 @@ export default function TodayScreen() {
 					{/* Badges entry hidden for now — restore when the badge feature ships.
 					<ResourceCard width={resourceCardWidth} motif='next' icon='award' label='Badges' description='Celebrate your milestones' onPress={() => router.push('/badges')} />
 					*/}
+					{/* Feature Board entry hidden for now — restore when the feature ships.
 					<ResourceCard width={resourceCardWidth} motif='next' icon='star' label="What's next" description='Vote on what we build' onPress={() => router.push('/feature-soon')} />
+					*/}
 				</ScrollView>
 			</View>
 
@@ -535,6 +619,88 @@ const styles = StyleSheet.create({
 		gap: spacing.sm,
 		paddingHorizontal: SCREEN_PADDING,
 		paddingVertical: spacing.lg,
+	},
+	groupSection: {
+		marginTop: spacing.xs,
+		gap: spacing.sm,
+	},
+	groupSectionHeader: {
+		fontFamily: fontFamilies.lexendSemiBold,
+		marginBottom: spacing.xxs,
+	},
+	// Break out of the screen padding and inset by CARD_SIDE so the cards line up
+	// exactly with the date carousel above (same width + edges). Generous vertical
+	// padding (cancelled by the negative margin) keeps the card shadow from
+	// clipping at the scroll bounds.
+	groupScroller: {
+		marginHorizontal: -SCREEN_PADDING,
+		marginVertical: -spacing.xl,
+	},
+	groupCards: {
+		paddingHorizontal: CARD_SIDE,
+		paddingVertical: spacing.xl,
+	},
+	groupCardPage: {
+		marginRight: CARD_GAP,
+	},
+	homeGroupCard: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: spacing.md,
+		borderRadius: 30,
+		padding: spacing.lg,
+		shadowOffset: { width: 0, height: 7 },
+		shadowOpacity: 0.09,
+		shadowRadius: 22,
+		elevation: 4,
+	},
+	homeGroupAvatar: {
+		width: 52,
+		height: 52,
+		borderRadius: radius.pill,
+		alignItems: 'center',
+		justifyContent: 'center',
+		overflow: 'hidden',
+	},
+	homeGroupInfo: {
+		flex: 1,
+		minWidth: 0,
+		gap: spacing.xxs,
+	},
+	homeGroupNameRow: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: spacing.xs,
+	},
+	homeGroupName: {
+		flexShrink: 1,
+		fontFamily: fontFamilies.lexendSemiBold,
+	},
+	homeGroupStreak: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: 3,
+		paddingHorizontal: spacing.xs,
+		paddingVertical: 2,
+		borderRadius: radius.pill,
+	},
+	homeGroupStreakText: {
+		fontFamily: fontFamilies.lexendSemiBold,
+		fontSize: 11,
+	},
+	homeGroupTodo: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: spacing.xs,
+		paddingHorizontal: spacing.sm,
+		paddingVertical: spacing.xs,
+		borderRadius: radius.pill,
+	},
+	homeGroupTodoDone: {
+		textTransform: 'capitalize',
+	},
+	homeGroupTodoNumber: {
+		fontFamily: 'Lexend-Black',
 	},
 	resourceCard: {
 		flex: 1,

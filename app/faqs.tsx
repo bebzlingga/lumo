@@ -34,7 +34,7 @@ const FAQS: Faq[] = [
 	{
 		question: 'How much does Lumo cost?',
 		answer:
-			'Habits, journals, stats, and themes are all free with no caps. Only the social features — Friends and the Feature Board — need a ₱49/month subscription, which covers their server costs. Cancel anytime in the App Store.',
+			'Habits, journals, stats, and themes are all free with no caps. Only the social features — like Friends — need a ₱49/month subscription, which covers their server costs. Cancel anytime in the App Store.',
 	},
 	{
 		question: 'How do streaks work?',

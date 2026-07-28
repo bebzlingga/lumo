@@ -1,19 +1,25 @@
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Alert, Animated as RNAnimated, Pressable, StyleSheet, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from "react-native-reanimated";
 import { habitAccent, habitColorOption, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
+import { alpha } from "@/lib/color";
 import { toDateKey } from "@/lib/date";
 import { completionCount, currentStreak, dailyTarget, isDoneOnDate, monthlyCompletionCount, weeklyCompletionCount } from "@/lib/habitMath";
 import { Habit } from "@/types/habit";
 import { AppText, Button, Card } from "./ui";
 import { DottedProgressChart } from "./DottedProgressChart";
+import { FireIcon } from "./FireIcon";
 import { HabitIcon } from "./HabitIcon";
+import { HoldProgressRing } from "./HoldProgressRing";
 import { Icon } from "./Icon";
 
 const UNDO_HOLD_DURATION_MS = 1500;
+// Only reveal the progress ring after this much holding, so a quick tap never
+// flashes it.
+const HOLD_REVEAL_DELAY_MS = 500;
 
 export function HabitCard({
   habit,
@@ -34,6 +40,9 @@ export function HabitCard({
   const undoPromptOpen = React.useRef(false);
   const pulse = useSharedValue(1);
   const holdScale = useSharedValue(1);
+  // Drives the hold-to-undo progress ring (0 idle -> 1 hold complete). Kept on
+  // the RN Animated API because HoldProgressRing animates SVG stroke props.
+  const holdProgress = React.useRef(new RNAnimated.Value(0)).current;
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulse.value }]
   }));
@@ -92,6 +101,16 @@ export function HabitCard({
       duration: UNDO_HOLD_DURATION_MS,
       easing: Easing.out(Easing.cubic)
     });
+    // Keep the ring hidden for the reveal delay (so a quick tap doesn't flash
+    // it), then fill over the remaining time so it's full when the long-press fires.
+    holdProgress.stopAnimation();
+    RNAnimated.timing(holdProgress, {
+      toValue: 1,
+      delay: HOLD_REVEAL_DELAY_MS,
+      duration: UNDO_HOLD_DURATION_MS - HOLD_REVEAL_DELAY_MS,
+      easing: (value) => value,
+      useNativeDriver: false
+    }).start();
   }
 
   function handleHoldEnd() {
@@ -99,6 +118,12 @@ export function HabitCard({
       damping: 14,
       stiffness: 150
     });
+    holdProgress.stopAnimation();
+    RNAnimated.timing(holdProgress, {
+      toValue: 0,
+      duration: 220,
+      useNativeDriver: false
+    }).start();
   }
 
   function handleOpenHabit() {
@@ -163,6 +188,9 @@ export function HabitCard({
           <View style={styles.header}>
             <View style={[styles.iconBubble, { backgroundColor: iconBackgroundColor }]}>
               <HabitIcon value={habit.emoji} color={iconColor} size={21} />
+              {canUndoCompletion ? (
+                <HoldProgressRing progress={holdProgress} size={52} stroke={3} color={accentColor} trackColor={alpha(accentColor, "24")} />
+              ) : null}
             </View>
             <View style={styles.titleBlock}>
               <View style={styles.titleRow}>
@@ -182,10 +210,15 @@ export function HabitCard({
                 <AppText variant="bodySmall" color={palette.muted}>
                   {reminderLabel}
                 </AppText>
-                <View style={[styles.metaDot, { backgroundColor: palette.hairline }]} />
-                <AppText variant="bodySmall" color={palette.muted}>
-                  {streak} day streak
-                </AppText>
+                {streak >= 3 ? (
+                  <>
+                    <View style={[styles.metaDot, { backgroundColor: palette.hairline }]} />
+                    <FireIcon size={14} />
+                    <AppText variant="bodySmall" color={palette.muted}>
+                      {streak} day streak
+                    </AppText>
+                  </>
+                ) : null}
               </View>
             </View>
           </View>

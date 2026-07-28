@@ -488,6 +488,7 @@ export default function SettingsScreen() {
           Privacy note: all habit data is stored locally on this device.
         </AppText>
         <View style={[styles.optionDivider, { backgroundColor: palette.hairline }]} />
+        {/* Feature request board hidden for now — restore when the feature ships.
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Open feature request board"
@@ -516,6 +517,7 @@ export default function SettingsScreen() {
           </View>
         </Pressable>
         <View style={[styles.optionDivider, { backgroundColor: palette.hairline }]} />
+        */}
         <View style={styles.communitySection}>
           <AppText variant="bodySmall" color={palette.ink} style={styles.rowTitle}>
             Communities

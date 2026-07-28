@@ -542,7 +542,7 @@ function TodayInsightCard({
         <View style={styles.todaySectionHeader}>
           <AppText variant="titleSmall">Best Current Streak</AppText>
         </View>
-        {bestStreak && bestStreak.streak > 0 ? (
+        {bestStreak && bestStreak.streak >= 3 ? (
           <View style={styles.todayInsightRow}>
             <View style={styles.habitTitle}>
               <HabitIcon value={bestStreak.habit.emoji} color={palette.ink} size={18} />

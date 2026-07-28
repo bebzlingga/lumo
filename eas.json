@@ -7,15 +7,30 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "ios": { "simulator": true, "image": "latest" }
+      "ios": {
+        "simulator": true,
+        "image": "latest"
+      }
     },
     "preview": {
       "distribution": "internal",
-      "ios": { "image": "latest" }
+      "ios": {
+        "image": "latest"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://rwqptcszfafcahoynyyf.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_Y3s8lSlKqpueloXQhz5YdA_DQDKTtzd"
+      }
     },
     "production": {
       "autoIncrement": true,
-      "ios": { "image": "macos-tahoe-26.4-xcode-26.4" }
+      "ios": {
+        "image": "macos-tahoe-26.4-xcode-26.4"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://rwqptcszfafcahoynyyf.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_Y3s8lSlKqpueloXQhz5YdA_DQDKTtzd"
+      }
     }
   },
   "submit": {
