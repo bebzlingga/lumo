@@ -21,7 +21,7 @@ import { formatLumoId, generateLumoSuffix } from "@/lib/lumoId";
 import { getExpoPushToken } from "@/lib/notifications";
 import { subscribeToUserNotifications } from "@/lib/realtime";
 import { ensureSignedIn } from "@/lib/supabase";
-import { updateTodayWidget } from "@/lib/widget";
+import { readPendingWidgetToggles, updateTodayWidget } from "@/lib/widget";
 import { AppSettings, BackupFrequency, CompletionEntry, FeatureRequest, Habit, HabitCategory, habitCategories, HabitDraft, JournalEntry, JournalMood } from "@/types/habit";
 
 // Persisted local state key. Do not change — it would orphan existing
@@ -523,12 +523,69 @@ export function LumoProvider({ children }: { children: ReactNode }) {
     });
   }, [isReady]);
 
-  // Keep the iOS home-screen widget in sync with today's habits/completions.
+  // Keep the iOS home-screen widget in sync with today's habits/completions,
+  // and let it follow the app's active theme.
   useEffect(() => {
     if (isReady) {
-      updateTodayWidget(state.habits);
+      updateTodayWidget(state.habits, {
+        background: palette.canvas,
+        card: palette.card,
+        accent: palette.greenDark,
+        onAccent: palette.canvas,
+        text: palette.ink,
+        subtle: palette.subtle
+      });
     }
-  }, [isReady, state.habits]);
+  }, [isReady, state.habits, palette]);
+
+  // Apply completions made from the widget's Complete button while the app was
+  // closed, then the effect above rewrites the authoritative snapshot. Runs on
+  // launch and each time the app returns to the foreground.
+  useEffect(() => {
+    if (!isReady) {
+      return;
+    }
+
+    const reconcile = async () => {
+      const pending = await readPendingWidgetToggles();
+      if (pending.length === 0) {
+        return;
+      }
+
+      const dateKey = toDateKey();
+      const before = stateRef.current.habits;
+
+      setState((current) => ({
+        ...current,
+        habits: current.habits.map((habit) => {
+          const toggle = pending.find((item) => item.id === habit.id);
+          if (!toggle) {
+            return habit;
+          }
+          return toggle.done ? withCompletionOnDate(habit, dateKey) : withoutCompletionOnDate(habit, dateKey);
+        })
+      }));
+
+      // Mirror to the group backend (no-op for personal habits).
+      pending.forEach((toggle) => {
+        const habit = before.find((item) => item.id === toggle.id);
+        if (!habit) {
+          return;
+        }
+        const next = toggle.done ? withCompletionOnDate(habit, dateKey) : withoutCompletionOnDate(habit, dateKey);
+        friendsService.syncCompletion(toggle.id, dateKey, completionCount(next, dateKey)).catch(() => undefined);
+      });
+    };
+
+    reconcile();
+    const subscription = AppState.addEventListener("change", (status) => {
+      if (status === "active") {
+        reconcile();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [isReady]);
 
   // Push + realtime notifications: register this device's push token (so the
   // server can notify when the app is closed) and subscribe to live in-app

@@ -13,6 +13,7 @@ import { AppText, Card, LoadingState, LumoInput, Screen } from "@/components/ui"
 import { fontFamilies, layout, radius, spacing, themeColorOptions } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
+import { PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legal";
 import { BackupFrequency } from "@/types/habit";
 
 const LUMO_FACEBOOK_URL = "https://www.facebook.com/lumo.habittracker/";
@@ -487,6 +488,21 @@ export default function SettingsScreen() {
         <AppText variant="bodySmall" color={palette.subtle} style={styles.descriptionText}>
           Privacy note: all habit data is stored locally on this device.
         </AppText>
+        <View style={styles.legalLinks}>
+          <Pressable accessibilityRole="link" accessibilityLabel="Terms of Use" onPress={() => openCommunityLink(TERMS_URL)}>
+            <AppText variant="bodySmall" color={palette.greenDark} style={styles.legalLink}>
+              Terms of Use
+            </AppText>
+          </Pressable>
+          <AppText variant="bodySmall" color={palette.subtle}>
+            ·
+          </AppText>
+          <Pressable accessibilityRole="link" accessibilityLabel="Privacy Policy" onPress={() => openCommunityLink(PRIVACY_POLICY_URL)}>
+            <AppText variant="bodySmall" color={palette.greenDark} style={styles.legalLink}>
+              Privacy Policy
+            </AppText>
+          </Pressable>
+        </View>
         <View style={[styles.optionDivider, { backgroundColor: palette.hairline }]} />
         {/* Feature request board hidden for now — restore when the feature ships.
         <Pressable
@@ -658,6 +674,16 @@ const styles = StyleSheet.create({
   },
   descriptionText: {
     lineHeight: 16
+  },
+  legalLinks: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginTop: spacing.sm
+  },
+  legalLink: {
+    fontFamily: fontFamilies.lexendSemiBold,
+    textDecorationLine: "underline"
   },
   themeSwitchButton: {
     width: 38,

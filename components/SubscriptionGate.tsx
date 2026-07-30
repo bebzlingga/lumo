@@ -1,11 +1,12 @@
 import React from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, View } from "react-native";
 import { Icon, type IconName } from "@/components/Icon";
 import { AppText, Screen } from "@/components/ui";
 import { fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { getFriendsSubscriptionPrice } from "@/lib/iap";
+import { PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legal";
 
 // Fallback until the App Store returns a localized price.
 const FALLBACK_PRICE_LABEL = "₱49";
@@ -77,6 +78,12 @@ export function SubscriptionGate() {
     } finally {
       setRestoring(false);
     }
+  }
+
+  function openLegal(url: string) {
+    Linking.openURL(url).catch(() => {
+      Alert.alert("Couldn't open link", "Please try again in a moment.");
+    });
   }
 
   return (
@@ -152,6 +159,30 @@ export function SubscriptionGate() {
           {restoring ? "Restoring…" : "Restore purchases"}
         </AppText>
       </Pressable>
+
+      <View style={styles.legal}>
+        <AppText variant="caption" color={palette.subtle} style={styles.legalText}>
+          Lumo Plus is an auto-renewable subscription at {priceLabel}/month. Payment is charged to your Apple ID at
+          confirmation of purchase. It renews automatically unless cancelled at least 24 hours before the end of the current
+          period, and your account is charged for renewal within 24 hours prior. Manage or cancel anytime in your App Store
+          account settings.
+        </AppText>
+        <View style={styles.legalLinks}>
+          <Pressable accessibilityRole="link" accessibilityLabel="Terms of Use" onPress={() => openLegal(TERMS_URL)}>
+            <AppText variant="caption" color={palette.greenDark} style={styles.legalLink}>
+              Terms of Use (EULA)
+            </AppText>
+          </Pressable>
+          <AppText variant="caption" color={palette.subtle}>
+            ·
+          </AppText>
+          <Pressable accessibilityRole="link" accessibilityLabel="Privacy Policy" onPress={() => openLegal(PRIVACY_POLICY_URL)}>
+            <AppText variant="caption" color={palette.greenDark} style={styles.legalLink}>
+              Privacy Policy
+            </AppText>
+          </Pressable>
+        </View>
+      </View>
     </Screen>
   );
 }
@@ -245,6 +276,24 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxs
   },
   restoreLabel: {
+    fontFamily: fontFamilies.lexendSemiBold,
+    textDecorationLine: "underline"
+  },
+  legal: {
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingTop: spacing.xs
+  },
+  legalText: {
+    textAlign: "center",
+    lineHeight: 16
+  },
+  legalLinks: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs
+  },
+  legalLink: {
     fontFamily: fontFamilies.lexendSemiBold,
     textDecorationLine: "underline"
   }

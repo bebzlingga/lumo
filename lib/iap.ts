@@ -48,6 +48,17 @@ export async function purchaseFriendsSubscription(): Promise<boolean> {
     return false;
   }
 
+  // StoreKit 2 requires the product to be loaded before it can be purchased —
+  // requestPurchase throws an "invalid product" error otherwise (the cause of
+  // the App Store review IAP failure). Warm the product cache on THIS
+  // connection first; best-effort, so a transient miss doesn't hard-block a
+  // product that may already be cached from the price fetch.
+  try {
+    await iap.fetchProducts({ skus: [FRIENDS_SUBSCRIPTION_SKU], type: "subs" });
+  } catch {
+    // Ignore and still attempt the purchase.
+  }
+
   // Ties the Apple transaction to this Supabase user: appAccountToken rides
   // along in App Store Server Notifications, letting the entitlement webhook
   // credit the right account server-side.
