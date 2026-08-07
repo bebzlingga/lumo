@@ -418,6 +418,8 @@ struct LumoWidget: Widget {
     }
     .configurationDisplayName("Today's Habits")
     .description("Check off today's habits right from the home screen.")
-    .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+    // One size only — the square box. Offering all three made the gallery show
+    // three variants of the same widget, which read as three separate widgets.
+    .supportedFamilies([.systemSmall])
   }
 }

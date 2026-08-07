@@ -12,7 +12,7 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const LUMO_FACEBOOK_URL = "https://www.facebook.com/lumo.habittracker/";
+const LUMO_FACEBOOK_URL = "https://www.facebook.com/lumo.habitcompanion";
 
 type Faq = { question: string; answer: string };
 

@@ -19,7 +19,7 @@ import { PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legal";
 import { BackupFrequency } from "@/types/habit";
 import { Pressable } from "@/components/Pressable"
 
-const LUMO_FACEBOOK_URL = "https://www.facebook.com/lumo.habittracker/";
+const LUMO_FACEBOOK_URL = "https://www.facebook.com/lumo.habitcompanion";
 const backupFrequencyOptions: { label: string; value: BackupFrequency }[] = [
   { label: "Daily", value: "daily" },
   { label: "Weekly", value: "weekly" },
@@ -478,7 +478,7 @@ export default function SettingsScreen() {
         <SettingsRow
           icon="facebook"
           title="Facebook community"
-          body="lumo.habittracker"
+          body="lumo.habitcompanion"
           onPress={() => openCommunityLink(LUMO_FACEBOOK_URL)}
           last
         />

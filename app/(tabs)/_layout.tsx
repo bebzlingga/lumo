@@ -107,7 +107,7 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBar
     return (
       <Pressable
         key={route.key}
-        className="h-[58px] min-w-0 flex-1 basis-0 items-center justify-center px-2"
+        className="h-[58px] min-w-0 flex-1 basis-0 items-center justify-center px-1"
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityState={isFocused ? { selected: true } : undefined}
@@ -127,10 +127,10 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBar
       >
         {/* The active fill lives on THIS box, not on the Pressable — the
             Pressable stays the full 58pt cell so the touch target does not
-            shrink with the highlight, which now sits 6pt inside it top and
-            bottom and 8pt in on each side (the cell's own px-2). */}
+            shrink with the highlight, which now sits 2pt inside it top and
+            bottom and 4pt in on each side (the cell's own px-1). */}
         <View
-          className="h-[46px] w-full items-center justify-center rounded-[16px]"
+          className="h-[54px] w-full items-center justify-center rounded-[16px]"
           style={{ backgroundColor: isFocused ? activeBackground : "transparent" }}
         >
         {/* Dim only the icon/label — the badge stays vivid on inactive tabs. */}
