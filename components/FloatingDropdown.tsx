@@ -1,9 +1,10 @@
 import React from "react";
-import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Dimensions, Modal, ScrollView, StyleSheet, View } from "react-native"
 import { control, fontFamilies, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
-import { AppText, controlBorderColor } from "./ui";
+import { AppText, controlBorderColor, fieldShadow } from "./ui";
 import { Icon } from "./Icon";
+import { Pressable } from "@/components/Pressable"
 
 export type FloatingDropdownOption<T extends string> = {
   label: string;
@@ -57,7 +58,8 @@ export function FloatingDropdown<T extends string>({
   const activeOption = options.find((option) => option.value === value);
   const isInput = variant === "input";
   const triggerBorderColor = controlBorderColor(palette, isDark, isOpen);
-  const inputBorderColor = borderColor ?? palette.hairline;
+  // No resting edge on the input variant — the open state supplies it.
+  const inputBorderColor = borderColor ?? "transparent";
 
   const open = () => {
     triggerRef.current?.measureInWindow((x, y, width, height) => {
@@ -97,33 +99,20 @@ export function FloatingDropdown<T extends string>({
         style={({ pressed }) => [
           isInput ? styles.inputTrigger : styles.pillTrigger,
           {
-            backgroundColor: isInput ? "transparent" : palette.surface,
-            borderColor: isInput ? "transparent" : triggerBorderColor,
+            backgroundColor: isInput ? palette.card : palette.surface,
+            shadowColor: palette.shadow,
+            borderColor: isInput ? (isOpen ? palette.hairlineStrong : inputBorderColor) : triggerBorderColor,
             opacity: disabled ? 0.55 : pressed ? 0.76 : 1
           }
         ]}
       >
         {isInput ? (
-          <>
-            <View style={styles.inputTriggerContent}>
-              <AppText variant="titleSmall" color={activeOption ? palette.ink : `${palette.body}99`} numberOfLines={1} style={styles.inputTriggerText}>
-                {activeOption?.label ?? placeholder}
-              </AppText>
-              <Icon name="chevronDown" size={18} color={palette.greenDark} weight="bulk" />
-            </View>
-            {/* Dedicated underline — a bare View's borderBottomWidth doesn't
-                render reliably on iOS, so draw the line as its own element. */}
-            <View
-              pointerEvents="none"
-              style={[
-                styles.inputUnderline,
-                {
-                  height: borderWidth ?? control.borderWidth,
-                  backgroundColor: isOpen ? palette.greenDark : inputBorderColor
-                }
-              ]}
-            />
-          </>
+          <View style={styles.inputTriggerContent}>
+            <AppText variant="titleSmall" color={activeOption ? palette.ink : `${palette.body}99`} numberOfLines={1} style={styles.inputTriggerText}>
+              {activeOption?.label ?? placeholder}
+            </AppText>
+            <Icon name="chevronDown" size={18} color={palette.greenDark} weight="bulk" />
+          </View>
         ) : (
           <AppText variant="caption" color={palette.greenDark} numberOfLines={1} style={styles.pillTriggerText}>
             {activeOption?.label ?? placeholder}
@@ -198,9 +187,12 @@ const styles = StyleSheet.create({
   rootPill: {
     flexShrink: 0
   },
+  // Compact by design: the pill variant only ever sits as the trailing control
+  // of a settings row, so it is sized against that row's caption text rather
+  // than against a form field. (The forms use the `input` variant below.)
   pillTrigger: {
-    minWidth: 104,
-    minHeight: 34,
+    minWidth: 84,
+    minHeight: 28,
     flexShrink: 0,
     flexDirection: "row",
     alignItems: "center",
@@ -208,25 +200,23 @@ const styles = StyleSheet.create({
     gap: 1,
     borderRadius: radius.pill,
     borderWidth: control.borderWidth,
-    paddingHorizontal: spacing.sm
+    paddingHorizontal: spacing.xs
   },
   pillTriggerText: {
     fontFamily: fontFamilies.lexendSemiBold,
-    fontSize: 14,
+    fontSize: 12,
     lineHeight: 16
   },
+  // Same box as LumoInput so the dropdown reads as a field.
   inputTrigger: {
     width: "100%",
     alignSelf: "stretch",
-    paddingHorizontal: 0,
-    paddingTop: spacing.sm,
-    paddingBottom: 0
-  },
-  inputUnderline: {
-    alignSelf: "stretch",
-    // Space between the value and the underline — matches the text inputs'
-    // paddingBottom (spacing.sm) so selects and fields line up.
-    marginTop: spacing.sm
+    justifyContent: "center",
+    minHeight: control.height,
+    borderWidth: control.borderWidth,
+    borderRadius: control.radius,
+    paddingHorizontal: spacing.md,
+    ...fieldShadow
   },
   inputTriggerContent: {
     width: "100%",
@@ -235,9 +225,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: spacing.sm
   },
+  // Semibold, matching the input this trigger is shaped like — and the pill
+  // trigger and menu rows above/below it. Bold made a select read heavier than
+  // the text field sitting next to it in the same form.
   inputTriggerText: {
     flex: 1,
-    fontFamily: fontFamilies.lexendBold,
+    fontFamily: fontFamilies.lexendSemiBold,
     fontSize: 16,
     lineHeight: 22
   },
@@ -246,10 +239,10 @@ const styles = StyleSheet.create({
   },
   menu: {
     position: "absolute",
-    borderRadius: radius.nav,
+    borderRadius: radius.card,
     borderWidth: 0,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.16,
     shadowRadius: 28,
@@ -259,11 +252,12 @@ const styles = StyleSheet.create({
     maxHeight: 264
   },
   option: {
-    minHeight: 28,
+    minHeight: 44,
     width: "100%",
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: spacing.sm
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
   },
   optionContent: {
     width: "100%",

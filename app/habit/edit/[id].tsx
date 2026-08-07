@@ -31,5 +31,11 @@ export default function EditHabitScreen() {
     router.back();
   }
 
-  return <HabitForm title="Edit habit" habit={currentHabit} onSave={save} />;
+  return <HabitForm
+      title="Edit habit"
+      subtitle="Adjust anything you like — your streak and history stay exactly as they are."
+      habit={currentHabit}
+      backLabel={currentHabit.name}
+      onSave={save}
+    />;
 }

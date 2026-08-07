@@ -9,7 +9,7 @@ type Palette = ReturnType<typeof useLumo>["palette"];
 
 const ITEM_HEIGHT = 40;
 const VISIBLE_ROWS = 5;
-const WHEEL_HEIGHT = ITEM_HEIGHT * VISIBLE_ROWS;
+export const WHEEL_HEIGHT = ITEM_HEIGHT * VISIBLE_ROWS;
 
 const HOURS = Array.from({ length: 12 }, (_, index) => String(index + 1));
 const MINUTES = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
@@ -33,16 +33,24 @@ function fromIndices(hourIndex: number, minuteIndex: number, periodIndex: number
   return `${String(hour24).padStart(2, "0")}:${String(minuteIndex).padStart(2, "0")}`;
 }
 
-function WheelColumn({
+/**
+ * One scrolling wheel. Exported so the date picker spins on exactly the same
+ * mechanics — snap interval, live fade, and settle-on-momentum — rather than a
+ * near-copy that drifts out of step.
+ */
+export function WheelColumn({
   data,
   index,
   onChange,
-  palette
+  palette,
+  width
 }: {
   data: string[];
   index: number;
   onChange: (index: number) => void;
   palette: Palette;
+  /** Overrides the default column width, for longer labels like "August". */
+  width?: number;
 }) {
   const ref = useRef<ScrollView>(null);
   const settledRef = useRef(index);
@@ -72,7 +80,7 @@ function WheelColumn({
   return (
     <Animated.ScrollView
       ref={ref as never}
-      style={styles.column}
+      style={[styles.column, width ? { width } : null]}
       showsVerticalScrollIndicator={false}
       snapToInterval={ITEM_HEIGHT}
       decelerationRate="fast"

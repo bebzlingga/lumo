@@ -1,63 +1,65 @@
-import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import * as Haptics from "expo-haptics";
+import { useNavigation, useRouter } from "expo-router";
+import React, { useMemo, useRef, useState } from "react";
+import { Alert, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native"
 import { Avatar } from "@/components/Avatar";
-import { Icon } from "@/components/Icon";
-import { AppText, IconButton, Screen } from "@/components/ui";
-import { fontFamilies, radius, spacing } from "@/constants/theme";
+import { SegmentedButton, SegmentedControl } from "@/components/controls";
+import { type IconName } from "@/components/Icon";
+import { ScreenHeader } from "@/components/ScreenHeader";
+import { AppText, Screen } from "@/components/ui";
+import { fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
-import { alpha } from "@/lib/color";
 import {
   AvatarConfig,
-  AvatarGender,
-  accessoriesOptions,
+  accentColors,
+  backgroundColors,
+  bodyColors,
+  bodyOptions,
   buildAvatarSvg,
-  clothesColors,
-  clothingOptions,
-  eyebrowsOptions,
   eyesOptions,
-  facialHairOptions,
-  hairColors,
-  hairOptions,
-  headwearOptions,
   mouthOptions,
-  skinColors
+  patternOptions,
+  randomAvatar,
+  topOptions
 } from "@/lib/avatar";
+import { Pressable } from "@/components/Pressable";
 
-type CategoryKey = "hair" | "headwear" | "eyes" | "eyebrows" | "mouth" | "facialHair" | "glasses" | "clothes" | "skin";
+/** Each tab edits exactly one field of the config. */
+type CategoryKey = "body" | "top" | "pattern" | "eyes" | "mouth" | "colors";
 
-const THUMB_COLUMNS = 6;
+const THUMB_COLUMNS = 4;
 const THUMB_PADDING = 5;
-const COLOR_COLUMNS = 8;
+const COLOR_COLUMNS = 6;
 const COLOR_GAP = spacing.xs;
 const COLOR_PADDING = 8;
 
-function overrideFor(base: AvatarConfig, category: CategoryKey, option: string): AvatarConfig {
-  switch (category) {
-    case "hair":
-      return { ...base, headwear: "none", hair: option };
-    case "headwear":
-      return { ...base, headwear: option };
-    case "eyes":
-      return { ...base, eyes: option };
-    case "eyebrows":
-      return { ...base, eyebrows: option };
-    case "mouth":
-      return { ...base, mouth: option };
-    case "facialHair":
-      return { ...base, facialHair: option };
-    case "glasses":
-      return { ...base, accessories: option };
-    case "clothes":
-      return { ...base, clothing: option };
-    default:
-      return base;
-  }
-}
+/**
+ * `label` is no longer drawn — the tabs are glyphs — but it stays as each tab's
+ * accessibility label. An icon-only control with no name is unusable to a
+ * screen reader, and "Body"/"Top" are exactly the words to announce.
+ */
+const categories: { key: CategoryKey; label: string; icon: IconName; field?: keyof AvatarConfig; options?: string[] }[] = [
+  { key: "body", label: "Body", icon: "user", field: "body", options: bodyOptions },
+  // A crown sits where a top does — the closest thing in the set to "the bit on
+  // top of the head", which has no literal glyph.
+  { key: "top", label: "Top", icon: "crown1", field: "top", options: topOptions },
+  { key: "eyes", label: "Eyes", icon: "eye", field: "eyes", options: eyesOptions },
+  { key: "mouth", label: "Mouth", icon: "smiley", field: "mouth", options: mouthOptions },
+  { key: "pattern", label: "Pattern", icon: "grid", field: "pattern", options: patternOptions },
+  { key: "colors", label: "Colors", icon: "colorFilter" }
+];
+
+/** What the segmented control needs, derived so the two can never fall out of
+ *  step with each other. */
+const categoryTabs = categories.map((category) => ({
+  label: category.label,
+  value: category.key,
+  icon: category.icon
+}));
 
 type Palette = ReturnType<typeof useLumo>["palette"];
 
-// Selected boxes (thumbnails + color swatches) get a light card bg + shadow.
+// Selected boxes (thumbnails + colour swatches) get a light card bg + shadow.
 function selectionStyle(active: boolean, palette: Palette) {
   return active
     ? {
@@ -71,43 +73,47 @@ function selectionStyle(active: boolean, palette: Palette) {
     : { backgroundColor: "transparent" };
 }
 
+/**
+ * Every thumbnail is the CURRENT avatar with one field swapped, so what you see
+ * is what choosing it would give you — not an isolated part on its own.
+ */
 function ThumbRow({
   base,
-  category,
+  field,
   options,
-  selected,
   onSelect,
   palette
 }: {
   base: AvatarConfig;
-  category: CategoryKey;
+  field: keyof AvatarConfig;
   options: string[];
-  selected: string;
   onSelect: (value: string) => void;
   palette: Palette;
 }) {
   const { width } = useWindowDimensions();
-  // Thumbs fill the width in equal columns, like the color swatches.
-  const thumbSize = Math.floor((width - spacing.lg * 2 - spacing.sm * (THUMB_COLUMNS - 1)) / THUMB_COLUMNS);
+  const thumbSize = Math.floor((width - layout.screenPaddingX * 2 - spacing.sm * (THUMB_COLUMNS - 1)) / THUMB_COLUMNS);
   const thumbs = useMemo(
-    () => options.map((option) => ({ option, svg: buildAvatarSvg(overrideFor(base, category, option)) })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [base, category, options]
+    () => options.map((option) => ({ option, svg: buildAvatarSvg({ ...base, [field]: option }) })),
+    [base, field, options]
   );
 
   return (
     <View style={styles.grid}>
       {thumbs.map(({ option, svg }) => {
-        const active = option === selected;
+        const active = option === base[field];
+
         return (
           <Pressable
             key={option}
             accessibilityRole="button"
+            accessibilityLabel={option === "none" ? `No ${String(field)}` : option}
             accessibilityState={{ selected: active }}
             onPress={() => onSelect(option)}
             style={[styles.thumb, { width: thumbSize, height: thumbSize }, selectionStyle(active, palette)]}
           >
-            <Avatar svg={svg} size={thumbSize - THUMB_PADDING * 2} rounded={false} />
+            {/* Circular, like the avatar is everywhere else it appears. Square
+                thumbnails were previewing a shape the app never renders. */}
+            <Avatar svg={svg} size={thumbSize - THUMB_PADDING * 2} />
           </Pressable>
         );
       })}
@@ -116,12 +122,14 @@ function ThumbRow({
 }
 
 function SwatchRow({
+  label,
   colors,
   selected,
   onSelect,
   palette,
   size
 }: {
+  label: string;
   colors: string[];
   selected: string;
   onSelect: (value: string) => void;
@@ -129,209 +137,186 @@ function SwatchRow({
   size: number;
 }) {
   const fill = size - COLOR_PADDING * 2;
+
   return (
-    <View style={styles.colorGrid}>
-      {colors.map((color) => {
-        const active = color === selected;
-        return (
-          <Pressable
-            key={color}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-            onPress={() => onSelect(color)}
-            style={[styles.colorBox, { width: size, height: size }, selectionStyle(active, palette)]}
-          >
-            <View style={[styles.colorFill, { width: fill, height: fill, backgroundColor: `#${color}`, borderColor: palette.hairline }]} />
-          </Pressable>
-        );
-      })}
+    <View style={styles.swatchBlock}>
+      <AppText variant="caption" color={palette.subtle} style={styles.swatchLabel}>
+        {label}
+      </AppText>
+      <View style={styles.colorGrid}>
+        {colors.map((color) => {
+          const active = color === selected;
+
+          return (
+            <Pressable
+              key={color}
+              accessibilityRole="button"
+              accessibilityLabel={`${label} ${color}`}
+              accessibilityState={{ selected: active }}
+              onPress={() => onSelect(color)}
+              style={[styles.colorBox, { width: size, height: size }, selectionStyle(active, palette)]}
+            >
+              {/* Clay's palettes are full hex strings, so they render as-is. */}
+              <View style={[styles.colorFill, { width: fill, height: fill, backgroundColor: color, borderColor: palette.hairline }]} />
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
 export default function AvatarScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const { width } = useWindowDimensions();
-  const { avatar, setAvatar, palette, isDark } = useLumo();
+  const { avatar, setAvatar, palette } = useLumo();
   const [draft, setDraft] = useState<AvatarConfig>(avatar);
-  const [category, setCategory] = useState<CategoryKey>("hair");
+  const [category, setCategory] = useState<CategoryKey>("body");
 
-  // Color swatches fill the width in 8 equal columns.
-  const colorSize = Math.floor((width - spacing.lg * 2 - COLOR_GAP * (COLOR_COLUMNS - 1)) / COLOR_COLUMNS);
-
+  const colorSize = Math.floor((width - layout.screenPaddingX * 2 - COLOR_GAP * (COLOR_COLUMNS - 1)) / COLOR_COLUMNS);
   const previewSvg = useMemo(() => buildAvatarSvg(draft), [draft]);
-
-  // Slide + fade the preview whenever the gender switches.
-  const genderAnim = useRef(new Animated.Value(1)).current;
-  const slideDir = useRef(0);
-  useEffect(() => {
-    slideDir.current = draft.gender === "female" ? 1 : -1;
-    genderAnim.setValue(0);
-    Animated.timing(genderAnim, { toValue: 1, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-  }, [draft.gender, genderAnim]);
+  const active = categories.find((item) => item.key === category);
+  const optionsRef = useRef<ScrollView>(null);
+  // Field-by-field rather than by reference: every tap makes a new `draft`
+  // object, but picking an option and picking the old one back is not a change
+  // and should not arm the discard prompt.
+  const dirty = (Object.keys(draft) as (keyof AvatarConfig)[]).some((key) => draft[key] !== avatar[key]);
+  // Read inside the `beforeRemove` listener, which is registered once and would
+  // otherwise close over whatever `dirty` was on the first render.
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  /** Set just before a leave we have already decided on, so the guard below
+   *  lets that one through instead of prompting about it again. */
+  const leavingRef = useRef(false);
 
   function update(patch: Partial<AvatarConfig>) {
+    // Every option is a one-tap change with no other confirmation, so the tap
+    // itself is the only feedback there is. Failures are swallowed: a device
+    // without a taptic engine should not break choosing an avatar.
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     setDraft((current) => ({ ...current, ...patch }));
   }
 
-  function setGender(gender: AvatarGender) {
-    setDraft((current) => {
-      const hair = hairOptions[gender].includes(current.hair) ? current.hair : hairOptions[gender][0];
-      const headwear = headwearOptions[gender].includes(current.headwear) ? current.headwear : "none";
-      const facialHair = facialHairOptions[gender].includes(current.facialHair) ? current.facialHair : "none";
-      return { ...current, gender, hair, headwear, facialHair };
-    });
-    if (category === "facialHair" && gender === "female") {
-      setCategory("hair");
-    }
+  /** Each category is its own list; landing mid-scroll in the next one is just
+   *  the previous one's offset leaking across. */
+  function selectCategory(key: CategoryKey) {
+    setCategory(key);
+    optionsRef.current?.scrollTo({ y: 0, animated: false });
+  }
+
+  function shuffle() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    setDraft(randomAvatar());
   }
 
   function save() {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    leavingRef.current = true;
     setAvatar(draft);
     router.back();
   }
 
-  const categories: { key: CategoryKey; label: string }[] = [
-    { key: "hair", label: "Hair" },
-    { key: "headwear", label: "Headwear" },
-    { key: "eyes", label: "Eyes" },
-    { key: "eyebrows", label: "Brows" },
-    { key: "mouth", label: "Mouth" },
-    ...(draft.gender === "male" ? [{ key: "facialHair" as CategoryKey, label: "Beard" }] : []),
-    { key: "glasses", label: "Glasses" },
-    { key: "clothes", label: "Clothes" },
-    { key: "skin", label: "Skin" }
-  ];
+  /**
+   * Nothing here is saved until the tick, and leaving used to throw the lot away
+   * without a word — easy to do after a couple of minutes of fiddling, with no
+   * way to get any of it back.
+   *
+   * On `beforeRemove` rather than on the Back button, because the button is only
+   * one of three ways off this screen: the iOS edge swipe and the Android back
+   * gesture both leave without ever touching it. A prompt that catches one of
+   * the three is worse than none — it teaches you that leaving is safe.
+   */
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener("beforeRemove", (event) => {
+      if (leavingRef.current || !dirtyRef.current) {
+        return;
+      }
+
+      event.preventDefault();
+      Alert.alert("Discard changes?", "Your new avatar has not been saved yet.", [
+        { text: "Keep editing", style: "cancel" },
+        {
+          text: "Discard",
+          style: "destructive",
+          onPress: () => {
+            leavingRef.current = true;
+            navigation.dispatch(event.data.action);
+          }
+        }
+      ]);
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   return (
     <Screen scroll={false} contentStyle={styles.content}>
-      <View style={styles.header}>
-        <IconButton icon="back" label="Back" iconWeight="bulk" iconSize={32} buttonSize={44} onPress={() => router.back()} iconStyle={styles.backIcon} />
-        <View style={styles.headerCenter} pointerEvents="none">
-          <AppText variant="titleSmall" color={palette.ink} style={styles.headerTitle}>
-            {draft.gender === "male" ? "Male" : "Female"}
-          </AppText>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Save avatar"
-          onPress={save}
-          hitSlop={8}
-          style={({ pressed }) => [styles.saveButton, { opacity: pressed ? 0.6 : 1 }]}
-        >
-          <Icon name="checkCircle" size={24} color={palette.greenDark} weight="bulk" />
-        </Pressable>
-      </View>
+      {/* The save tick takes the header's default ink, like every other header
+          button. It was greenDark, which is only 3.6:1 on the light canvas and
+          left this circle looking washed out beside the ink Back button in the
+          identical circle next to it. These outlined buttons are chrome, so the
+          one colour that overrides ink anywhere in the app is danger, on the
+          destructive ones. */}
+      <ScreenHeader
+        title="Your avatar"
+        leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }}
+        rightAction={{ icon: "check", label: "Save avatar", onPress: save }}
+      />
 
+      {/* One circular disc, no separate backdrop behind a square portrait: the
+          art carries its own background colour, so clipping it round IS the
+          disc — and it is what the avatar actually looks like on Home, Profile
+          and Settings. The editor was previewing a shape you never see. */}
       <View style={styles.preview}>
-        <View style={styles.previewRow}>
-          {draft.gender === "female" ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Switch to male"
-              onPress={() => setGender("male")}
-              hitSlop={8}
-              style={({ pressed }) => [styles.genderArrow, { opacity: pressed ? 0.6 : 1 }]}
-            >
-              <Icon name="arrowLeft" size={24} color={palette.greenDark} weight="outline" />
-            </Pressable>
-          ) : (
-            <View style={styles.genderArrow} />
-          )}
-
-          <Animated.View
-            style={{
-              opacity: genderAnim,
-              transform: [{ translateX: genderAnim.interpolate({ inputRange: [0, 1], outputRange: [slideDir.current * 70, 0] }) }]
-            }}
-          >
-            <View style={styles.previewFrame}>
-              <View style={[styles.previewCircle, { backgroundColor: alpha(palette.greenDark, "10") }]} pointerEvents="none" />
-              <Avatar svg={previewSvg} size={156} rounded={false} />
-            </View>
-          </Animated.View>
-
-          {draft.gender === "male" ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Switch to female"
-              onPress={() => setGender("female")}
-              hitSlop={8}
-              style={({ pressed }) => [styles.genderArrow, { opacity: pressed ? 0.6 : 1 }]}
-            >
-              <Icon name="arrowRight" size={24} color={palette.greenDark} weight="outline" />
-            </Pressable>
-          ) : (
-            <View style={styles.genderArrow} />
-          )}
-        </View>
+        <Avatar svg={previewSvg} size={156} />
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabScroll} contentContainerStyle={styles.tabRow}>
-        {categories.map((cat) => {
-          const active = category === cat.key;
-          return (
-            <Pressable
-              key={cat.key}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              onPress={() => setCategory(cat.key)}
-              style={[styles.tab, active ? styles.tabActive : null, active ? { backgroundColor: palette.greenDark } : null]}
-            >
-              <AppText
-                variant="bodySmall"
-                color={active ? (isDark ? palette.onAccent : palette.white) : alpha(palette.subtle, "99")}
-                style={[styles.tabText, active ? null : styles.tabTextInactive]}
-              >
-                {cat.label}
-              </AppText>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      {/* Laid out like the Habits filter row: an action split off into its own
+          short track on the left, the real tabs filling the rest. Same recessed
+          track and card-filled segment as there — nothing bespoke. Six segments
+          at flex 1 divide the width evenly, so there is nothing to scroll and
+          no tab hiding off the right edge. */}
+      <View style={styles.controlRow}>
+        <SegmentedButton icon="shuffle" label="Shuffle avatar" onPress={shuffle} style={styles.controlShuffle} />
+        <SegmentedControl options={categoryTabs} value={category} onChange={selectCategory} style={styles.controlTabs} />
+      </View>
 
-      <ScrollView style={styles.optionsScroll} contentContainerStyle={styles.optionsContent} showsVerticalScrollIndicator={false}>
-        {category === "skin" ? <SwatchRow colors={skinColors} selected={draft.skinColor} onSelect={(c) => update({ skinColor: c })} palette={palette} size={colorSize} /> : null}
-
-        {category === "hair" ? (
-          <>
-            <ThumbRow base={draft} category="hair" options={hairOptions[draft.gender]} selected={draft.headwear === "none" ? draft.hair : ""} onSelect={(o) => update({ hair: o, headwear: "none" })} palette={palette} />
-            <SwatchRow colors={hairColors} selected={draft.hairColor} onSelect={(c) => update({ hairColor: c })} palette={palette} size={colorSize} />
-          </>
+      <ScrollView
+        ref={optionsRef}
+        style={styles.optionsScroll}
+        contentContainerStyle={styles.optionsContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {active?.field && active.options ? (
+          <ThumbRow
+            base={draft}
+            field={active.field}
+            options={active.options}
+            onSelect={(option) => update({ [active.field as keyof AvatarConfig]: option })}
+            palette={palette}
+          />
         ) : null}
 
-        {category === "headwear" ? (
+        {category === "colors" ? (
           <>
-            <ThumbRow base={draft} category="headwear" options={headwearOptions[draft.gender]} selected={draft.headwear} onSelect={(o) => update({ headwear: o })} palette={palette} />
-            {draft.headwear !== "none" ? (
-              <>
-                <SwatchRow colors={clothesColors} selected={draft.hatColor} onSelect={(c) => update({ hatColor: c })} palette={palette} size={colorSize} />
-              </>
-            ) : null}
-          </>
-        ) : null}
-
-        {category === "eyes" ? <ThumbRow base={draft} category="eyes" options={eyesOptions} selected={draft.eyes} onSelect={(o) => update({ eyes: o })} palette={palette} /> : null}
-        {category === "eyebrows" ? <ThumbRow base={draft} category="eyebrows" options={eyebrowsOptions} selected={draft.eyebrows} onSelect={(o) => update({ eyebrows: o })} palette={palette} /> : null}
-        {category === "mouth" ? <ThumbRow base={draft} category="mouth" options={mouthOptions} selected={draft.mouth} onSelect={(o) => update({ mouth: o })} palette={palette} /> : null}
-
-        {category === "facialHair" ? (
-          <>
-            <ThumbRow base={draft} category="facialHair" options={facialHairOptions[draft.gender]} selected={draft.facialHair} onSelect={(o) => update({ facialHair: o })} palette={palette} />
-            {draft.facialHair !== "none" ? (
-              <>
-                <SwatchRow colors={hairColors} selected={draft.facialHairColor} onSelect={(c) => update({ facialHairColor: c })} palette={palette} size={colorSize} />
-              </>
-            ) : null}
-          </>
-        ) : null}
-
-        {category === "glasses" ? <ThumbRow base={draft} category="glasses" options={accessoriesOptions} selected={draft.accessories} onSelect={(o) => update({ accessories: o })} palette={palette} /> : null}
-
-        {category === "clothes" ? (
-          <>
-            <ThumbRow base={draft} category="clothes" options={clothingOptions} selected={draft.clothing} onSelect={(o) => update({ clothing: o })} palette={palette} />
-            <SwatchRow colors={clothesColors} selected={draft.clothesColor} onSelect={(c) => update({ clothesColor: c })} palette={palette} size={colorSize} />
+            <SwatchRow label="Body" colors={bodyColors} selected={draft.bodyColor} onSelect={(c) => update({ bodyColor: c })} palette={palette} size={colorSize} />
+            <SwatchRow
+              label="Accent"
+              colors={accentColors}
+              selected={draft.accentColor}
+              onSelect={(c) => update({ accentColor: c })}
+              palette={palette}
+              size={colorSize}
+            />
+            <SwatchRow
+              label="Background"
+              colors={backgroundColors}
+              selected={draft.backgroundColor}
+              onSelect={(c) => update({ backgroundColor: c })}
+              palette={palette}
+              size={colorSize}
+            />
           </>
         ) : null}
       </ScrollView>
@@ -344,88 +329,34 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: spacing.sm
   },
-  header: {
-    minHeight: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between"
-  },
-  headerCenter: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  headerTitle: {
-    fontFamily: fontFamilies.lexendBold,
-    fontSize: 17,
-    lineHeight: 22
-  },
-  backIcon: {
-    transform: [{ translateX: 1 }]
-  },
-  saveButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: spacing.xs,
-    paddingLeft: spacing.sm
-  },
   preview: {
     alignItems: "center",
     paddingVertical: spacing.md
   },
-  previewRow: {
+  controlRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.lg
-  },
-  genderArrow: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  previewFrame: {
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  previewCircle: {
-    position: "absolute",
-    width: 156,
-    height: 156,
-    borderRadius: 78
-  },
-  tabScroll: {
-    flexGrow: 0,
-    marginHorizontal: -spacing.lg
-  },
-  tabRow: {
-    paddingHorizontal: spacing.lg,
     gap: spacing.xs
   },
-  tab: {
-    justifyContent: "center",
-    padding: 3,
-    borderRadius: radius.pill
+  // `segment` is flex:1 (so flexBasis:0), which in a one-segment track collapses
+  // to its own padding without a floor. Narrower than the Habits row's 88, since
+  // this one holds a glyph rather than the word "Active".
+  controlShuffle: {
+    flexShrink: 0,
+    minWidth: 60
   },
-  tabActive: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xxs
-  },
-  tabText: {
-    fontFamily: fontFamilies.lexendSemiBold
-  },
-  tabTextInactive: {
-    fontFamily: fontFamilies.lexendMedium
+  controlTabs: {
+    flex: 1
   },
   optionsScroll: {
     flex: 1,
     // Bleed to the screen edges so the first/last item shadows aren't clipped.
-    marginHorizontal: -spacing.lg
+    marginHorizontal: -layout.screenPaddingX
   },
   optionsContent: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: layout.screenPaddingX,
     paddingVertical: spacing.sm,
-    gap: spacing.sm
+    gap: spacing.md
   },
   grid: {
     flexDirection: "row",
@@ -437,6 +368,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     alignItems: "center",
     justifyContent: "center"
+  },
+  swatchBlock: {
+    gap: spacing.xs
+  },
+  swatchLabel: {
+    fontFamily: fontFamilies.lexendSemiBold
   },
   colorGrid: {
     flexDirection: "row",

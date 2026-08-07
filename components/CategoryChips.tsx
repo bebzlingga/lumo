@@ -14,10 +14,10 @@ export const categoryIcons: Record<HabitCategory, IconName> = {
   General: "sparkle",
   Health: "heart",
   Fitness: "weight",
-  Mind: "smiley",
-  Focus: "eye",
+  Mind: "brain",
+  Focus: "target",
   Learning: "book",
-  Social: "emojiHappy",
+  Social: "friends",
   Home: "home",
   Money: "money",
   Creative: "brush"
@@ -34,6 +34,24 @@ export const categoryNamePlaceholders: Record<HabitCategory, string> = {
   Home: "Tidy up the space",
   Money: "Track today's spending",
   Creative: "Sketch for 15 minutes"
+};
+
+/**
+ * A concrete, deliberately tiny starting point per category, used in the habit
+ * form's lead copy. Phrased as the smallest version of the habit — the point is
+ * that it should survive a bad day, not that it should look impressive.
+ */
+export const categorySuggestions: Record<HabitCategory, string> = {
+  General: "one glass of water counts",
+  Health: "one vitamin, one glass of water",
+  Fitness: "five minutes still counts",
+  Mind: "even one slow breath counts",
+  Focus: "a single ten-minute block",
+  Learning: "one page is a real page",
+  Social: "one message to one person",
+  Home: "one surface, not the whole room",
+  Money: "log one purchase",
+  Creative: "one sketch, however rough"
 };
 
 /**

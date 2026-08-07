@@ -1,23 +1,16 @@
+import { useFocusEffect } from "expo-router";
 import React, { ReactNode } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleProp,
-  StyleSheet,
-  Text,
-  TextInput,
-  TextInputProps,
-  TextStyle,
-  View,
-  ViewStyle,
-  useWindowDimensions
-} from "react-native";
+import { ActivityIndicator, Animated, type GestureResponderHandlers, LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, ScrollView, StyleProp, StyleSheet, Text, TextInput, TextInputProps, TextStyle, View, ViewStyle, useWindowDimensions } from "react-native"
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
-import { control, fontFamilies, fontScaleForWidth, radius, spacing, type } from "@/constants/theme";
+import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect as SvgRect, Stop } from "react-native-svg";
+import { DEFAULT_BACKGROUND, type BackgroundVariant } from "@/constants/backgroundAssets";
+import { control, fontFamilies, fontScaleForWidth, layout, radius, spacing, type } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
+import { useTabBarVisibility } from "@/context/TabBarVisibility";
 import { alpha } from "@/lib/color";
 import { Icon, IconName, IconWeight } from "./Icon";
+import { LumoBackground, type BackgroundIntensity } from "./LumoBackground";
+import { Pressable } from "@/components/Pressable"
 
 type TextVariant = keyof typeof type;
 
@@ -44,39 +37,139 @@ export function Screen({
   scroll = true,
   contentStyle,
   edges = ["top", "left", "right"],
+  background,
+  backgroundGradient,
+  backgroundNode,
+  backgroundVariant = DEFAULT_BACKGROUND,
+  backgroundIntensity = "subtle",
   refreshControl,
   onScroll,
-  scrollEventThrottle
+  scrollEventThrottle,
+  resetScrollOnFocus = true,
+  gestureHandlers,
+  stickyHeader
 }: {
   children: ReactNode;
   scroll?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
   edges?: Edge[];
+  // Overrides the default canvas background (e.g. an immersive full-bleed screen).
+  background?: string;
+  // Full-screen vertical gradient behind the content; stops run top (0) → bottom (1).
+  backgroundGradient?: { color: string; offset: number }[];
+  // Pastel landscape plate. Defaults to DEFAULT_BACKGROUND so every screen
+  // carries the same backdrop as onboarding; pass a variant to override, or
+  // `null` to opt out entirely (e.g. immersive full-bleed screens).
+  backgroundVariant?: BackgroundVariant | null;
+  backgroundIntensity?: BackgroundIntensity;
+  // Extra full-screen layer drawn above the gradient but behind the content
+  // (e.g. decorative art that should blend into the background).
+  backgroundNode?: ReactNode;
   // Pull-to-refresh for scrolling screens (ignored when scroll is false).
   refreshControl?: React.ComponentProps<typeof ScrollView>["refreshControl"];
   // Optional scroll passthrough (e.g. for infinite-scroll pagination).
   onScroll?: React.ComponentProps<typeof ScrollView>["onScroll"];
   scrollEventThrottle?: number;
+  /** Screens are re-entered at the top by default. Opt out for a screen where
+   * losing the reader's place is the worse outcome — a paginated feed they
+   * scrolled a long way into, say. */
+  resetScrollOnFocus?: boolean;
+  /** PanResponder handlers spread onto the content view (non-scrolling screens
+   * only) — e.g. swipe-to-navigate in onboarding. */
+  gestureHandlers?: GestureResponderHandlers;
+  /**
+   * A page bar pinned above the scroll area rather than scrolling with it.
+   *
+   * A sibling of the ScrollView, not an overlay: the content then simply
+   * begins beneath it, so nothing has to be padded by the bar's height and
+   * nothing scrolls under a transparent strip. `backgroundNode` still fills
+   * the whole screen behind both.
+   */
+  stickyHeader?: ReactNode;
 }) {
   const { palette, isDark } = useLumo();
+  // Overscroll/bounce past the content should match the gradient's tail (or the flat override).
+  const canvas = backgroundGradient?.[backgroundGradient.length - 1]?.color ?? background ?? palette.canvas;
+  const scrollRef = React.useRef<ScrollView>(null);
+
+  /**
+   * A tab screen stays mounted once visited, so its ScrollView keeps whatever
+   * offset it was left at — come back to Settings and you land halfway down it,
+   * with no idea the page has a top. Every screen re-enters at the top instead.
+   *
+   * Unanimated on purpose: this fires as the screen begins appearing, so the
+   * reset lands before it is on-screen rather than scrolling in front of the
+   * reader. Harmless on first mount, where the offset is already zero.
+   */
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!scroll || !resetScrollOnFocus) {
+        return;
+      }
+
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }, [scroll, resetScrollOnFocus])
+  );
+
+  /**
+   * Scrolling down tucks the floating tab bar away; scrolling back up brings it
+   * in. Driven from here rather than from each tab screen so every page in the
+   * navigator behaves the same, and chained so a screen that wants its own
+   * `onScroll` (infinite scroll, parallax) still gets it. Null off the tabs.
+   */
+  const tabBar = useTabBarVisibility();
+  const handleScroll = React.useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      tabBar?.onScroll(event);
+      onScroll?.(event);
+    },
+    [tabBar, onScroll]
+  );
+  // A screen that can't scroll can't have hidden the bar — but the one that did
+  // may still be mounted behind this one, so it is put back on arrival.
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!scroll) {
+        tabBar?.reveal();
+      }
+    }, [scroll, tabBar])
+  );
 
   return (
-    <SafeAreaView edges={edges} style={[styles.safeArea, { backgroundColor: palette.canvas }]}>
+    <SafeAreaView edges={edges} style={[styles.safeArea, { backgroundColor: canvas }]}>
+      {backgroundGradient ? (
+        <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Defs>
+            <SvgLinearGradient id="screenBgGradient" x1="0" y1="0" x2="0" y2="1">
+              {backgroundGradient.map((stop, index) => (
+                <Stop key={index} offset={stop.offset} stopColor={stop.color} />
+              ))}
+            </SvgLinearGradient>
+          </Defs>
+          <SvgRect x="0" y="0" width="100%" height="100%" fill="url(#screenBgGradient)" />
+        </Svg>
+      ) : null}
+      {backgroundVariant ? <LumoBackground variant={backgroundVariant} intensity={backgroundIntensity} /> : null}
+      {backgroundNode}
+      {stickyHeader ? <View style={styles.stickyHeader}>{stickyHeader}</View> : null}
       {scroll ? (
         <ScrollView
+          ref={scrollRef}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
           automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.screenContent, contentStyle]}
           refreshControl={refreshControl}
-          onScroll={onScroll}
-          scrollEventThrottle={scrollEventThrottle}
+          onScroll={handleScroll}
+          scrollEventThrottle={scrollEventThrottle ?? 16}
         >
           {children}
         </ScrollView>
       ) : (
-        <View style={[styles.screenContent, styles.flex, contentStyle]}>{children}</View>
+        <Animated.View style={[styles.screenContent, styles.flex, contentStyle]} {...gestureHandlers}>
+          {children}
+        </Animated.View>
       )}
     </SafeAreaView>
   );
@@ -120,12 +213,14 @@ export function Card({
   children,
   className,
   style,
-  tone = "card"
+  tone = "card",
+  onLayout
 }: {
   children: ReactNode;
   className?: string;
   style?: StyleProp<ViewStyle>;
   tone?: "card" | "surface" | "glow" | "dark";
+  onLayout?: (event: LayoutChangeEvent) => void;
 }) {
   const { palette, isDark } = useLumo();
   const backgroundColor =
@@ -134,6 +229,7 @@ export function Card({
   return (
     <View
       className={className}
+      onLayout={onLayout}
       style={[
         styles.card,
         {
@@ -206,7 +302,9 @@ export function Button({
           : palette.hairline;
   const surfaceBackgroundColor = customStyle?.backgroundColor ?? backgroundColor;
   const surfaceBorderColor = customStyle?.borderColor ?? borderColor;
-  const surfaceBorderRadius = customStyle?.borderRadius ?? (shape === "pill" ? radius.pill : control.radius);
+  // Every button is a pill app-wide; `shape` is kept so existing call sites
+  // still type-check, but both settings land on the same radius now.
+  const surfaceBorderRadius = customStyle?.borderRadius ?? radius.pill;
   const surfaceBorderWidth = customStyle?.borderWidth ?? StyleSheet.hairlineWidth;
   const color =
     variant === "primary" || variant === "danger"
@@ -305,6 +403,17 @@ export function IconButton({
   );
 }
 
+/**
+ * Field label, matching onboarding: ink-coloured and a step up in size/weight
+ * from caption, so it reads as a heading for its field rather than muted
+ * helper text.
+ */
+/**
+ * A field's name. Set in `subtle`, one step down the text ramp from `ink`: the
+ * label is a question and the value the reader supplies is the answer, so at
+ * full ink weight every form read as a column of headings with the actual
+ * content — the inputs, the pickers — sitting under them at the same strength.
+ */
 export function FieldLabel({ children, style }: { children: ReactNode; style?: StyleProp<TextStyle> }) {
   const { palette } = useLumo();
 
@@ -341,26 +450,51 @@ export function FieldDescription({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Soft lift for a borderless field. With no resting outline the fill alone is
+ * ~1.02:1 against the canvas, so the shadow is what makes the field findable.
+ * Kept shallow — it should read as a raised surface, not a floating card.
+ */
+export const fieldShadow = {
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.03,
+  shadowRadius: 2,
+  elevation: 1
+} as const;
+
 export function controlBorderColor(palette: ReturnType<typeof useLumo>["palette"], isDark: boolean, active = false) {
+  // Focus is the only state that draws an edge; at rest the field is defined
+  // by its fill against the canvas, so the border sits transparent. The border
+  // WIDTH stays constant either way — dropping it would shift the layout by a
+  // pixel on every focus.
   if (active) {
-    return palette.greenDark;
+    return palette.hairlineStrong;
   }
 
-  return isDark ? alpha(palette.greenDark, "5C") : alpha(palette.greenDark, "47");
+  return "transparent";
 }
 
 export function LumoInput(props: TextInputProps) {
-  const { palette, isDark, settings } = useLumo();
+  const { palette, isDark } = useLumo();
   const { width } = useWindowDimensions();
   const [focused, setFocused] = React.useState(false);
-  // The green theme uses a soft green-tinted field instead of the cream surface.
-  const fieldBackground = settings.colorScheme === "green" ? alpha(palette.greenDark, "14") : palette.surface;
+  // Card, not surface — onboarding's fields sit on the lighter surface so
+  // they read as inputs rather than as part of the canvas.
+  const fieldBackground = palette.card;
   const flat = StyleSheet.flatten([
     styles.input,
+    // Single-line only. The field's minHeight sits well above the height of one
+    // line of text, and Android's EditText brings vertical padding of its own,
+    // so the value and its placeholder ended up on the floor of the box instead
+    // of centred in it. A multiline field has to keep its text at the top, so
+    // it is left alone.
+    props.multiline ? null : styles.inputSingleLine,
     {
       backgroundColor: fieldBackground,
       borderColor: controlBorderColor(palette, isDark, focused),
-      color: palette.ink
+      color: palette.ink,
+      shadowColor: palette.shadow,
+      ...fieldShadow
     },
     props.style
   ]) as TextStyle;
@@ -513,8 +647,9 @@ export function LoadingState() {
   const { palette } = useLumo();
 
   return (
-    <Screen scroll={false} contentStyle={styles.centered}>
-      <ActivityIndicator color={palette.green} />
+    <Screen scroll={false} contentStyle={[styles.centered, { gap: spacing.md }]}>
+      <AppText style={{ fontFamily: "Lexend-Black", fontSize: 24, letterSpacing: 1.5, color: palette.ink }}>LUMO</AppText>
+      <ActivityIndicator color={palette.glow} />
     </Screen>
   );
 }
@@ -523,10 +658,18 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1
   },
+  // Carries the screen's own gutter, so a pinned bar lines up with the content
+  // under it without each caller re-stating the padding.
+  stickyHeader: {
+    paddingHorizontal: layout.screenPaddingX,
+    paddingTop: spacing.lg
+  },
   screenContent: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: layout.screenPaddingX,
     paddingTop: spacing.lg,
-    gap: spacing.md
+    // A touch airier than spacing.md so stacked sections breathe instead of
+    // reading as one dense block (the mascot-brand refresh).
+    gap: 20
   },
   flex: {
     flex: 1
@@ -535,12 +678,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center"
   },
+  // Matches the onboarding card treatment: 18pt radius and a soft, wide
+  // shadow rather than a tight one.
   card: {
-    borderRadius: radius.nav,
+    borderRadius: radius.card,
     padding: spacing.lg,
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
+    shadowOpacity: 0.045,
+    shadowRadius: 8,
     elevation: 2
   },
   buttonBase: {
@@ -553,7 +698,7 @@ const styles = StyleSheet.create({
   },
   buttonDefaultSize: {
     minHeight: control.height,
-    borderRadius: control.radius,
+    borderRadius: radius.pill,
     paddingHorizontal: spacing.md
   },
   buttonPill: {
@@ -576,8 +721,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center"
   },
+  // A step under body copy. At 15 it was within a point of the input text it
+  // introduces, so the label and the value it labels carried the same weight.
   label: {
-    fontFamily: fontFamilies.lexendSemiBold
+    fontFamily: fontFamilies.lexendSemiBold,
+    fontSize: 14,
+    lineHeight: 19
   },
   field: {
     gap: spacing.xs
@@ -603,10 +752,17 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.lexend,
     fontSize: 16
   },
+  // Centres one line of text in a box taller than it. `paddingVertical: 0` is
+  // the half that matters on Android, where the platform's own EditText inset
+  // is what pushed the text down.
+  inputSingleLine: {
+    paddingVertical: 0,
+    textAlignVertical: "center"
+  },
   pill: {
     minHeight: 40,
     borderRadius: radius.nav,
-    borderWidth: 2,
+    borderWidth: 1,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     alignItems: "center",

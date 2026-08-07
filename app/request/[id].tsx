@@ -5,7 +5,7 @@ import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, LoadingState, LumoInput, Screen } from "@/components/ui";
-import { fontFamilies, radius, spacing } from "@/constants/theme";
+import { fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { defaultAvatar } from "@/lib/avatar";
 import { alpha } from "@/lib/color";
@@ -397,7 +397,7 @@ export default function RequestDetailScreen() {
                 style={[styles.voterRow, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.hairline }]}
               >
                 <View style={[styles.voterAvatar, { backgroundColor: alpha(palette.greenDark, "10") }]}>
-                  <Avatar config={voter.avatar ?? defaultAvatar()} size={34} rounded={false} />
+                  <Avatar config={voter.avatar ?? defaultAvatar()} size={34} />
                 </View>
                 <View style={styles.voterText}>
                   <AppText variant="bodySmall" color={palette.ink} numberOfLines={1} style={styles.voterName}>
@@ -434,11 +434,11 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
-    marginHorizontal: -spacing.lg,
+    marginHorizontal: -layout.screenPaddingX,
     marginTop: -spacing.xs
   },
   scrollContent: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: layout.screenPaddingX,
     paddingBottom: spacing.xxl,
     gap: spacing.sm
   },
@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
     minHeight: 50,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: layout.screenPaddingX,
     borderRadius: radius.pill
   },
   voteLabel: {
@@ -521,7 +521,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.pill,
-    paddingHorizontal: spacing.lg
+    paddingHorizontal: layout.screenPaddingX
   },
   // Vertical timeline: dot + connecting rail per update.
   timeline: {
@@ -602,7 +602,7 @@ const styles = StyleSheet.create({
   },
   votersCard: {
     borderRadius: radius.nav,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: layout.screenPaddingX,
     paddingVertical: spacing.xs,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.05,

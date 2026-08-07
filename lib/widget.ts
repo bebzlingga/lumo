@@ -26,7 +26,7 @@ export type WidgetTheme = {
 // A completion the widget's Complete button applied while the app was closed.
 export type PendingToggle = { id: string; done: boolean };
 
-// The app's habit icons are custom (iconsax) glyphs SwiftUI can't render, so we
+// The app's habit icons are custom (Phosphor) glyphs SwiftUI can't render, so we
 // map each to the nearest SF Symbol for the widget. Keep in sync with the icon
 // names in components/IconPicker.tsx (categoryIconOptions).
 const SF_SYMBOL_FOR_ICON: Record<string, string> = {

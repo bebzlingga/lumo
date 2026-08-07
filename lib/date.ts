@@ -1,4 +1,7 @@
 export const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+/** Single-letter weekday markers, for dense rows where "Mon" will not fit. */
+export const dayInitials = ["S", "M", "T", "W", "T", "F", "S"] as const;
+
 export const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 
 export function toDateKey(date = new Date()) {
@@ -43,6 +46,28 @@ export function startOfWeek(dateKey: string) {
 
 export function weekRange(dateKey: string) {
   const start = startOfWeek(dateKey);
+  return Array.from({ length: 7 }, (_, index) => addDays(start, index));
+}
+
+/**
+ * Monday-anchored week start — what the charts and group views use.
+ *
+ * Deliberately separate from `startOfWeek` (Sunday), which governs weekly-goal
+ * evaluation; changing that would silently move which days count toward a goal.
+ * Derive Monday here rather than `addDays(startOfWeek(key), 1)`, which lands on
+ * *next* Monday when `key` is itself a Sunday.
+ */
+export function startOfWeekMonday(dateKey: string) {
+  const date = parseDateKey(dateKey);
+  // getDay(): Sun=0 … Sat=6. Shift so Monday is 0 and Sunday is 6.
+  const offset = (date.getDay() + 6) % 7;
+  date.setDate(date.getDate() - offset);
+
+  return toDateKey(date);
+}
+
+export function weekRangeMonday(dateKey: string) {
+  const start = startOfWeekMonday(dateKey);
   return Array.from({ length: 7 }, (_, index) => addDays(start, index));
 }
 

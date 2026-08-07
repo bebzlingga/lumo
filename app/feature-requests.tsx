@@ -1,15 +1,16 @@
 import { Href, useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { Image, RefreshControl, ScrollView, StyleSheet, View } from "react-native"
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SubscriptionGate } from "@/components/SubscriptionGate";
 import { AppText, Card, LoadingState, Screen } from "@/components/ui";
-import { fontFamilies, progressAccents, progressAccentText, radius, spacing } from "@/constants/theme";
+import { fontFamilies, layout, progressAccent, progressAccentText, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { featureBoardService } from "@/lib/featureBoard";
 import { FeatureRequest, FeatureRequestType } from "@/types/habit";
+import { Pressable } from "@/components/Pressable"
 
 type BoardTab = FeatureRequestType | "mine";
 
@@ -242,7 +243,7 @@ function RequestRow({ request }: { request: FeatureRequest }) {
   const { palette, settings } = useLumo();
   const isBug = (request.type ?? "feature") === "bug";
   // Same pop accent as the home screen's TO DO badge.
-  const voteBadgeColor = progressAccents[settings.colorScheme ?? "green"] ?? palette.glow;
+  const voteBadgeColor = progressAccent;
 
   return (
     <Pressable
@@ -392,7 +393,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
-    marginHorizontal: -spacing.lg
+    marginHorizontal: -layout.screenPaddingX
   },
   list: {
     gap: spacing.sm,

@@ -1,7 +1,7 @@
 import { Platform } from "react-native";
 import type { IconName } from "@/components/Icon";
 import { type AvatarConfig } from "@/lib/avatar";
-import { addDays, parseDateKey, startOfWeek, toDateKey } from "@/lib/date";
+import { addDays, parseDateKey, toDateKey, weekRangeMonday } from "@/lib/date";
 import { ensureSignedIn, isSupabaseConfigured, supabase } from "@/lib/supabase";
 import type { GoalType, RepeatSchedule, Weekday } from "@/types/habit";
 
@@ -52,6 +52,9 @@ export type GroupMember = {
   completedTodayHabitIds: string[];
   /** Raw completion count per group-habit id for today (multi-count rings). */
   todayCountByHabit?: Record<string, number>;
+  /** Total completions this member has logged per group-habit id (all time) —
+   * powers per-challenge leaderboards. */
+  contributionByHabit: Record<string, number>;
   /** Mon–Sun status per group-habit id for the current week (stats math). */
   weekByHabit?: Record<string, MemberDayStatus[]>;
   /** Status per group-habit id over Group.gridDays (the history grid). */
@@ -126,6 +129,9 @@ export type Group = {
   avatarSeed?: string;
   /** Rolling day keys (oldest → today) backing each member's historyByHabit. */
   gridDays: string[];
+  /** Distinct day keys any member logged each group-habit id (all-time) — powers
+   * challenge duration progress. */
+  completedDaysByHabit: Record<string, string[]>;
   members: GroupMember[];
   /** Lumo IDs of friends invited but not yet accepted (for the invite sheet). */
   pendingInviteeLumoIds: string[];
@@ -213,6 +219,18 @@ function isFlexibleGoal(goal: GoalType) {
   return goal.type === "weekly" || goal.type === "monthly";
 }
 
+/**
+ * Group habits scheduled on a date — the single rule the roll call, group
+ * streak, and the group screen all share.
+ *
+ * Deliberately NOT `lib/habitMath.isScheduledOnDate`: that one anchors
+ * `interval` schedules to a personal `createdAt` and honours per-habit status,
+ * neither of which exists for a shared group habit.
+ */
+export function scheduledGroupHabitsOn(habits: GroupHabit[], dateKey: string): GroupHabit[] {
+  return habits.filter((habit) => !isFlexibleGoal(habit.goal) && isScheduledOn(habit.repeatSchedule, dateKey));
+}
+
 function isScheduledOn(schedule: RepeatSchedule, dateKey: string) {
   const day = parseDateKey(dateKey).getDay() as Weekday;
 
@@ -230,12 +248,6 @@ function isScheduledOn(schedule: RepeatSchedule, dateKey: string) {
   }
 }
 
-function mondayWeek(todayKey: string) {
-  const monday = addDays(startOfWeek(todayKey), 1);
-  const start = monday > todayKey ? addDays(monday, -7) : monday;
-
-  return Array.from({ length: 7 }, (_, index) => addDays(start, index));
-}
 
 type GroupRowJoined = {
   id: string;
@@ -244,12 +256,19 @@ type GroupRowJoined = {
   weekly_target: number | null;
   avatar_seed: string | null;
   group_habits: GroupHabitRow[];
-  group_members: { member: string; status: "pending" | "accepted"; profiles: ProfileRow }[];
+  group_members: { member: string; status: "pending" | "accepted"; joined_at: string | null; profiles: ProfileRow }[];
 };
 
 type CheckinRow = { group_id: string; member: string; day: string };
 
-function buildGroup(
+/**
+ * Turns the joined Supabase rows for one group into the `Group` the app reads.
+ * Pure — every input is passed in, including `todayKey` — which is what makes
+ * the streak rules testable without a clock or a network.
+ *
+ * Exported for `__tests__/groupStreak.test.ts`; nothing else should call it.
+ */
+export function buildGroup(
   row: GroupRowJoined,
   completions: CompletionRow[],
   checkins: CheckinRow[],
@@ -257,18 +276,47 @@ function buildGroup(
   todayKey: string
 ): Group {
   const habits = (row.group_habits ?? []).map(rowToGroupHabit);
-  const week = mondayWeek(todayKey);
+  const week = weekRangeMonday(todayKey);
   const lastWeekDays = week.map((day) => addDays(day, -7));
   // Rolling window for the activity history grid (oldest → today).
-  const gridDays = Array.from({ length: 14 }, (_, index) => addDays(todayKey, index - 13));
+  const gridDays = Array.from({ length: 21 }, (_, index) => addDays(todayKey, index - 20));
   const countFor = (member: string, habitId: string, day: string) =>
     completions.find((entry) => entry.member === member && entry.habit_id === habitId && entry.day === day)?.count ?? 0;
   const sumWithin = (rows: CompletionRow[], days: string[]) =>
     rows.filter((entry) => days.includes(entry.day)).reduce((sum, entry) => sum + entry.count, 0);
-  const scheduledToday = habits.filter((habit) => !isFlexibleGoal(habit.goal) && isScheduledOn(habit.repeatSchedule, todayKey));
+  const scheduledToday = scheduledGroupHabitsOn(habits, todayKey);
   // Pending invitees aren't members yet — they don't appear or count anywhere,
   // but the invite sheet marks them as already invited.
   const acceptedRows = (row.group_members ?? []).filter((memberRow) => memberRow.status !== "pending");
+
+  /**
+   * Whether a member is answerable for a given day — the rule that keeps a
+   * group's streaks alive when it grows.
+   *
+   * Both streaks below walk backwards asking "did EVERY member do their bit
+   * that day". Evaluated against today's roster alone, a member who joined on
+   * Tuesday has no rows for Monday, so Monday fails and the loop breaks: the
+   * moment someone accepted an invite, a group's 10-day streak read 0. Growing
+   * the group destroyed its history retroactively.
+   *
+   * So a member only counts from their join date, and history they were not
+   * present for is judged on the people who WERE. Plus one grace day: accept an
+   * invite at 9pm with nothing logged and you would otherwise break the streak
+   * on your first night, before having had a day to take part in. Members are
+   * answerable from the day AFTER they joined.
+   *
+   * Missing `joined_at` (older rows, or a local-only group) means we can't
+   * date the membership, so the member counts for every day — the previous
+   * behaviour, which is the safe direction to fail: it can understate a streak,
+   * never inflate one.
+   */
+  const countsOn = (memberRow: { joined_at?: string | null }, day: string) => {
+    if (!memberRow.joined_at) {
+      return true;
+    }
+
+    return day > toDateKey(new Date(memberRow.joined_at));
+  };
   const pendingInviteeLumoIds = (row.group_members ?? [])
     .filter((memberRow) => memberRow.status === "pending" && memberRow.profiles)
     .map((memberRow) => memberRow.profiles.lumo_id);
@@ -279,6 +327,12 @@ function buildGroup(
       const memberId = memberRow.member;
       const memberRows = completions.filter((entry) => entry.member === memberId);
       const contribution = memberRows.reduce((sum, entry) => sum + entry.count, 0);
+      const contributionByHabit: Record<string, number> = {};
+      for (const habit of habits) {
+        contributionByHabit[habit.id] = memberRows
+          .filter((entry) => entry.habit_id === habit.id)
+          .reduce((sum, entry) => sum + entry.count, 0);
+      }
       const completedTodayHabitIds = habits
         .filter((habit) => countFor(memberId, habit.id, todayKey) >= dailyTarget(habit.goal))
         .map((habit) => habit.id);
@@ -320,10 +374,24 @@ function buildGroup(
           : memberRows.some((entry) => entry.day === todayKey && entry.count > 0),
         completedTodayHabitIds,
         todayCountByHabit,
+        contributionByHabit,
         weekByHabit,
         historyByHabit
       };
     });
+
+  // Distinct days any member logged each habit (all-time) — the challenge
+  // duration progress. Built once from every completion row.
+  const completedDaysByHabit: Record<string, string[]> = {};
+  for (const habit of habits) {
+    const days = new Set<string>();
+    for (const entry of completions) {
+      if (entry.habit_id === habit.id && entry.count > 0) {
+        days.add(entry.day);
+      }
+    }
+    completedDaysByHabit[habit.id] = Array.from(days).sort();
+  }
 
   // Last week's recap: totals, per-member MVP, and perfect days.
   const lastWeekTotal = sumWithin(completions, lastWeekDays);
@@ -359,15 +427,16 @@ function buildGroup(
   }
 
   // Streak: consecutive days (ending today, today itself optional) where every
-  // member met every scheduled habit's target.
+  // member who had joined by then met every scheduled habit's target.
   let streak = 0;
   if (members.length && habits.length) {
     for (let offset = 0; offset < 60; offset++) {
       const day = addDays(todayKey, -offset);
-      const scheduled = habits.filter((habit) => !isFlexibleGoal(habit.goal) && isScheduledOn(habit.repeatSchedule, day));
-      const allDone = scheduled.every((habit) =>
-        acceptedRows.every((memberRow) => countFor(memberRow.member, habit.id, day) >= dailyTarget(habit.goal))
-      );
+      const scheduled = scheduledGroupHabitsOn(habits, day);
+      const answerable = acceptedRows.filter((memberRow) => countsOn(memberRow, day));
+      const allDone =
+        answerable.length > 0 &&
+        scheduled.every((habit) => answerable.every((memberRow) => countFor(memberRow.member, habit.id, day) >= dailyTarget(habit.goal)));
 
       if (allDone && scheduled.length) {
         streak += 1;
@@ -377,14 +446,16 @@ function buildGroup(
     }
   }
 
-  // Roll-call streak: consecutive days (today optional) where every member
-  // visited the group page. Independent of habit completion.
+  // Roll-call streak: consecutive days (today optional) where every member who
+  // had joined by then visited the group page. Independent of habit completion,
+  // but grandfathered on the same rule — it broke identically on a new join.
   const checkedInOn = (member: string, day: string) => checkins.some((c) => c.member === member && c.day === day);
   let rollCallStreak = 0;
   if (acceptedRows.length) {
     for (let offset = 0; offset < 60; offset++) {
       const day = addDays(todayKey, -offset);
-      const everyoneVisited = acceptedRows.every((memberRow) => checkedInOn(memberRow.member, day));
+      const answerable = acceptedRows.filter((memberRow) => countsOn(memberRow, day));
+      const everyoneVisited = answerable.length > 0 && answerable.every((memberRow) => checkedInOn(memberRow.member, day));
 
       if (everyoneVisited) {
         rollCallStreak += 1;
@@ -407,6 +478,7 @@ function buildGroup(
     lastWeek,
     avatarSeed: row.avatar_seed ?? undefined,
     gridDays,
+    completedDaysByHabit,
     members,
     pendingInviteeLumoIds,
     ownedByMe: row.owner === userId
@@ -632,7 +704,9 @@ export const friendsService = {
     const { data } = await supabase
       .from("groups")
       .select(
-        "id, name, owner, weekly_target, avatar_seed, group_habits(id, name, icon, color, repeat_schedule, goal), group_members(member, status, profiles(id, lumo_id, nickname, avatar))"
+        // `joined_at` is what stops a new member's empty history breaking the
+        // group's streak — see `countsOn` in buildGroup.
+        "id, name, owner, weekly_target, avatar_seed, group_habits(id, name, icon, color, repeat_schedule, goal), group_members(member, status, joined_at, profiles(id, lumo_id, nickname, avatar))"
       )
       .order("created_at", { ascending: false });
     // Groups where this user is still a pending invitee live on the profile's
@@ -753,6 +827,41 @@ export const friendsService = {
     }
 
     return !error;
+  },
+
+  /**
+   * Adds a single shared activity to a group (e.g. from a productivity
+   * challenge). Mirrors the group_habits insert used when creating a group.
+   */
+  async addGroupActivity(groupId: string, activity: GroupHabit): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const userId = await ensureSignedIn();
+    if (!userId) {
+      return { ok: false, reason: "You're offline. Connect to the internet to start challenges." };
+    }
+
+    const { error } = await supabase.from("group_habits").insert({
+      id: activity.id,
+      group_id: groupId,
+      name: activity.name,
+      icon: activity.icon,
+      color: activity.color ?? null,
+      repeat_schedule: activity.repeatSchedule,
+      goal: activity.goal
+    });
+
+    if (error) {
+      console.warn("[addGroupActivity] insert failed", error);
+      // 42501 = RLS denial. Only the group owner may write group_habits, so a
+      // member tapping Start gets rejected here.
+      const isRlsDenial = error.code === "42501" || /row-level security/i.test(error.message ?? "");
+      return {
+        ok: false,
+        reason: isRlsDenial ? "Only the group's creator can start challenges." : error.message
+      };
+    }
+
+    notifyMembershipChanged();
+    return { ok: true };
   },
 
   /**
@@ -907,6 +1016,7 @@ export const friendsService = {
         weeklyTarget: draft.weeklyTarget,
         avatarSeed: draft.avatarSeed,
         gridDays: [],
+        completedDaysByHabit: {},
         pendingInviteeLumoIds: [],
         ownedByMe: true,
         members: []
@@ -967,6 +1077,7 @@ export const friendsService = {
       weeklyTarget: draft.weeklyTarget,
       avatarSeed: draft.avatarSeed,
       gridDays: [],
+      completedDaysByHabit: {},
       pendingInviteeLumoIds: [],
       ownedByMe: true,
       members: []
@@ -1111,7 +1222,17 @@ export const friendsService = {
 
     // RLS silently skips rows the caller doesn't own — verify one was touched.
     const { data, error } = accept
-      ? await supabase.from("group_members").update({ status: "accepted" }).eq("group_id", groupId).eq("member", userId).select("group_id")
+      ? // `joined_at` is stamped again here, not left at the invite's own
+        // insert time. The streak rule dates a member from `joined_at`, and an
+        // invite sat on for a week would otherwise make them answerable for
+        // days they had not yet accepted — reintroducing the very break the
+        // rule exists to prevent.
+        await supabase
+          .from("group_members")
+          .update({ status: "accepted", joined_at: new Date().toISOString() })
+          .eq("group_id", groupId)
+          .eq("member", userId)
+          .select("group_id")
       : await supabase.from("group_members").delete().eq("group_id", groupId).eq("member", userId).select("group_id");
 
     const changed = !error && ((data ?? []) as unknown[]).length > 0;

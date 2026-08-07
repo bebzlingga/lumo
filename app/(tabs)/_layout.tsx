@@ -1,20 +1,35 @@
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Tabs } from "expo-router";
 import React from "react";
-import { Platform, Pressable, View } from "react-native";
+import { Platform, View } from "react-native"
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { Icon, type IconName } from "@/components/Icon";
 import { AppText } from "@/components/ui";
-import { fontFamilies, layout } from "@/constants/theme";
+import { badgeAccent, badgeAccentText, fontFamilies, layout, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
-import { friendsService, onGroupCompletionsChanged } from "@/lib/friends";
+import { TabBarVisibilityProvider, useTabBarVisibility } from "@/context/TabBarVisibility";
+import { alpha } from "@/lib/color";
+import { friendsService, onGroupCompletionsChanged, scheduledGroupHabitsOn } from "@/lib/friends";
+import { toDateKey } from "@/lib/date";
 import { formatLumoId } from "@/lib/lumoId";
+import { Pressable } from "@/components/Pressable"
+
+/**
+ * Routes that live in the tabs navigator — so the bar stays visible while
+ * they are open — but hold no slot in it.
+ *
+ * This is an explicit list rather than a check on `href: null`: Expo Router
+ * consumes `href` itself, so it never reaches `descriptors[...].options` and a
+ * filter on it silently matches nothing.
+ */
+const HIDDEN_TABS = new Set(["settings"]);
 
 const tabIcons: Record<string, IconName> = {
   today: "home",
   habits: "colorFilter",
-  stats: "chart",
   journal: "book",
-  friends: "friends"
+  friends: "friends",
+  profile: "user"
 };
 
 function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
@@ -25,33 +40,21 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBar
   const loadPendingActivities = React.useCallback(async () => {
     const myLumoId = formatLumoId(lumoIdSuffix);
     const groups = await friendsService.listGroups();
-    const todayDow = new Date().getDay();
+    const todayKey = toDateKey();
     let pending = 0;
 
     for (const group of groups) {
       const me = group.members.find((member) => member.profile.lumoId === myLumoId);
+
       if (!me) {
         continue;
       }
 
-      for (const habit of group.habits) {
-        if (habit.goal.type === "weekly" || habit.goal.type === "monthly") {
-          continue;
-        }
-
-        const scheduled =
-          habit.repeatSchedule.type === "weekdays"
-            ? todayDow >= 1 && todayDow <= 5
-            : habit.repeatSchedule.type === "weekends"
-              ? todayDow === 0 || todayDow === 6
-              : habit.repeatSchedule.type === "specific"
-                ? (habit.repeatSchedule.days as number[]).includes(todayDow)
-                : true;
-
-        if (scheduled && !me.completedTodayHabitIds.includes(habit.id)) {
-          pending += 1;
-        }
-      }
+      // The shared rule, not a copy of it. This used to inline its own reading
+      // of `repeatSchedule`, which meant the badge and the Habits tab could
+      // disagree about what was due — the badge saying two, the list showing
+      // three.
+      pending += scheduledGroupHabitsOn(group.habits, todayKey).filter((habit) => !me.completedTodayHabitIds.includes(habit.id)).length;
     }
 
     setPendingActivities(pending);
@@ -64,13 +67,34 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBar
   }, [state.index, loadPendingActivities]);
 
   React.useEffect(() => onGroupCompletionsChanged(loadPendingActivities), [loadPendingActivities]);
-  // Slightly below the safe-area inset so the bar hugs the screen bottom.
-  const bottomGap = -12;
-  const bottomInset = Math.max(insets.bottom, 0);
-  const shellBackground = isDark ? palette.surface : palette.greenDark;
-  const activeColor = palette.white;
-  const inactiveColor = isDark ? palette.muted : palette.greenSoft;
-  const activeBackground = isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0.14)";
+  // Lifted clear of the bottom edge rather than tucked under the safe-area
+  // inset — the bar is a floating shell, and pulled down into the home
+  // indicator it read as docked chrome. The floor covers phones that report no
+  // bottom inset at all, where the bar would otherwise sit flush on the edge.
+  const bottomGap = 0;
+  const bottomInset = Math.max(insets.bottom, spacing.sm);
+  // Scrolling down slides the bar out; scrolling back up returns it. It travels
+  // its full height plus the gutter so the shadow clears the edge too, and
+  // fades on the way so it doesn't read as a slab sliding under the content.
+  const tabBar = useTabBarVisibility();
+  const hiddenTravel = layout.floatingTabBarHeight + bottomInset + bottomGap + spacing.md;
+  const hideStyle = useAnimatedStyle(() => {
+    const hidden = tabBar?.hidden.value ?? 0;
+
+    return { transform: [{ translateY: hidden * hiddenTravel }], opacity: 1 - hidden };
+  });
+  // A tab switch always brings it back — the new screen starts at its own
+  // offset, and arriving to a bar the PREVIOUS page scrolled away is a tab bar
+  // that has gone missing for no reason the reader can see.
+  React.useEffect(() => {
+    tabBar?.reveal();
+  }, [state.index, tabBar]);
+  // Light warm shell to match the onboarding surfaces, rather than a solid
+  // green slab — the sage now reads as the ACTIVE state instead of the chrome.
+  const shellBackground = isDark ? palette.surface : palette.card;
+  const activeColor = isDark ? palette.greenActive : palette.greenDark;
+  const inactiveColor = palette.muted;
+  const activeBackground = isDark ? alpha(palette.greenActive, "1F") : palette.greenSoft;
 
   function renderRoute(route: (typeof state.routes)[number]) {
     const index = state.routes.findIndex((item) => item.key === route.key);
@@ -83,7 +107,7 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBar
     return (
       <Pressable
         key={route.key}
-        className="h-[58px] min-w-0 flex-1 basis-0 items-center justify-center rounded-[18px] px-2"
+        className="h-[58px] min-w-0 flex-1 basis-0 items-center justify-center px-2"
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityState={isFocused ? { selected: true } : undefined}
@@ -99,17 +123,20 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBar
             navigation.navigate(route.name, route.params);
           }
         }}
-        style={({ pressed }) => [
-          {
-            backgroundColor: isFocused ? activeBackground : "transparent",
-            opacity: pressed ? 0.72 : 1
-          },
-        ]}
+        style={({ pressed }) => [{ opacity: pressed ? 0.72 : 1 }]}
       >
+        {/* The active fill lives on THIS box, not on the Pressable — the
+            Pressable stays the full 58pt cell so the touch target does not
+            shrink with the highlight, which now sits 6pt inside it top and
+            bottom and 8pt in on each side (the cell's own px-2). */}
+        <View
+          className="h-[46px] w-full items-center justify-center rounded-[16px]"
+          style={{ backgroundColor: isFocused ? activeBackground : "transparent" }}
+        >
         {/* Dim only the icon/label — the badge stays vivid on inactive tabs. */}
         <View>
           <View style={{ opacity: isFocused ? 1 : 0.7 }}>
-            <Icon name={tabIcons[route.name] ?? "grid"} size={25} color={color} weight="bulk" />
+            <Icon name={tabIcons[route.name] ?? "grid"} size={25} color={color} weight={isFocused ? "fill" : "bulk"} />
           </View>
           {route.name === "friends" && pendingActivities > 0 ? (
             <View
@@ -124,12 +151,12 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBar
                 paddingHorizontal: 3,
                 alignItems: "center",
                 justifyContent: "center",
-                backgroundColor: palette.danger
+                backgroundColor: badgeAccent
               }}
             >
               <AppText
                 variant="caption"
-                color={palette.white}
+                color={badgeAccentText}
                 style={{ fontSize: 9, lineHeight: 12, fontFamily: fontFamilies.lexendBold }}
               >
                 {pendingActivities > 9 ? "9+" : pendingActivities}
@@ -145,18 +172,23 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBar
         >
           {label}
         </AppText>
+        </View>
       </Pressable>
     );
   }
 
   return (
-    <View
+    <Animated.View
       pointerEvents="box-none"
-      className="absolute inset-x-0 bottom-0 items-center justify-end bg-transparent px-6"
-      style={{ paddingBottom: bottomInset + bottomGap }}
+      className="absolute inset-x-0 bottom-0 items-center justify-end bg-transparent"
+      // Same gutter every screen's content uses, so the bar's edges line up
+      // with the cards above it rather than sitting 8pt wider.
+      style={[{ paddingHorizontal: layout.screenPaddingX, paddingBottom: bottomInset + bottomGap }, hideStyle]}
     >
       <View
-        className="w-full rounded-[22px]"
+        // 28 (radius.sheet), not 22 — a 72pt-tall bar carried its old corner
+        // like a card rather than like the floating shell it is.
+        className="w-full rounded-[28px]"
         style={{
           height: layout.floatingTabBarHeight,
           backgroundColor: shellBackground,
@@ -172,68 +204,72 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBar
         }}
       >
         <View className="h-full w-full flex-row items-center justify-center px-5">
-          {state.routes.filter((route) => route.name !== "settings").map(renderRoute)}
+          {state.routes.filter((route) => !HIDDEN_TABS.has(route.name)).map(renderRoute)}
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
 export default function TabLayout() {
   return (
-    <Tabs
-      initialRouteName="today"
-      tabBar={(props) => <FloatingTabBar {...props} />}
-      screenOptions={{
-        animation: "shift",
-        headerShown: false,
-        transitionSpec: {
-          animation: "timing",
-          config: {
-            duration: 240
+    // Wraps the navigator so the bar and the screens whose scrolling drives it
+    // share one signal — `tabBar` renders inside `Tabs`, so both are below this.
+    <TabBarVisibilityProvider>
+      <Tabs
+        initialRouteName="today"
+        tabBar={(props) => <FloatingTabBar {...props} />}
+        screenOptions={{
+          animation: "shift",
+          headerShown: false,
+          transitionSpec: {
+            animation: "timing",
+            config: {
+              duration: 240
+            }
           }
-        }
-      }}
-    >
-      <Tabs.Screen
-        name="today"
-        options={{
-          title: "Today"
         }}
-      />
-      <Tabs.Screen
-        name="habits"
-        options={{
-          title: "Habits"
-        }}
-      />
-      <Tabs.Screen
-        name="friends"
-        options={{
-          title: "Friends"
-        }}
-      />
-      <Tabs.Screen
-        name="journal"
-        options={{
-          title: "Journal"
-        }}
-      />
-      <Tabs.Screen
-        name="stats"
-        options={{
-          title: "Insights"
-        }}
-      />
-      {/* Hidden from the tab bar, but kept in the tabs navigator so the bottom
-          navigation pane still shows while the Settings screen is open. */}
-      <Tabs.Screen
-        name="settings"
-        options={{
-          href: null,
-          title: "Settings"
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="today"
+          options={{
+            title: "Today"
+          }}
+        />
+        <Tabs.Screen
+          name="habits"
+          options={{
+            title: "Habits"
+          }}
+        />
+        <Tabs.Screen
+          name="friends"
+          options={{
+            title: "Friends"
+          }}
+        />
+        <Tabs.Screen
+          name="journal"
+          options={{
+            title: "Journal"
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: "Profile"
+          }}
+        />
+        {/* Hidden from the tab bar, but kept in the tabs navigator so the bottom
+            navigation pane still shows while the Settings screen is open. */}
+        <Tabs.Screen
+          name="settings"
+          options={{
+            href: null,
+            title: "Settings"
+          }}
+        />
+      </Tabs>
+    </TabBarVisibilityProvider>
   );
 }

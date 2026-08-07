@@ -1,90 +1,110 @@
-import {
-  Add,
-  AddCircle,
-  Activity,
-  Archive,
-  ArrowDown2,
-  ArrowDown3,
-  ArrowLeft,
-  ArrowLeft3,
-  ArrowRight,
-  ArrowRight3,
-  ArrowUp3,
-  ArrowRotateRight,
-  Award,
-  Book,
-  Book1,
-  Broom,
-  Brush,
-  Calendar,
-  Chart2,
-  ChartSquare,
-  Check,
-  Clock,
-  CloseCircle,
-  CloudPlus,
-  Coffee,
-  Crown1,
-  Colorfilter,
-  Cup,
-  DocumentDownload,
-  DocumentUpload,
-  Drop,
-  Edit,
-  ElementPlus,
-  EmojiHappy,
-  EmojiNormal,
-  EmojiSad,
-  Eye,
-  EyeSlash,
-  Facebook,
-  Flash,
-  Flashy,
-  GalleryAdd,
-  Glass,
-  Grid4,
-  Headphone,
-  Health,
-  Heart,
-  Home,
-  MagicStar,
-  MessageEdit,
-  Messages,
-  Milk,
-  MinusCirlce,
-  Microphone2,
-  Money,
-  Moon,
-  Note,
-  Notification,
-  Paperclip,
-  Pause,
-  Play,
-  Profile2User,
-  Setting2,
-  Smileys,
-  Star,
-  Sun,
-  TaskSquare,
-  TickCircle,
-  Timer,
-  UserCirlceAdd,
-  Trash,
-  Tree,
-  Weight,
-  type Icon as IconsaxIcon,
-  type IconProps as IconsaxIconProps
-} from "iconsax-react-native";
 import React from "react";
+import type { StyleProp, TextStyle, ViewStyle } from "react-native";
+import {
+  ArchiveIcon,
+  ArrowClockwiseIcon,
+  ArrowDownIcon,
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  ArrowUpIcon,
+  BarbellIcon,
+  BellIcon,
+  BookIcon,
+  BookOpenIcon,
+  BrainIcon,
+  BookmarkSimpleIcon,
+  BroomIcon,
+  CalendarBlankIcon,
+  CaretDownIcon,
+  ChartBarIcon,
+  ChartLineUpIcon,
+  ChatCircleTextIcon,
+  ChatsCircleIcon,
+  CheckCircleIcon,
+  CheckIcon,
+  ClockIcon,
+  CloudArrowUpIcon,
+  CoffeeIcon,
+  CrownIcon,
+  DotsThreeVerticalIcon,
+  DownloadSimpleIcon,
+  DropIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  FacebookLogoIcon,
+  FireIcon as PhosphorFireIcon,
+  GearIcon,
+  HeadphonesIcon,
+  HeartIcon,
+  HeartbeatIcon,
+  HouseIcon,
+  ImageIcon,
+  JarIcon,
+  LightningIcon,
+  ListChecksIcon,
+  LockIcon,
+  MedalIcon,
+  MicrophoneIcon,
+  MinusCircleIcon,
+  MoneyIcon,
+  MagnifyingGlassIcon,
+  MoonIcon,
+  NoteIcon,
+  PaintBrushIcon,
+  PillIcon,
+  PaletteIcon,
+  PaperclipIcon,
+  PauseIcon,
+  PencilSimpleIcon,
+  PlayIcon,
+  PlusCircleIcon,
+  QrCodeIcon,
+  PlusIcon,
+  PlusSquareIcon,
+  PulseIcon,
+  SelectionPlusIcon,
+  SlidersHorizontalIcon,
+  SmileyIcon,
+  SmileyWinkIcon,
+  SmileyXEyesIcon,
+  SmileyMehIcon,
+  SmileySadIcon,
+  ShuffleIcon,
+  SparkleIcon,
+  TargetIcon,
+  SquaresFourIcon,
+  StarIcon,
+  SunIcon,
+  TimerIcon,
+  TrashIcon,
+  TreeIcon,
+  TrophyIcon,
+  UploadSimpleIcon,
+  UserCirclePlusIcon,
+  UserCircleIcon,
+  UserIcon,
+  UsersThreeIcon,
+  WineIcon,
+  XCircleIcon,
+  type Icon as PhosphorIcon,
+  type IconWeight as PhosphorWeight
+} from "phosphor-react-native";
 import { FireIcon } from "./FireIcon";
 
-type IconsaxVariant = NonNullable<IconsaxIconProps["variant"]>;
-
+/**
+ * Central icon registry, backed by Phosphor.
+ *
+ * `IconName` values are PERSISTED (a habit stores its icon as one of these
+ * strings, see Habit.emoji), so names must never be removed or renamed —
+ * only their underlying glyph may change.
+ */
 export type IconWeight = "linear" | "outline" | "thin" | "light" | "regular" | "bold" | "fill" | "duotone" | "bulk";
 
 export type IconName =
   | "activity"
   | "archive"
+  | "bookmark"
+  | "lock"
   | "arrowDown"
   | "arrowLeft"
   | "arrowRight"
@@ -92,6 +112,7 @@ export type IconName =
   | "award"
   | "back"
   | "book"
+  | "brain"
   | "book1"
   | "broom"
   | "brush"
@@ -105,6 +126,7 @@ export type IconName =
   | "colorFilter"
   | "close"
   | "coffee"
+  | "dotsThree"
   | "drop"
   | "download"
   | "edit"
@@ -132,21 +154,29 @@ export type IconName =
   | "minusCircle"
   | "microphone"
   | "money"
+  | "moodGreat"
+  | "moodStruggling"
   | "moon"
   | "note"
   | "attachment"
   | "notifications"
   | "friends"
   | "pause"
+  | "pill"
   | "play"
   | "plus"
   | "plusCircle"
   | "plusDashed"
+  | "qrCode"
   | "refresh"
+  | "search"
   | "settings"
+  | "shuffle"
+  | "sliders"
   | "smiley"
   | "sparkle"
   | "star"
+  | "target"
   | "streakFire"
   | "sun"
   | "taskSquare"
@@ -155,121 +185,160 @@ export type IconName =
   | "tree"
   | "trophy"
   | "upload"
+  | "user"
+  | "userCircle"
   | "userCircleAdd"
   | "weight"
   | "zap";
 
-const iconMap: Record<IconName, IconsaxIcon> = {
-  activity: Activity,
-  archive: Archive,
-  arrowDown: ArrowDown3,
-  arrowLeft: ArrowLeft,
-  arrowRight: ArrowRight,
-  arrowUp: ArrowUp3,
-  award: Award,
-  back: ArrowLeft3,
-  book: Book,
-  book1: Book1,
-  broom: Broom,
-  brush: Brush,
-  calendar: Calendar,
-  chart: ChartSquare,
-  chart2: Chart2,
-  check: Check,
-  checkCircle: TickCircle,
-  chevronDown: ArrowDown2,
-  clock: Clock,
-  colorFilter: Colorfilter,
-  close: CloseCircle,
-  coffee: Coffee,
-  drop: Drop,
-  download: DocumentDownload,
-  edit: Edit,
-  cloudPlus: CloudPlus,
-  crown1: Crown1,
-  elementPlus: ElementPlus,
-  emojiHappy: EmojiHappy,
-  emojiNormal: EmojiNormal,
-  emojiSad: EmojiSad,
-  eye: Eye,
-  eyeSlash: EyeSlash,
-  facebook: Facebook,
-  fire: Flashy,
-  forward: ArrowRight3,
-  gallery: GalleryAdd,
-  glass: Glass,
-  grid: Grid4,
-  headphone: Headphone,
-  health: Health,
-  heart: Heart,
-  home: Home,
-  milk: Milk,
-  minusCircle: MinusCirlce,
-  microphone: Microphone2,
-  money: Money,
-  moon: Moon,
-  note: Note,
-  attachment: Paperclip,
-  notifications: Notification,
-  friends: Profile2User,
-  pause: Pause,
-  play: Play,
-  plus: Add,
-  plusCircle: AddCircle,
-  plusDashed: AddCircle,
-  refresh: ArrowRotateRight,
-  settings: Setting2,
-  smiley: Smileys,
-  sparkle: MagicStar,
-  messageEdit: MessageEdit,
-  messages: Messages,
-  star: Star,
+const iconMap: Record<IconName, PhosphorIcon> = {
+  activity: PulseIcon,
+  archive: ArchiveIcon,
+  bookmark: BookmarkSimpleIcon,
+  lock: LockIcon,
+  arrowDown: ArrowDownIcon,
+  arrowLeft: ArrowLeftIcon,
+  arrowRight: ArrowRightIcon,
+  arrowUp: ArrowUpIcon,
+  award: MedalIcon,
+  back: ArrowLeftIcon,
+  book: BookOpenIcon,
+  brain: BrainIcon,
+  book1: BookIcon,
+  broom: BroomIcon,
+  brush: PaintBrushIcon,
+  calendar: CalendarBlankIcon,
+  chart: ChartBarIcon,
+  chart2: ChartLineUpIcon,
+  check: CheckIcon,
+  checkCircle: CheckCircleIcon,
+  chevronDown: CaretDownIcon,
+  clock: ClockIcon,
+  colorFilter: PaletteIcon,
+  close: XCircleIcon,
+  coffee: CoffeeIcon,
+  dotsThree: DotsThreeVerticalIcon,
+  drop: DropIcon,
+  download: DownloadSimpleIcon,
+  edit: PencilSimpleIcon,
+  cloudPlus: CloudArrowUpIcon,
+  crown1: CrownIcon,
+  elementPlus: PlusSquareIcon,
+  emojiHappy: SmileyIcon,
+  emojiNormal: SmileyMehIcon,
+  emojiSad: SmileySadIcon,
+  eye: EyeIcon,
+  eyeSlash: EyeSlashIcon,
+  facebook: FacebookLogoIcon,
+  fire: PhosphorFireIcon,
+  forward: ArrowRightIcon,
+  gallery: ImageIcon,
+  glass: WineIcon,
+  grid: SquaresFourIcon,
+  headphone: HeadphonesIcon,
+  health: HeartbeatIcon,
+  heart: HeartIcon,
+  home: HouseIcon,
+  // Phosphor has no milk glyph; a jar is the closest honest stand-in.
+  milk: JarIcon,
+  minusCircle: MinusCircleIcon,
+  microphone: MicrophoneIcon,
+  money: MoneyIcon,
+  moodGreat: SmileyWinkIcon,
+  moodStruggling: SmileyXEyesIcon,
+  moon: MoonIcon,
+  note: NoteIcon,
+  attachment: PaperclipIcon,
+  notifications: BellIcon,
+  friends: UsersThreeIcon,
+  pause: PauseIcon,
+  pill: PillIcon,
+  play: PlayIcon,
+  plus: PlusIcon,
+  plusCircle: PlusCircleIcon,
+  plusDashed: SelectionPlusIcon,
+  qrCode: QrCodeIcon,
+  refresh: ArrowClockwiseIcon,
+  search: MagnifyingGlassIcon,
+  settings: GearIcon,
+  shuffle: ShuffleIcon,
+  sliders: SlidersHorizontalIcon,
+  smiley: SmileyIcon,
+  sparkle: SparkleIcon,
+  target: TargetIcon,
+  messageEdit: ChatCircleTextIcon,
+  messages: ChatsCircleIcon,
+  star: StarIcon,
   // Placeholder mapping — "streakFire" short-circuits to the FireIcon SVG in
-  // the Icon component and never reaches the iconsax map.
-  streakFire: Flashy,
-  sun: Sun,
-  taskSquare: TaskSquare,
-  timer: Timer,
-  trash: Trash,
-  tree: Tree,
-  trophy: Cup,
-  upload: DocumentUpload,
-  userCircleAdd: UserCirlceAdd,
-  weight: Weight,
-  zap: Flash
+  // the Icon component and never reaches this map.
+  streakFire: PhosphorFireIcon,
+  sun: SunIcon,
+  taskSquare: ListChecksIcon,
+  timer: TimerIcon,
+  trash: TrashIcon,
+  tree: TreeIcon,
+  trophy: TrophyIcon,
+  upload: UploadSimpleIcon,
+  user: UserIcon,
+  userCircle: UserCircleIcon,
+  userCircleAdd: UserCirclePlusIcon,
+  weight: BarbellIcon,
+  zap: LightningIcon
 };
 
 export function isIconName(value: string): value is IconName {
   return value in iconMap;
 }
 
-const weightVariantMap: Record<IconWeight, IconsaxVariant> = {
-  linear: "Linear",
-  outline: "Outline",
-  thin: "TwoTone",
-  light: "TwoTone",
-  regular: "TwoTone",
-  bold: "TwoTone",
-  fill: "TwoTone",
-  duotone: "TwoTone",
-  bulk: "Bulk"
+/**
+ * Maps this app's weight vocabulary onto Phosphor's six weights.
+ *
+ * "bulk" (by far the most-used here) was Iconsax's two-tone style, so it maps
+ * to Phosphor's `duotone`. Phosphor's duotone defaults to a fainter 0.2 back
+ * layer than Iconsax's, so DUOTONE_OPACITY nudges it back toward the density
+ * the app was designed against.
+ */
+const weightMap: Record<IconWeight, PhosphorWeight> = {
+  linear: "regular",
+  outline: "regular",
+  thin: "thin",
+  light: "light",
+  regular: "regular",
+  bold: "bold",
+  fill: "fill",
+  duotone: "duotone",
+  bulk: "duotone"
 };
+
+const DUOTONE_OPACITY = 0.3;
 
 export function Icon({
   name,
   size = 20,
   color,
   weight = "regular",
-  ...props
-}: Omit<IconsaxIconProps, "variant"> & {
+  style
+}: {
   name: IconName;
+  size?: number | string;
+  color?: string;
   weight?: IconWeight;
+  style?: StyleProp<ViewStyle | Omit<TextStyle, "cursor">>;
 }) {
   if (name === "streakFire") {
     return <FireIcon size={typeof size === "number" ? size : 20} />;
   }
 
   const Component = iconMap[name];
+  const phosphorWeight = weightMap[weight];
 
-  return <Component {...props} color={color} size={size} variant={weightVariantMap[weight]} />;
+  return (
+    <Component
+      color={color}
+      size={size}
+      weight={phosphorWeight}
+      style={style}
+      duotoneOpacity={phosphorWeight === "duotone" ? DUOTONE_OPACITY : undefined}
+    />
+  );
 }

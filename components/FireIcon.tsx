@@ -3,7 +3,8 @@ import Svg, { Path } from "react-native-svg";
 
 /** Font Awesome Free v7.3.0 fire glyph (CC BY 4.0) — rendered in a fixed fire
  * orange so streak flames read as fire regardless of the surrounding tint. */
-const FIRE_COLOR = "#FF7A1A";
+/** The flame's own orange — a streak reads as fire, not as the app accent. */
+export const FIRE_COLOR = "#FF7A1A";
 
 export function FireIcon({ size = 20, color = FIRE_COLOR }: { size?: number; color?: string }) {
   return (

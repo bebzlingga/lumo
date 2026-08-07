@@ -5,8 +5,9 @@ import { HabitIcon } from "@/components/HabitIcon";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Card, LoadingState, Screen } from "@/components/ui";
-import { fontFamilies, layout, radius, spacing } from "@/constants/theme";
+import { fontFamilies, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
+import { alpha } from "@/lib/color";
 
 function formatDeletedAt(iso?: string) {
   if (!iso) {
@@ -50,19 +51,12 @@ export default function TrashScreen() {
 
   return (
     <Screen contentStyle={styles.content}>
+      {/* Nothing to empty when the trash is empty, so the action goes with it. */}
       <ScreenHeader
+        title="Trash"
         leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }}
-        centerContent={
-          <AppText variant="titleSmall" color={palette.ink} style={styles.headerTitle}>
-            Trash
-          </AppText>
-        }
-        rightAction={{ icon: "trash", label: "Delete all", onPress: confirmEmptyTrash, iconSize: 21 }}
+        rightAction={deletedHabits.length ? { icon: "trash", label: "Delete all", onPress: confirmEmptyTrash } : undefined}
       />
-
-      <AppText variant="bodySmall" color={palette.subtle} style={styles.intro}>
-        Deleted habits stay here so you can restore them. Permanently deleting removes a habit and its history for good.
-      </AppText>
 
       {deletedHabits.length ? (
         <View style={styles.list}>
@@ -88,7 +82,7 @@ export default function TrashScreen() {
                   style={styles.action}
                   onPress={() => confirmRestore(habit.id, habit.name)}
                 >
-                  <Icon name="refresh" size={23} color={palette.greenDark} weight="bulk" />
+                  <Icon name="refresh" size={19} color={palette.greenDark} weight="bulk" />
                 </Pressable>
                 <Pressable
                   accessibilityLabel="Delete"
@@ -96,44 +90,92 @@ export default function TrashScreen() {
                   style={styles.action}
                   onPress={() => confirmPermanentDelete(habit.id, habit.name)}
                 >
-                  <Icon name="trash" size={20} color={palette.danger} weight="bulk" />
+                  <Icon name="trash" size={17} color={palette.danger} weight="bulk" />
                 </Pressable>
               </View>
             </Card>
           ))}
         </View>
-      ) : null}
+      ) : (
+        // Carries the explanation the intro line used to, but only when it is
+        // actually useful — once there is a list, the rows speak for themselves.
+        <View style={styles.empty}>
+          {/* Neutral rather than the brand green — an empty trash is a state of
+              affairs, not something to draw the eye to. */}
+          <View style={[styles.emptyIcon, { backgroundColor: alpha(palette.muted, "1F") }]}>
+            <Icon name="trash" size={28} color={palette.muted} weight="bulk" />
+          </View>
+          <AppText variant="titleSmall" color={palette.ink} style={styles.emptyTitle}>
+            Nothing in the trash
+          </AppText>
+          <AppText variant="bodySmall" color={palette.subtle} style={styles.emptyBody}>
+            Habits you delete land here first, so you can bring one back if you change your mind.
+          </AppText>
+        </View>
+      )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    paddingBottom: layout.tabScreenBottomPadding,
+    // Not a tab screen — it is pushed from Settings, so the floating tab bar
+    // never covers it and the 144pt of clearance it reserved was dead space.
+    paddingBottom: spacing.xxl,
+    // Lets the empty state flex into the height left under the header.
+    flexGrow: 1,
     gap: spacing.md
   },
-  headerTitle: {
-    fontFamily: fontFamilies.lexendBold,
-    fontSize: 19,
-    lineHeight: 24,
-    transform: [{ translateY: -8 }]
+  // Fills the space left under the header so the block sits in the middle of
+  // the screen rather than hanging off the top of it. Needs `flexGrow` on the
+  // content container above to have any space to fill.
+  empty: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    // Sits the block above the true centre — a lone message reads better high
+    // in the space than marooned in the middle of it.
+    paddingBottom: 160
   },
-  intro: {
-    fontSize: 15,
-    lineHeight: 21
+  emptyIcon: {
+    width: 60,
+    height: 60,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.xl,
+    marginBottom: spacing.xs
+  },
+  emptyTitle: {
+    fontFamily: fontFamilies.lexendBold,
+    fontSize: 17,
+    lineHeight: 23
+  },
+  emptyBody: {
+    fontFamily: fontFamilies.lexend,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
+    maxWidth: 280
   },
   list: {
     gap: spacing.sm
   },
+  // Card defaults to spacing.lg; a list row uses the spacing.md inset every
+  // other list card in the app carries.
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.card
   },
+  // Rounded square, matching the icon tile every other list row in the app uses.
   icon: {
     width: 40,
     height: 40,
-    borderRadius: radius.pill,
+    borderRadius: radius.lg,
     alignItems: "center",
     justifyContent: "center"
   },

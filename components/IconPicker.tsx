@@ -12,12 +12,12 @@ const ICON_SIZE = 22;
 
 export const categoryIconOptions: Record<HabitCategory, IconName[]> = {
   General: ["sparkle", "star", "taskSquare", "note", "calendar", "checkCircle", "grid", "elementPlus"],
-  Health: ["health", "heart", "drop", "milk", "glass", "moon", "sun", "weight"],
+  Health: ["health", "pill", "heart", "drop", "milk", "glass", "moon", "sun"],
   Fitness: ["weight", "activity", "fire", "zap", "trophy", "heart", "timer", "award"],
-  Mind: ["moon", "smiley", "emojiHappy", "sun", "sparkle", "tree", "heart", "star"],
-  Focus: ["eye", "timer", "clock", "taskSquare", "chart", "zap", "note", "book"],
+  Mind: ["brain", "moon", "smiley", "sun", "sparkle", "tree", "heart", "star"],
+  Focus: ["target", "eye", "timer", "clock", "taskSquare", "chart", "zap", "note"],
   Learning: ["book", "note", "edit", "award", "headphone", "chart", "taskSquare", "star"],
-  Social: ["emojiHappy", "heart", "smiley", "coffee", "headphone", "facebook", "star", "sparkle"],
+  Social: ["friends", "emojiHappy", "heart", "smiley", "coffee", "headphone", "messages", "sparkle"],
   Home: ["home", "broom", "tree", "coffee", "milk", "drop", "note", "sun"],
   Money: ["money", "chart", "trophy", "award", "star", "calendar", "taskSquare", "archive"],
   Creative: ["brush", "edit", "sparkle", "note", "headphone", "star", "drop", "coffee"]

@@ -1,4 +1,5 @@
-import type { ThemeColorScheme } from "@/constants/theme";
+
+import type { CheckInSchedule, CheckInTimes } from "@/constants/checkIns";
 
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -60,6 +61,13 @@ export type Habit = {
   goal: GoalType;
   createdAt: string;
   completions: CompletionEntry[];
+  /**
+   * Days deliberately skipped, as date keys. A skip is not a miss — it marks
+   * the day as not expected, so the streak survives it.
+   */
+  skips?: string[];
+  /** Free-text note the user keeps against the habit. */
+  notes?: string;
   status: HabitStatus;
   notificationIds?: string[];
   // Set when the habit is soft-deleted (moved to Trash).
@@ -82,10 +90,25 @@ export type HabitDraft = {
   goal: GoalType;
 };
 
-export type JournalMood = "happy" | "neutral" | "sad";
+/**
+ * Five-point mood scale. "happy" | "neutral" | "sad" are the original three and
+ * are kept verbatim so entries saved before the scale widened still resolve —
+ * they now read as Great / Okay / Down, with Good and Struggling added either
+ * side of the middle.
+ */
+export type JournalMood = "happy" | "good" | "neutral" | "sad" | "struggling";
+
+/**
+ * How many entries a single day can hold. Entries carry their own id rather
+ * than being keyed by date, so this can be raised without a migration — legacy
+ * entries adopt their date as their id when they load.
+ */
+export const MAX_JOURNALS_PER_DAY = 1;
 
 export type JournalEntry = {
-  // One entry per day, keyed by date (YYYY-MM-DD).
+  /** Stable per-entry id; a day holds up to `MAX_JOURNALS_PER_DAY` of them. */
+  id: string;
+  // The day the entry is filed under (YYYY-MM-DD).
   date: string;
   // Optional big header/title for the entry.
   title?: string;
@@ -94,6 +117,8 @@ export type JournalEntry = {
   photoUri?: string;
   // Optional mood for the day.
   mood?: JournalMood;
+  /** Free-form labels chosen from `journalTags`. */
+  tags?: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -128,13 +153,44 @@ export type BackupFrequency = "daily" | "weekly" | "monthly";
 
 export type AppSettings = {
   themeMode: ThemeMode;
-  colorScheme: ThemeColorScheme;
   notificationStatus: "unknown" | "granted" | "denied" | "undetermined";
   notificationsEnabled: boolean;
   autoBackupEnabled: boolean;
   backupFrequency: BackupFrequency;
-  // Active Lumo Plus subscription (₱29/month) — gates the social features
-  // (Friends + Feature Board). All core features are free; see lib/iap.ts.
+  /**
+   * Friends subscription (₱49/month) — gates the social features: Friends,
+   * groups, and the Feature Board.
+   */
   isPro: boolean;
+  /**
+   * Unlimited unlock (₱149, once) — lifts the free caps on how many habits and
+   * journal entries can be kept.
+   *
+   * A separate entitlement from `isPro`, not a tier above it: the two products
+   * are sold independently, so someone can hold either, both, or neither. See
+   * lib/iap.ts.
+   */
+  isUnlimited: boolean;
   lastBackupAt?: string;
+  /**
+   * High-water mark for the longest streak ever reached, across every habit.
+   *
+   * Badges are earned, not held: deriving them from the CURRENT habits meant
+   * deleting the habit that earned a milestone silently took the badge back,
+   * and so did importing a backup that no longer contained it. This only ever
+   * rises.
+   */
+  bestStreakEver: number;
+  /**
+   * Which of Lumo's daily nudges are on (see constants/checkIns). Chosen during
+   * onboarding and editable in Settings; each enabled key holds one repeating
+   * local notification, keyed by `checkInNotificationId`.
+   */
+  checkIns: CheckInSchedule;
+  /**
+   * Times the user has moved a check-in to, keyed the same way. Sparse: a key
+   * only appears once it has been changed, so anything left alone keeps
+   * following the built-in `defaultTime`.
+   */
+  checkInTimes: CheckInTimes;
 };

@@ -4,7 +4,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-na
 import { radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
-import { addDays, dateRange, daysBetween, monthRange, startOfWeek, toDateKey } from "@/lib/date";
+import { addDays, dateRange, daysBetween, monthRange, startOfWeek, startOfWeekMonday, toDateKey } from "@/lib/date";
 import { completionCount, isScheduledOnDate } from "@/lib/habitMath";
 import { Habit } from "@/types/habit";
 
@@ -24,11 +24,6 @@ type Props = {
   accentColor?: string;
 };
 
-function startOfWeekMonday(dateKey: string) {
-  const monday = addDays(startOfWeek(dateKey), 1);
-
-  return monday > dateKey ? addDays(monday, -7) : monday;
-}
 
 function Dot({
   status,

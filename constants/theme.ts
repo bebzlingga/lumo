@@ -1,387 +1,167 @@
 import { TextStyle } from "react-native";
 
-export const themeColorOptions = [
-  { key: "black", label: "Black", swatch: "#2F302B" },
-  { key: "blue", label: "Blue", swatch: "#274F6F" },
-  { key: "indigo", label: "Indigo", swatch: "#3E3D79" },
-  { key: "orange", label: "Orange", swatch: "#744729" },
-  { key: "pink", label: "Pink", swatch: "#763E5C" },
-  { key: "purple", label: "Purple", swatch: "#5A4077" },
-  { key: "green", label: "Green", swatch: "#335E3B" }
-] as const;
+/**
+ * LUMO design tokens.
+ *
+ * Colour is light/dark only — there is no per-accent colour scheme. Every
+ * surface pulls from `getPalette(isDark)`, so re-introducing extra schemes
+ * later means adding one lookup here rather than touching call sites.
+ *
+ * Palette values come from the LUMO brand spec: warm cream canvas, navy ink,
+ * sage-green primary actions, golden highlights, and pastel accents.
+ */
 
-export type ThemeColorScheme = (typeof themeColorOptions)[number]["key"];
+// --- brand ramp (raw values; prefer the palette below at call sites) --------
+export const brand = {
+  // Warm cream canvas — used by ONBOARDING and the splash, which run a lighter,
+  // brighter look than the app they hand off to.
+  cream: "#FFF8EB",
+  /** In-app canvas for EVERY screen past onboarding: deeper than the near-white
+   * it started as, so cards, plates and illustrations sit ON something instead
+   * of washing into it — but desaturated, since the same darkness carried at
+   * onboarding's saturation reads yellow over a whole screen.
+   * `surface`/`surfaceStrong` step down with it to keep the ladder. */
+  canvas: "#F8F4EB",
+  creamSoft: "#FAF6EC",
+  /**
+   * Card/field surface. Sits between white and the canvas: far enough off white
+   * that cards and inputs don't glare on the warm background, not so close to
+   * `canvas` that they read yellow.
+   */
+  card: "#FDFBF5",
+  /** Warm outline for fields and selected cards (never a cool gray hairline). */
+  borderWarm: "#E6D0A6",
+  /** Inactive tracks, dots, and switch rails. */
+  sand: "#DECFB4",
+  /**
+   * Primary ink. A deep amber-brown, not navy — a cool blue-black reads
+   * foreign against the warm cream canvas. Still 11.6:1 on canvas, so it
+   * clears AAA for body text.
+   */
+  navy: "#453213",
+  // Warm taupe neutrals, NOT cool blue-grays. On the cream canvas a blue-tinted
+  // gray reads as dirty; these share the background's warmth. They also carry
+  // MORE contrast than the cool tones they replaced (5.95 vs 4.92 on canvas).
+  slate: "#6E6152",
+  mist: "#9C9182",
+  sage: "#7FA466",
+  sageStrong: "#648A4C",
+  sageSoft: "#E8F0DD",
+  gold: "#F4B632",
+  goldSoft: "#FFF1C9",
+  // For gold glyphs ON goldSoft — brand.gold there is only 1.61:1 and vanishes.
+  // goldDeep clears 3:1 (non-text UI); goldInk clears 4.5:1 for small text.
+  goldDeep: "#A8710B",
+  goldInk: "#8A5C08",
+  lavender: "#A98BEF",
+  lavenderSoft: "#EEE7FF",
+  mint: "#9BCFB4",
+  mintSoft: "#E5F5EC",
+  blue: "#88B5EA",
+  blueSoft: "#E6F0FC",
+  coral: "#F58C78",
+  coralSoft: "#FCE4DE",
+  warning: "#E8A129",
+  error: "#E7665D",
+  success: "#50A878",
+  border: "#EAE4D7"
+};
 
 export type LumoPalette = typeof lightPalette;
 
 export const lightPalette = {
-  canvas: "#FFFFFF",
-  surface: "#FFF7E6",
-  surfaceStrong: "#BBDBB1",
-  card: "#FFFFFF",
-  ink: "#335E3B",
-  body: "#335E3B",
-  muted: "#6EA66E",
-  subtle: "#706A60",
-  hairline: "#EFE3C8",
-  green: "#6EA66E",
-  greenActive: "#335E3B",
-  greenDark: "#335E3B",
-  greenSoft: "#BBDBB1",
-  chartTrack: "#E7ECE6",
-  chartPartial: "#FFB313",
-  glow: "#FFC94D",
-  glowSoft: "#FFE8A6",
-  accent: "#FFC94D",
-  accentBorder: "#FFB313",
-  onAccent: "#335E3B",
-  danger: "#B84F45",
+  canvas: brand.canvas,
+  // Deeper than brand.creamSoft (which onboarding still uses over its lighter
+  // cream) so recessed areas stay readable against the deeper canvas, and held
+  // at the canvas's lower saturation.
+  surface: "#F1ECE0",
+  surfaceStrong: "#E6DFD0",
+  card: brand.card,
+  ink: brand.navy,
+  body: brand.navy,
+  muted: brand.mist,
+  subtle: brand.slate,
+  hairline: brand.borderWarm,
+  /**
+   * Warm edge for selected cards and focused fields — the same hue as
+   * `hairline`, a couple of steps deeper. It is the ONLY cue for the state, so
+   * it is not taken lighter than this: 2.36:1 on card is already under the 3:1
+   * WCAG asks of a state indicator, and going further would make selection
+   * imperceptible for some users.
+   */
+  hairlineStrong: "#B8A685",
+  green: brand.sage,
+  greenActive: brand.sageStrong,
+  greenDark: brand.sageStrong,
+  greenSoft: brand.sageSoft,
+  chartTrack: brand.sand,
+  chartPartial: brand.gold,
+  glow: brand.gold,
+  glowSoft: brand.goldSoft,
+  accent: brand.gold,
+  accentBorder: "#E5A21F",
+  onAccent: brand.navy,
+  danger: brand.error,
+  /** Danger as a FILL. `danger` itself only carries a white label at 3.25:1,
+   * so a filled destructive button uses this deeper red (4.8:1) instead. */
+  dangerFill: "#B9524A",
   white: "#FFFFFF",
-  shadow: "#141413"
+  shadow: brand.navy
 };
 
-export const darkPalette = {
-  canvas: "#1A2119",
-  surface: "#223025",
-  surfaceStrong: "#2B3A2D",
-  card: "#202A20",
-  ink: "#FFF7E6",
-  body: "#FFE8A6",
-  muted: "#BBDBB1",
-  subtle: "#9A9385",
-  hairline: "#335E3B",
-  green: "#6EA66E",
-  greenActive: "#BBDBB1",
-  greenDark: "#BBDBB1",
-  greenSoft: "#243829",
-  chartTrack: "#223025",
-  chartPartial: "#FFB313",
-  glow: "#FFC94D",
-  glowSoft: "#3A311B",
-  accent: "#FFC94D",
-  accentBorder: "#FFB313",
-  onAccent: "#335E3B",
-  danger: "#F29A8E",
+/** Deep navy/charcoal — never pure black — with muted pastel accents. */
+export const darkPalette: LumoPalette = {
+  canvas: "#121722",
+  surface: "#202838",
+  surfaceStrong: "#263049",
+  card: "#1A2130",
+  ink: "#F7F8FA",
+  body: "#C3C8D0",
+  muted: "#98A2B3",
+  subtle: "#A8AEB9",
+  hairline: "#2A3346",
+  hairlineStrong: "#55648A",
+  green: "#8FB47A",
+  greenActive: "#A8C892",
+  greenDark: "#A8C892",
+  greenSoft: "#22301F",
+  chartTrack: "#202838",
+  chartPartial: brand.gold,
+  glow: brand.gold,
+  glowSoft: "#3A2F17",
+  accent: brand.gold,
+  accentBorder: "#E5A21F",
+  onAccent: brand.navy,
+  danger: "#F08A80",
+  // Dark canvas: the label on a filled destructive button is the deep ink, so
+  // the fill stays bright rather than darkening.
+  dangerFill: "#F08A80",
   white: "#FFFFFF",
   shadow: "#000000"
 };
 
-type PaletteAccent = Pick<
-  LumoPalette,
-  | "canvas"
-  | "surface"
-  | "surfaceStrong"
-  | "card"
-  | "ink"
-  | "body"
-  | "muted"
-  | "hairline"
-  | "green"
-  | "greenActive"
-  | "greenDark"
-  | "greenSoft"
-  | "chartTrack"
-  | "onAccent"
->;
-
-const themeAccentPalettes = {
-  black: {
-    light: {
-      canvas: "#FFFFFF",
-      surface: "#ECEEE9",
-      surfaceStrong: "#D8DDD6",
-      card: "#FFFFFF",
-      ink: "#2F302B",
-      body: "#2F302B",
-      muted: "#73786E",
-      hairline: "#DADDD6",
-      green: "#73786E",
-      greenActive: "#2F302B",
-      greenDark: "#2F302B",
-      greenSoft: "#D8DDD6",
-      chartTrack: "#E9ECE7",
-      onAccent: "#FFF7E6"
-    },
-    dark: {
-      canvas: "#171817",
-      surface: "#242521",
-      surfaceStrong: "#353730",
-      card: "#20211E",
-      ink: "#FFF7E6",
-      body: "#D8D4C7",
-      muted: "#C3C7BE",
-      hairline: "#3A3D36",
-      green: "#92978F",
-      greenActive: "#E8EADF",
-      greenDark: "#E8EADF",
-      greenSoft: "#2C302B",
-      chartTrack: "#242821",
-      onAccent: "#191A17"
-    }
-  },
-  blue: {
-    light: {
-      canvas: "#FFFFFF",
-      surface: "#EEF7FB",
-      surfaceStrong: "#C8DEE8",
-      card: "#FFFFFF",
-      ink: "#274F6F",
-      body: "#274F6F",
-      muted: "#6D9AB8",
-      hairline: "#DCEAF0",
-      green: "#6D9AB8",
-      greenActive: "#274F6F",
-      greenDark: "#274F6F",
-      greenSoft: "#C8DEE8",
-      chartTrack: "#E7EEF2",
-      onAccent: "#F8FCFF"
-    },
-    dark: {
-      canvas: "#151D24",
-      surface: "#1E2A33",
-      surfaceStrong: "#263645",
-      card: "#1B242C",
-      ink: "#F2F8FB",
-      body: "#D8E8F2",
-      muted: "#B8D4E5",
-      hairline: "#2B4A5E",
-      green: "#6D9AB8",
-      greenActive: "#C8DEE8",
-      greenDark: "#C8DEE8",
-      greenSoft: "#203747",
-      chartTrack: "#1E2A33",
-      onAccent: "#173044"
-    }
-  },
-  indigo: {
-    light: {
-      canvas: "#FFFFFF",
-      surface: "#F3F2FD",
-      surfaceStrong: "#DAD9F4",
-      card: "#FFFFFF",
-      ink: "#3E3D79",
-      body: "#3E3D79",
-      muted: "#8584C6",
-      hairline: "#E5E3F2",
-      green: "#8584C6",
-      greenActive: "#3E3D79",
-      greenDark: "#3E3D79",
-      greenSoft: "#DAD9F4",
-      chartTrack: "#ECECF6",
-      onAccent: "#FBFAFF"
-    },
-    dark: {
-      canvas: "#191A28",
-      surface: "#24253A",
-      surfaceStrong: "#303254",
-      card: "#202133",
-      ink: "#F7F5FF",
-      body: "#E4E1FF",
-      muted: "#C6C5EA",
-      hairline: "#3C3E65",
-      green: "#8584C6",
-      greenActive: "#DAD9F4",
-      greenDark: "#DAD9F4",
-      greenSoft: "#292B47",
-      chartTrack: "#24253A",
-      onAccent: "#202247"
-    }
-  },
-  orange: {
-    light: {
-      canvas: "#FFFFFF",
-      surface: "#FFF3E7",
-      surfaceStrong: "#F1D4B9",
-      card: "#FFFFFF",
-      ink: "#744729",
-      body: "#744729",
-      muted: "#C48551",
-      hairline: "#F0E1D1",
-      green: "#C48551",
-      greenActive: "#744729",
-      greenDark: "#744729",
-      greenSoft: "#F1D4B9",
-      chartTrack: "#F3E7DA",
-      onAccent: "#FFFBF6"
-    },
-    dark: {
-      canvas: "#241A14",
-      surface: "#32251C",
-      surfaceStrong: "#4A3120",
-      card: "#2B2018",
-      ink: "#FFF6EE",
-      body: "#F2DDCB",
-      muted: "#E2BE9C",
-      hairline: "#5A3824",
-      green: "#C48551",
-      greenActive: "#F1D4B9",
-      greenDark: "#F1D4B9",
-      greenSoft: "#40291C",
-      chartTrack: "#32251C",
-      onAccent: "#2B190E"
-    }
-  },
-  pink: {
-    light: {
-      canvas: "#FFFFFF",
-      surface: "#FFF0F6",
-      surfaceStrong: "#F1D4E2",
-      card: "#FFFFFF",
-      ink: "#763E5C",
-      body: "#763E5C",
-      muted: "#C77C9E",
-      hairline: "#F0DFE8",
-      green: "#C77C9E",
-      greenActive: "#763E5C",
-      greenDark: "#763E5C",
-      greenSoft: "#F1D4E2",
-      chartTrack: "#F4E8ED",
-      onAccent: "#FFFAFC"
-    },
-    dark: {
-      canvas: "#251820",
-      surface: "#33232B",
-      surfaceStrong: "#4A293A",
-      card: "#2D1F27",
-      ink: "#FFF4F8",
-      body: "#F3DCE8",
-      muted: "#E3B7CC",
-      hairline: "#5E3448",
-      green: "#C77C9E",
-      greenActive: "#F1D4E2",
-      greenDark: "#F1D4E2",
-      greenSoft: "#432434",
-      chartTrack: "#33232B",
-      onAccent: "#311825"
-    }
-  },
-  purple: {
-    light: {
-      canvas: "#FFFFFF",
-      surface: "#F7F0FC",
-      surfaceStrong: "#E5D7F1",
-      card: "#FFFFFF",
-      ink: "#5A4077",
-      body: "#5A4077",
-      muted: "#A079C4",
-      hairline: "#E9DFF0",
-      green: "#A079C4",
-      greenActive: "#5A4077",
-      greenDark: "#5A4077",
-      greenSoft: "#E5D7F1",
-      chartTrack: "#F0E9F4",
-      onAccent: "#FDFAFF"
-    },
-    dark: {
-      canvas: "#201927",
-      surface: "#2B2235",
-      surfaceStrong: "#3D2B4F",
-      card: "#271F30",
-      ink: "#FAF4FF",
-      body: "#E9D9F5",
-      muted: "#D0B5E3",
-      hairline: "#4A3561",
-      green: "#A079C4",
-      greenActive: "#E5D7F1",
-      greenDark: "#E5D7F1",
-      greenSoft: "#382743",
-      chartTrack: "#2B2235",
-      onAccent: "#261633"
-    }
-  },
-  green: {
-    light: {
-      canvas: lightPalette.canvas,
-      surface: lightPalette.surface,
-      surfaceStrong: lightPalette.surfaceStrong,
-      card: lightPalette.card,
-      ink: lightPalette.ink,
-      body: lightPalette.body,
-      muted: lightPalette.muted,
-      hairline: lightPalette.hairline,
-      green: lightPalette.green,
-      greenActive: lightPalette.greenActive,
-      greenDark: lightPalette.greenDark,
-      greenSoft: lightPalette.greenSoft,
-      chartTrack: lightPalette.chartTrack,
-      onAccent: lightPalette.onAccent
-    },
-    dark: {
-      canvas: darkPalette.canvas,
-      surface: darkPalette.surface,
-      surfaceStrong: darkPalette.surfaceStrong,
-      card: darkPalette.card,
-      ink: darkPalette.ink,
-      body: darkPalette.body,
-      muted: darkPalette.muted,
-      hairline: darkPalette.hairline,
-      green: darkPalette.green,
-      greenActive: darkPalette.greenActive,
-      greenDark: darkPalette.greenDark,
-      greenSoft: darkPalette.greenSoft,
-      chartTrack: darkPalette.chartTrack,
-      onAccent: darkPalette.onAccent
-    }
-  }
-} satisfies Record<ThemeColorScheme, { light: PaletteAccent; dark: PaletteAccent }>;
-
-const themeSubtleColors = {
-  black: {
-    light: "#6F726A",
-    dark: "#A7AAA1"
-  },
-  blue: {
-    light: "#637888",
-    dark: "#9BAFBE"
-  },
-  indigo: {
-    light: "#74739E",
-    dark: "#AAA8CE"
-  },
-  orange: {
-    light: "#8A7460",
-    dark: "#CDAE91"
-  },
-  pink: {
-    light: "#8B6F7D",
-    dark: "#CDA5B9"
-  },
-  purple: {
-    light: "#806F8E",
-    dark: "#BCA4CD"
-  },
-  green: {
-    light: lightPalette.subtle,
-    dark: darkPalette.subtle
-  }
-} satisfies Record<ThemeColorScheme, { light: string; dark: string }>;
-
 /**
- * Contrasting pop color per theme (quick-done TO DO badge, board vote
- * counts) — deliberately NOT the theme's own hue, the way amber pops on the
- * black theme. All are light enough to carry near-black text in both modes.
+ * Contrasting pop colour for "to do" badges and vote counts — deliberately not
+ * the primary sage, so it reads as a distinct state rather than an action.
  */
-export const progressAccents: Record<ThemeColorScheme, string> = {
-  black: "#FFC94D", // amber
-  green: "#EE8B6C", // terracotta
-  blue: "#F09B7A", // peach coral
-  indigo: "#F0928A", // coral
-  orange: "#E5C685", // cream / sand
-  pink: "#F7BE45", // deep gold
-  purple: "#F2A08C" // salmon
-};
+export const progressAccent = brand.coral;
 export const progressAccentText = "#141413";
 
-export function getPalette(isDark: boolean, colorScheme: ThemeColorScheme = "green"): LumoPalette {
-  const basePalette = isDark ? darkPalette : lightPalette;
-  const accent = themeAccentPalettes[colorScheme] ?? themeAccentPalettes.green;
-  const subtle = themeSubtleColors[colorScheme]?.[isDark ? "dark" : "light"] ?? basePalette.subtle;
+/**
+ * Count badges — the header's pending-invitations pip and the tab bar's.
+ *
+ * Fixed, not from the palette: a badge is the same object in both themes, and
+ * `palette.danger` lightens in dark mode, which is the wrong direction for
+ * something carrying white text. Deep enough that white clears 4.6:1 on it —
+ * `brand.error` only reaches 3.25, and the coral the header used was 2.36
+ * (which is why that one carried near-black text and read as a warning chip
+ * rather than a notification).
+ */
+export const badgeAccent = "#D0405E";
+export const badgeAccentText = "#FFFFFF";
 
-  return {
-    ...basePalette,
-    ...(isDark ? accent.dark : accent.light),
-    subtle
-  };
+export function getPalette(isDark: boolean): LumoPalette {
+  return isDark ? darkPalette : lightPalette;
 }
 
 export const spacing = {
@@ -389,8 +169,10 @@ export const spacing = {
   xs: 8,
   sm: 12,
   md: 16,
+  ml: 20,
   lg: 24,
   xl: 32,
+  hero: 40,
   xxl: 48
 };
 
@@ -398,6 +180,15 @@ const floatingTabBarHeight = 72;
 
 export const layout = {
   floatingTabBarHeight,
+  /**
+   * The horizontal gutter every screen uses. Onboarding set the standard, and
+   * the rest of the app follows it. Full-bleed rows escape it with
+   * `marginHorizontal: -layout.screenPaddingX`.
+   *
+   * NOTE: bleeds that escape a CARD's padding use that card's own value
+   * instead — the two are not interchangeable.
+   */
+  screenPaddingX: spacing.xl,
   tabScreenBottomPadding: floatingTabBarHeight + spacing.xxl + spacing.lg
 };
 
@@ -407,7 +198,18 @@ export const radius = {
   md: 8,
   lg: 12,
   xl: 16,
+  // Brand-spec steps: 18 is the default card radius, 16 the primary button.
+  card: 18,
+  /**
+   * The softer corner the full-bleed hero cards take — the daily progress card
+   * and the group cards on Home. A named step because it was two separate
+   * hardcoded 30s, which read as one card having drifted from the other rather
+   * than as a deliberate second tier above `card`.
+   */
+  hero: 30,
+  button: 16,
   nav: 22,
+  sheet: 28,
   pill: 9999
 };
 
@@ -416,9 +218,12 @@ export const radius = {
  * stay visually consistent across every page — one height, one radius, one
  * border weight. Border/focus colors come from the active palette at use sites.
  */
+// Field geometry, matching onboarding's inputs: boxed, with a 1pt warm
+// outline that DARKENS on focus rather than thickening (a width change would
+// shift the layout by a pixel on every focus).
 export const control = {
-  height: 48,
-  radius: radius.lg,
+  height: 52,
+  radius: radius.button,
   borderWidth: 1
 };
 
@@ -426,10 +231,57 @@ export const fontFamilies = {
   lexend: "Lexend-Regular",
   lexendMedium: "Lexend-Medium",
   lexendSemiBold: "Lexend-SemiBold",
-  lexendBold: "Lexend-Bold"
+  lexendBold: "Lexend-Bold",
+  lexendBlack: "Lexend-Black",
+  /**
+   * Koh Santepheap — a Scotch-style serif, to give titles some editorial weight
+   * against the rounded Lexend UI text.
+   *
+   * HEADLINES ONLY, meaning exactly two things:
+   *  - the page bar's title (19pt), and
+   *  - a screen's hero headline (27pt and up).
+   *
+   * NOT section or card headers — "My Habits", a journal month, a form section,
+   * an empty state's title. At body sizes the serif stops reading as editorial
+   * and just reads as a different font, and a screen ends up with two competing
+   * title faces. Those all take `lexendBold`.
+   */
+  serif: "KohSantepheap-Regular",
+  serifBold: "KohSantepheap-Bold",
+  serifBlack: "KohSantepheap-Black"
 };
 
 export const type = {
+  displayXL: {
+    fontFamily: fontFamilies.lexendBold,
+    fontSize: 40,
+    lineHeight: 46,
+    letterSpacing: 0
+  } satisfies TextStyle,
+  h1: {
+    fontFamily: fontFamilies.lexendBold,
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: 0
+  } satisfies TextStyle,
+  h2: {
+    fontFamily: fontFamilies.lexendBold,
+    fontSize: 24,
+    lineHeight: 30,
+    letterSpacing: 0
+  } satisfies TextStyle,
+  h3: {
+    fontFamily: fontFamilies.lexendSemiBold,
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: 0
+  } satisfies TextStyle,
+  label: {
+    fontFamily: fontFamilies.lexendSemiBold,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0
+  } satisfies TextStyle,
   display: {
     fontFamily: fontFamilies.lexendMedium,
     fontSize: 34,
@@ -476,7 +328,10 @@ export const type = {
     fontFamily: fontFamilies.lexendBold,
     fontSize: 14,
     lineHeight: 18,
-    letterSpacing: 0
+    letterSpacing: 0,
+    // Every button label reads as Capitalised Words, whatever casing the call
+    // site passes — set once here so no screen has to remember.
+    textTransform: "capitalize"
   } satisfies TextStyle
 };
 

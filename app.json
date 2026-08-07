@@ -6,7 +6,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "icon": "./assets/logo/png/lumo-app-icon-opaque-1024.png",
+    "icon": "./assets/production/expo-ready/icon.png",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
@@ -24,13 +24,23 @@
     },
     "android": {
       "package": "com.lumo.habits",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/production/expo-ready/adaptive-icon.png",
+        "backgroundColor": "#FDBD1C"
+      },
       "permissions": [
         "android.permission.RECORD_AUDIO"
       ]
     },
     "plugins": [
       "expo-router",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/production/expo-ready/notification-icon.png",
+          "color": "#FDBD1C"
+        }
+      ],
       "expo-asset",
       "@bacons/apple-targets",
       "@react-native-community/datetimepicker",
@@ -47,13 +57,16 @@
           "speechRecognitionPermission": "Lumo uses speech recognition to turn your voice into text."
         }
       ],
-      "expo-video",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#17140F",
+          "image": "./assets/Splash.png",
+          "resizeMode": "cover",
+          "backgroundColor": "#FCF4E4",
           "dark": {
-            "backgroundColor": "#17140F"
+            "image": "./assets/Splash.png",
+            "resizeMode": "cover",
+            "backgroundColor": "#FCF4E4"
           }
         }
       ]

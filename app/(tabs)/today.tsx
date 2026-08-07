@@ -1,212 +1,75 @@
 import { useFocusEffect, useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AppState, FlatList, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native'
+import { Animated, AppState, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import ConfettiCannon from 'react-native-confetti-cannon'
-import Svg, { Circle as SvgCircle, Path as SvgPath } from 'react-native-svg'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { fontFamilies, layout, radius, spacing } from '@/constants/theme'
 import { useLumo } from '@/context/LumoContext'
-import { alpha } from '@/lib/color'
-import { addDays, formatHeaderDateParts, parseDateKey, toDateKey } from '@/lib/date'
-import { friendsService, onGroupMembershipChanged, type Group } from '@/lib/friends'
-import { bestCurrentStreakAcrossHabits, isDoneOnDate, isScheduledOnDate } from '@/lib/habitMath'
-import { buildGroupAvatarSvg } from '@/lib/avatar'
-import { formatLumoId } from '@/lib/lumoId'
-import { Habit } from '@/types/habit'
+import { alpha, readableOn } from '@/lib/color'
+import { toDateKey } from '@/lib/date'
+import { friendsService, onGroupMembershipChanged } from '@/lib/friends'
+import { greetingFor, reflectionPromptFor, taglineFor } from '@/lib/homeCopy'
+import { isDoneOnDate, isScheduledOnDate } from '@/lib/habitMath'
+import { HomeBackground, homeSceneBottom, useHomePeriod } from '@/components/HomeBackground'
 import { Avatar } from '@/components/Avatar'
-import { DailyProgressCard } from '@/components/DailyProgressCard'
-import { FireIcon } from '@/components/FireIcon'
+import { DailyReflectionCard } from '@/components/DailyReflectionCard'
+import { DatePill } from '@/components/DatePill'
 import { Icon, IconName } from '@/components/Icon'
 import { QuickDoneWidgets } from '@/components/QuickDoneWidgets'
-import { AppText, LoadingState, Screen } from '@/components/ui'
+import { StreakCard } from '@/components/StreakCard'
+import { AppText, Card, LoadingState, Screen } from '@/components/ui'
+import { Pressable } from '@/components/Pressable'
 
-type RecentProgress = {
-	completeDays: number
-	missedDays: number
-	trackedDays: number
-}
+/** The header row's height — the avatar and bell buttons set it. */
+const HEADER_HEIGHT = 42
+/**
+ * Row gap between the stacked cards. Tighter than the 20 `Screen` gives every
+ * other page: home carries seven surfaces in a column, and at 20 they read as
+ * seven separate pages rather than one dashboard.
+ */
+const CONTENT_GAP = spacing.xs
+/** What actually separates the header from the greeting: the row gap above,
+ *  plus the extra top margin the greeting block drops by. */
+const HERO_TOP_GAP = CONTENT_GAP + spacing.xl
+/**
+ * The avatar's ring carries the card colour, but semi-transparent — it sits
+ * directly on the backdrop plate's sky, and a solid fill up there reads as a
+ * chip pasted over the artwork. Matches the day selector beside it. The
+ * settings button stays a bare outline: it holds a glyph rather than a
+ * portrait, so it has nothing to sit on.
+ */
+const HEADER_FILL_ALPHA = 'A6'
 
-function progressForDay(habits: Habit[], dateKey: string): 'complete' | 'missed' | 'none' {
-	const scheduledHabits = habits.filter((habit) => isScheduledOnDate(habit, dateKey))
-
-	if (!scheduledHabits.length) {
-		return 'none'
-	}
-
-	return scheduledHabits.every((habit) => isDoneOnDate(habit, dateKey)) ? 'complete' : 'missed'
-}
-
-function recentProgress(habits: Habit[], dateKey: string, todayKey: string): RecentProgress {
-	const anchorKey = dateKey > todayKey ? todayKey : dateKey
-	const anchorDate = parseDateKey(anchorKey)
-	const progress: RecentProgress = {
-		completeDays: 0,
-		missedDays: 0,
-		trackedDays: 0,
-	}
-
-	for (let index = 1; index <= 5; index += 1) {
-		const previousKey = addDays(anchorKey, -index)
-		const previousDate = parseDateKey(previousKey)
-
-		if (previousDate.getMonth() !== anchorDate.getMonth() || previousDate.getFullYear() !== anchorDate.getFullYear()) {
-			continue
-		}
-
-		const dayProgress = progressForDay(habits, previousKey)
-
-		if (dayProgress === 'none') {
-			continue
-		}
-
-		progress.trackedDays += 1
-
-		if (dayProgress === 'complete') {
-			progress.completeDays += 1
-		} else {
-			progress.missedDays += 1
-		}
-	}
-
-	return progress
-}
-
-function monthlyHeaderMessage(dateKey: string, habits: Habit[], todayKey: string) {
-	const date = parseDateKey(dateKey)
-	const day = date.getDate()
-	const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
-	const daysLeft = lastDay - day
-	const progress = recentProgress(habits, dateKey, todayKey)
-
-	const recoveryMessages = [
-		'Fresh start,\none habit today counts.',
-		"Missed days happen,\nlet's show up today.",
-		'Reset gently,\none habit gets you moving.',
-		'A red day is not the end,\ntoday can turn green.',
-		'Still in the game,\nchoose one habit now.',
-		'Almost there,\nfinish with one win.',
-	]
-
-	const momentumMessages = [
-		'Green days already,\nkeep the spark going.',
-		'Nice rhythm,\nkeep stacking wins.',
-		'Momentum is building,\nstay with it.',
-		'Your habits are showing,\nkeep them glowing.',
-		'Strong month,\nkeep protecting the streak.',
-		'Almost there,\nbring it home.',
-	]
-
-	const neutralMessages = [
-		'Fresh month,\nstart with one small win.',
-		'Nice start,\nfind your rhythm today.',
-		'Momentum can start here,\none habit at a time.',
-		'Halfway energy,\nshow up for one habit.',
-		"Keep stacking wins,\nyou're getting close.",
-		'Almost there,\nfinish strong.',
-	]
-
-	const phaseIndex = daysLeft <= 4 ? 5 : Math.min(4, Math.floor((day - 1) / 5))
-
-	if (progress.missedDays > 0) {
-		return recoveryMessages[phaseIndex]
-	}
-
-	if (progress.completeDays > 0) {
-		return momentumMessages[phaseIndex]
-	}
-
-	return neutralMessages[phaseIndex]
-}
-
-// Days available in the swipeable progress carousel. Only the past is reachable —
-// today is the last (rightmost) card, so you can't swipe into the future.
-const PAST_DAYS = 15
-const FUTURE_DAYS = 0
-const SCREEN_PADDING = spacing.lg
-// Peek carousel: a sliver of the neighboring card shows on each side.
-const CARD_GAP = 10
-const CARD_PEEK = 12
-const CARD_SIDE = CARD_GAP + CARD_PEEK
-
-type ResourceMotif = 'journey' | 'faqs' | 'next'
-
-function sparklePath(cx: number, cy: number, size: number) {
-	const waist = size * 0.28
-
-	return `M${cx} ${cy - size} L${cx + waist} ${cy - waist} L${cx + size} ${cy} L${cx + waist} ${cy + waist} L${cx} ${cy + size} L${cx - waist} ${cy + waist} L${cx - size} ${cy} L${cx - waist} ${cy - waist} Z`
-}
-
-/** Soft decorative shapes anchored to the card's right edge, tinted from the
- * active palette so they follow theme and dark mode. */
-function ResourceCardBackdrop({ motif }: { motif: ResourceMotif }) {
-	const { palette } = useLumo()
-	const soft = alpha(palette.greenSoft, '4D')
-	const softer = alpha(palette.greenSoft, '2E')
-	const glowTint = alpha(palette.glow, '59')
-
-	return (
-		<View
-			style={[StyleSheet.absoluteFill, styles.resourceBackdrop]}
-			pointerEvents='none'
-		>
-			<Svg
-				width={160}
-				height={150}
-			>
-				{motif === 'journey' ? (
-					<>
-						<SvgCircle cx={165} cy={150} r={72} fill={softer} />
-						<SvgCircle cx={165} cy={150} r={46} fill={soft} />
-						<SvgPath
-							d='M18 118 C 58 100, 74 58, 128 34'
-							stroke={glowTint}
-							strokeWidth={3}
-							strokeDasharray='1 11'
-							strokeLinecap='round'
-							fill='none'
-						/>
-						<SvgPath d={sparklePath(136, 28, 9)} fill={palette.glow} opacity={0.75} />
-					</>
-				) : null}
-				{motif === 'faqs' ? (
-					<>
-						<SvgCircle cx={148} cy={6} r={58} fill={alpha(palette.glowSoft, '66')} />
-						<SvgCircle cx={104} cy={104} r={34} fill={softer} />
-						<SvgCircle cx={64} cy={34} r={9} fill={glowTint} />
-						<SvgCircle cx={148} cy={116} r={14} fill={soft} />
-					</>
-				) : null}
-				{motif === 'next' ? (
-					<>
-						<SvgCircle cx={168} cy={140} r={54} fill={softer} />
-						<SvgPath d={sparklePath(122, 40, 15)} fill={glowTint} />
-						<SvgPath d={sparklePath(88, 96, 9)} fill={soft} />
-						<SvgPath d={sparklePath(146, 92, 6)} fill={palette.glow} opacity={0.55} />
-					</>
-				) : null}
-			</Svg>
-		</View>
-	)
-}
-
-// NativeWind's css-interop drops function-valued `style` props on Pressable,
-// so pressed state is tracked manually and the style is passed as a plain array.
-function ResourceCard({
+/**
+ * One Explore row.
+ *
+ * `accent` is the dominant hue of the plate belonging to the screen the row
+ * leads to, sampled off that art rather than guessed, so each row carries a
+ * trace of where it goes. It survives from when these were picture tiles; the
+ * list treatment keeps the colour and drops the pictures.
+ */
+function ResourceRow({
 	icon,
 	label,
 	description,
-	width,
-	motif,
+	accent,
+	divided,
 	onPress,
 }: {
 	icon: IconName
 	label: string
 	description: string
-	width: number
-	motif: ResourceMotif
+	accent: string
+	/** Draws the hairline above this row — every row but the first. */
+	divided: boolean
 	onPress: () => void
 }) {
 	const { palette, isDark } = useLumo()
 	const [pressed, setPressed] = useState(false)
+	// Several of these hues are pastels that vanish as a glyph on a light tile,
+	// so the sampled colour is walked toward the surface's opposite until it
+	// clears 3:1 — as much adjustment as needed and no more, so the hue holds.
+	const glyph = readableOn(accent, palette.card, 3)
 
 	return (
 		<Pressable
@@ -216,76 +79,25 @@ function ResourceCard({
 			onPressIn={() => setPressed(true)}
 			onPressOut={() => setPressed(false)}
 			style={[
-				styles.resourceCard,
-				{ width, backgroundColor: palette.card, shadowColor: isDark ? 'transparent' : palette.shadow, opacity: pressed ? 0.85 : 1 },
+				styles.resourceRow,
+				divided ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: alpha(palette.hairline, '80') } : null,
+				{ opacity: pressed ? 0.7 : 1 },
 			]}
 		>
-			<ResourceCardBackdrop motif={motif} />
-			<Icon name={icon} size={24} color={palette.green} weight='bulk' />
-			<AppText variant='bodySmall' color={palette.ink} style={styles.resourceLabel}>
-				{label}
-			</AppText>
-			<AppText variant='caption' color={palette.subtle} style={styles.resourceDescription}>
-				{description}
-			</AppText>
-		</Pressable>
-	)
-}
-
-// Full-width group card for the home screen's horizontal group row — matches
-// the date card's width and rounding. Two columns (avatar · details), centered,
-// with the important bit up front: how many activities you still owe today.
-function HomeGroupCard({ group, width, myLumoId, onPress }: { group: Group; width: number; myLumoId: string; onPress: () => void }) {
-	const { palette, isDark } = useLumo()
-	const [pressed, setPressed] = useState(false)
-	const avatarSvg = useMemo(() => buildGroupAvatarSvg(group.avatarSeed ?? group.id), [group.avatarSeed, group.id])
-	const me = group.members.find((member) => member.profile.lumoId === myLumoId)
-	const remaining = me ? group.habits.filter((habit) => !me.completedTodayHabitIds.includes(habit.id)).length : group.habits.length
-	const allDone = remaining === 0
-
-	return (
-		<Pressable
-			accessibilityRole='button'
-			accessibilityLabel={`Open group ${group.name}, ${allDone ? 'all activities done today' : `${remaining} activities to complete today`}`}
-			onPress={onPress}
-			onPressIn={() => setPressed(true)}
-			onPressOut={() => setPressed(false)}
-			style={[styles.homeGroupCard, { width, backgroundColor: palette.card, shadowColor: isDark ? 'transparent' : palette.shadow, opacity: pressed ? 0.85 : 1 }]}
-		>
-			<View style={[styles.homeGroupAvatar, { backgroundColor: alpha(palette.greenDark, '10') }]}>
-				<Avatar svg={avatarSvg} size={52} rounded={false} />
+			{/* The same rounded-square tile the habit rows wear, so the two lists
+			    on this screen read as the same kind of list. */}
+			<View style={[styles.resourceIcon, { backgroundColor: alpha(accent, isDark ? '2E' : '24') }]}>
+				<Icon name={icon} size={20} color={glyph} weight='bulk' />
 			</View>
-			<View style={styles.homeGroupInfo}>
-				<View style={styles.homeGroupNameRow}>
-					<AppText variant='titleSmall' color={palette.ink} numberOfLines={1} style={styles.homeGroupName}>
-						{group.name}
-					</AppText>
-					{group.streak >= 3 ? (
-						<View style={[styles.homeGroupStreak, { backgroundColor: palette.glowSoft }]}>
-							<FireIcon size={11} />
-							<AppText variant='caption' color={palette.ink} style={styles.homeGroupStreakText}>
-								{group.streak}d
-							</AppText>
-						</View>
-					) : null}
-				</View>
-				<AppText variant='caption' color={alpha(palette.subtle, 'AA')} numberOfLines={1}>
-					{group.members.length} {group.members.length === 1 ? 'member' : 'members'} · {group.habits.length}{' '}
-					{group.habits.length === 1 ? 'activity' : 'activities'}
+			<View style={styles.resourceText}>
+				<AppText variant='titleSmall' color={palette.ink} numberOfLines={1} style={styles.resourceLabel}>
+					{label}
+				</AppText>
+				<AppText variant='caption' color={palette.muted} numberOfLines={1} style={styles.resourceDescription}>
+					{description}
 				</AppText>
 			</View>
-			<View style={[styles.homeGroupTodo, { backgroundColor: alpha(palette.greenDark, '12') }]}>
-				<Icon name={allDone ? 'checkCircle' : 'chart2'} size={13} color={palette.greenDark} weight='bulk' />
-				{allDone ? (
-					<AppText variant='caption' color={palette.greenDark} numberOfLines={1} style={styles.homeGroupTodoDone}>
-						All done
-					</AppText>
-				) : (
-					<AppText variant='caption' color={palette.greenDark} numberOfLines={1} style={styles.homeGroupTodoNumber}>
-						{remaining}
-					</AppText>
-				)}
-			</View>
+			<Icon name='forward' size={15} color={alpha(palette.muted, 'CC')} weight='bold' />
 		</Pressable>
 	)
 }
@@ -293,32 +105,55 @@ function HomeGroupCard({ group, width, myLumoId, onPress }: { group: Group; widt
 export default function TodayScreen() {
 	const router = useRouter()
 	const { width } = useWindowDimensions()
-	const { habits, isReady, nickname, palette, avatar, lumoIdSuffix, isPro } = useLumo()
-	const myLumoId = formatLumoId(lumoIdSuffix)
+	const insets = useSafeAreaInsets()
+	const { habits, isReady, nickname, palette, avatar } = useLumo()
 	const todayKey = toDateKey()
 	const [selectedDateKey, setSelectedDateKey] = useState(todayKey)
 	const activeHabits = habits.filter((habit) => habit.status === 'active')
 	const selectedHabits = activeHabits.filter((habit) => isScheduledOnDate(habit, selectedDateKey))
-	const resourceCardWidth = (width - SCREEN_PADDING * 2) * 0.7
+	const isToday = selectedDateKey === todayKey
+	const greeting = greetingFor(new Date().getHours())
+	// Drives BOTH the backdrop plate and the tagline under the greeting, so the
+	// words and the scene behind them never describe different times of day.
+	const period = useHomePeriod()
+	/**
+	 * Drives the backdrop's fade — see HomeBackground.
+	 *
+	 * The JS driver: `Screen` renders a plain ScrollView, which has nothing for
+	 * `useNativeDriver` to attach to. One interpolated opacity per frame is
+	 * cheap enough that reshaping `Screen` for it would be the wrong trade.
+	 */
+	const scrollY = React.useRef(new Animated.Value(0)).current
+	const handleScroll = React.useCallback(
+		(event: NativeSyntheticEvent<NativeScrollEvent>) => scrollY.setValue(event.nativeEvent.contentOffset.y),
+		[scrollY],
+	)
+	const firstName = nickname?.trim() || 'there'
+	// The backdrop plate draws Lumo into the top of the screen, so the greeting
+	// block holds a minimum height that keeps the first card off his face and
+	// torso. Everything above the greeting (safe area, the screen's own top
+	// padding, the header, the gap under it) comes off the reserve. No floor
+	// beyond zero: the greeting's own three lines are taller than this on a
+	// normal phone, and a floor above them would only push the cards back down.
+	const heroMinHeight = Math.max(0, homeSceneBottom(width, period) - insets.top - spacing.lg - HEADER_HEIGHT - HERO_TOP_GAP)
 
-	// The user's friends groups, shown as a horizontal card row below. Habits
-	// that belong to a group also get a small marker on their cards.
-	const [groups, setGroups] = useState<Group[]>([])
+	// Home no longer lists the user's groups, but a habit that belongs to one
+	// still carries a small marker on its row — so the ids are all this screen
+	// needs from the friends service.
 	const [groupHabitIds, setGroupHabitIds] = useState<Set<string>>(() => new Set())
-	const refreshGroups = useCallback(() => {
+	const refreshGroupHabitIds = useCallback(() => {
 		friendsService.listGroups().then((loadedGroups) => {
-			setGroups(loadedGroups)
 			setGroupHabitIds(new Set(loadedGroups.flatMap((group) => group.habits.map((habit) => habit.id))))
 		})
 	}, [])
-	// Refresh on focus, and live whenever group membership changes (e.g. leaving
-	// or deleting a group) so the "Your groups" row updates in real time.
-	useFocusEffect(refreshGroups)
-	useEffect(() => onGroupMembershipChanged(refreshGroups), [refreshGroups])
+	// Refreshed on focus, and live whenever group membership changes — leaving a
+	// group has to take its markers with it.
+	useFocusEffect(refreshGroupHabitIds)
+	useEffect(() => onGroupMembershipChanged(refreshGroupHabitIds), [refreshGroupHabitIds])
 
 	// Page-wide confetti when every habit for the selected day gets completed.
 	// Only fires on the transition to all-done while staying on the same day —
-	// swiping onto an already-completed day stays quiet. The cannon is only
+	// jumping to an already-completed day stays quiet. The cannon is only
 	// mounted while firing; when idle it would otherwise render its pieces
 	// statically at the origin.
 	const [showConfetti, setShowConfetti] = useState(false)
@@ -332,177 +167,139 @@ export default function TodayScreen() {
 		prevAllDoneRef.current = { dateKey: selectedDateKey, allDone }
 	}, [allDone, selectedDateKey])
 
-	const carouselRef = useRef<FlatList<string>>(null)
-	// A window of day keys ending on today; today sits at index PAST_DAYS.
-	const dateKeys = useMemo(() => {
-		const start = addDays(todayKey, -PAST_DAYS)
-		return Array.from({ length: PAST_DAYS + FUTURE_DAYS + 1 }, (_, index) => addDays(start, index))
-	}, [todayKey])
-	const todayIndex = PAST_DAYS
-	// Each card is narrower than the screen so neighbors peek; pages snap by card + gap.
-	const cardWidth = width - CARD_SIDE * 2
-	const snapInterval = cardWidth + CARD_GAP
-
-	// Always open on today, and snap back to it whenever the app returns to foreground.
+	// Always open on today, and snap back to it whenever the app returns to the
+	// foreground — otherwise a phone left overnight still shows yesterday.
 	useEffect(() => {
 		setSelectedDateKey(todayKey)
-		carouselRef.current?.scrollToIndex({ index: todayIndex, animated: false })
 
 		const subscription = AppState.addEventListener('change', (state) => {
 			if (state === 'active') {
 				setSelectedDateKey(toDateKey())
-				carouselRef.current?.scrollToIndex({ index: todayIndex, animated: false })
 			}
 		})
 
 		return () => subscription.remove()
-	}, [todayKey, todayIndex])
-
-	function onCarouselSettled(event: NativeSyntheticEvent<NativeScrollEvent>) {
-		const index = Math.round(event.nativeEvent.contentOffset.x / snapInterval)
-		const nextKey = dateKeys[index]
-
-		if (nextKey && nextKey !== selectedDateKey) {
-			setSelectedDateKey(nextKey)
-		}
-	}
+	}, [todayKey])
 
 	if (!isReady) {
 		return <LoadingState />
 	}
 
 	return (
-		<Screen contentStyle={styles.content}>
-			<View style={styles.checkInPanel}>
-				<View style={styles.header}>
-					<View style={styles.topRow}>
-						<View style={styles.profileRow}>
-							<Pressable
-								accessibilityRole='button'
-								accessibilityLabel='Open profile'
-								onPress={() => router.push('/profile')}
-								style={({ pressed }) => [styles.avatarFrame, { opacity: pressed ? 0.75 : 1 }]}
-							>
-								<View style={[styles.avatarCircle, { backgroundColor: alpha(palette.greenDark, '10') }]} pointerEvents='none' />
-								<Avatar config={avatar} size={54} rounded={false} />
-							</Pressable>
-							<View style={styles.nameBlock}>
-								<AppText variant='titleSmall' color={palette.ink} numberOfLines={1} style={styles.nickname}>
-									{nickname?.trim() || 'there'}
-								</AppText>
-								<AppText variant='bodySmall' color={palette.subtle} numberOfLines={1} style={styles.dateText}>
-									{formatHeaderDateParts(selectedDateKey).weekday}, {formatHeaderDateParts(selectedDateKey).date}
-								</AppText>
-							</View>
-						</View>
-						<Pressable
-							accessibilityRole='button'
-							accessibilityLabel='Open settings'
-							onPress={() => router.push('/(tabs)/settings')}
-							style={({ pressed }) => [styles.settingsButton, { opacity: pressed ? 0.75 : 1 }]}
-						>
-							<Icon
-								name='settings'
-								size={26}
-								color={palette.ink}
-								weight='bulk'
-							/>
-						</Pressable>
-					</View>
+		// The home plate replaces the shared landscape wash entirely — two
+		// backdrops would just muddy each other.
+		<Screen
+			contentStyle={styles.content}
+			backgroundVariant={null}
+			backgroundNode={<HomeBackground period={period} scrollY={scrollY} />}
+			onScroll={handleScroll}
+			scrollEventThrottle={16}
+		>
+			{/* Header: profile · day selector · notifications. Both sides reserve
+			    the same width so the selector centres on the SCREEN, not on
+			    whatever space is left beside the avatar. */}
+			<View style={styles.header}>
+				<View style={styles.headerSide}>
+					<Pressable
+						accessibilityRole='button'
+						accessibilityLabel='Open profile'
+						onPress={() => router.push('/(tabs)/profile')}
+						hitSlop={8}
+						style={({ pressed }) => [
+							styles.avatarButton,
+							{ backgroundColor: alpha(palette.card, HEADER_FILL_ALPHA), opacity: pressed ? 0.7 : 1 },
+						]}
+					>
+						<Avatar config={avatar} size={42} backgroundColor={palette.greenSoft} />
+					</Pressable>
+				</View>
+				<View style={styles.headerCenter}>
+					<DatePill value={selectedDateKey} onChange={setSelectedDateKey} max={todayKey} />
+				</View>
+				<View style={[styles.headerSide, styles.headerSideRight]}>
+					<Pressable
+						accessibilityRole='button'
+						accessibilityLabel='Open settings'
+						onPress={() => router.push('/(tabs)/settings')}
+						hitSlop={10}
+						style={({ pressed }) => [
+							styles.headerButton,
+							{ borderColor: alpha(palette.ink, '2E'), opacity: pressed ? 0.6 : 1 },
+						]}
+					>
+						{/* Ink glyph, but only a tint of it on the ring. Full ink on both
+						    made the outline as loud as the icon inside it — and this
+						    button sits beside an avatar with no ring at all, so a heavy
+						    one read as the odd control out. The glyph stays ink because
+						    it sits on the backdrop plate's sky, where the warm hairline
+						    the rest of the app's chrome uses all but disappears. */}
+						<Icon name='settings' size={20} color={palette.ink} weight='bulk' />
+					</Pressable>
 				</View>
 			</View>
 
-			<FlatList
-				ref={carouselRef}
-				data={dateKeys}
-				keyExtractor={(item) => item}
-				horizontal
-				showsHorizontalScrollIndicator={false}
-				bounces={false}
-				alwaysBounceHorizontal={false}
-				overScrollMode='never'
-				initialScrollIndex={todayIndex}
-				getItemLayout={(_, index) => ({ length: snapInterval, offset: snapInterval * index, index })}
-				initialNumToRender={3}
-				maxToRenderPerBatch={3}
-				windowSize={3}
-				snapToInterval={snapInterval}
-				snapToAlignment='start'
-				disableIntervalMomentum
-				decelerationRate='fast'
-				contentContainerStyle={styles.carouselContent}
-				onMomentumScrollEnd={onCarouselSettled}
-				onScrollToIndexFailed={({ index }) => {
-					carouselRef.current?.scrollToOffset({ offset: index * snapInterval, animated: false })
-				}}
-				style={styles.carousel}
-				renderItem={({ item }) => {
-					const dayHabits = activeHabits.filter((habit) => isScheduledOnDate(habit, item))
-					return (
-						<View style={[styles.progressPage, { width: cardWidth }]}>
-							<DailyProgressCard
-								habits={dayHabits}
-								dateKey={item}
-								streak={bestCurrentStreakAcrossHabits(activeHabits, item)}
-							/>
-						</View>
-					)
-				}}
-			/>
+			{/* Hero. No mascot component here on purpose — Lumo is painted into
+			    the backdrop plate, so the copy column stays out of his half of
+			    the screen and the greeting simply sits beside him. The minimum
+			    height is what keeps the first card off his feet. */}
+			<View style={[styles.hero, { minHeight: heroMinHeight }]}>
+				{/* Outside the column below it, and deliberately so: this line sits
+				    level with Lumo's HEAD, which is the narrowest part of him, so it
+				    gets more of the screen than the lines under it can have. */}
+				<AppText color={palette.ink} style={styles.heroGreeting}>
+					{greeting},
+				</AppText>
+				<View style={styles.heroLower}>
+					<View style={styles.heroCopy}>
+						<AppText color={palette.ink} numberOfLines={2} style={styles.heroName}>
+							{firstName}! 💛
+						</AppText>
+						<AppText variant='bodySmall' color={alpha(palette.ink, 'CC')} style={styles.heroTagline}>
+							{taglineFor(selectedDateKey, period)}
+						</AppText>
+					</View>
+					{/* Reserved, not decorative: below the head Lumo widens out to
+					    roughly the right half of every plate, and copy running under
+					    his hoodie would be unreadable. */}
+					<View style={styles.heroArtReserve} />
+				</View>
+			</View>
+
+			<StreakCard habits={activeHabits} dateKey={selectedDateKey} />
 
 			<QuickDoneWidgets
 				habits={selectedHabits}
 				dateKey={selectedDateKey}
 				groupHabitIds={groupHabitIds}
+				title={isToday ? 'Today’s Habits' : 'Habits'}
 			/>
 
-			{isPro && groups.length > 0 ? (
-				<View style={styles.groupSection}>
-					<AppText variant='titleSmall' color={palette.ink} style={styles.groupSectionHeader}>
-						Your groups
-					</AppText>
-					<ScrollView
-						horizontal
-						showsHorizontalScrollIndicator={false}
-						snapToInterval={snapInterval}
-						snapToAlignment='start'
-						disableIntervalMomentum
-						decelerationRate='fast'
-						style={styles.groupScroller}
-						contentContainerStyle={styles.groupCards}
-					>
-						{groups.map((group) => (
-							<View key={group.id} style={styles.groupCardPage}>
-								<HomeGroupCard group={group} width={cardWidth} myLumoId={myLumoId} onPress={() => router.push(`/group/${group.id}`)} />
-							</View>
-						))}
-					</ScrollView>
-				</View>
-			) : null}
+			<DailyReflectionCard
+				prompt={reflectionPromptFor(selectedDateKey)}
+				onPress={() => router.push(`/journal/${selectedDateKey}`)}
+			/>
 
-			<View style={styles.resourceSection}>
+			<View style={styles.exploreSection}>
 				<AppText
 					variant='titleSmall'
 					color={palette.ink}
-					style={styles.resourceHeader}
+					style={styles.sectionTitle}
 				>
 					Explore
 				</AppText>
-				<ScrollView
-					horizontal
-					showsHorizontalScrollIndicator={false}
-					style={styles.resourceScroller}
-					contentContainerStyle={styles.resourceCards}
-				>
-					<ResourceCard width={resourceCardWidth} motif='journey' icon='sparkle' label='Habit Journey' description='Habit science, made simple' onPress={() => router.push('/tips')} />
-					<ResourceCard width={resourceCardWidth} motif='faqs' icon='note' label='FAQs' description='Quick answers about Lumo' onPress={() => router.push('/faqs')} />
-					{/* Badges entry hidden for now — restore when the badge feature ships.
-					<ResourceCard width={resourceCardWidth} motif='next' icon='award' label='Badges' description='Celebrate your milestones' onPress={() => router.push('/badges')} />
-					*/}
+				{/* One card, four divided rows — the same shape as the habits
+				    card above it. These were picture tiles in a grid, which made
+				    four small destinations look like the loudest thing on the
+				    screen; as a list they sit where they belong, under the day's
+				    actual work. */}
+				<Card style={styles.resourceCard}>
+					<ResourceRow accent='#74BC97' icon='sparkle' label='Habit Journey' description='Habit science, made simple' divided={false} onPress={() => router.push('/tips')} />
+					<ResourceRow accent='#B390F3' icon='note' label='FAQs' description='Quick answers about Lumo' divided onPress={() => router.push('/faqs')} />
+					<ResourceRow accent='#FAD686' icon='award' label='Badges' description='Celebrate your milestones' divided onPress={() => router.push('/badges')} />
 					{/* Feature Board entry hidden for now — restore when the feature ships.
-					<ResourceCard width={resourceCardWidth} motif='next' icon='star' label="What's next" description='Vote on what we build' onPress={() => router.push('/feature-soon')} />
+					<ResourceRow accent='#AE8FFB' icon='star' label="What's next" description='Vote on what we build' divided onPress={() => router.push('/feature-soon')} />
 					*/}
-				</ScrollView>
+				</Card>
 			</View>
 
 			{showConfetti ? (
@@ -526,206 +323,154 @@ export default function TodayScreen() {
 }
 
 const styles = StyleSheet.create({
+	// CONTENT_GAP is what separates the stacked cards, overriding the wider row
+	// gap `Screen` applies by default; only the hero sets a margin of its own.
 	content: {
+		gap: CONTENT_GAP,
 		paddingBottom: layout.tabScreenBottomPadding,
 	},
-	checkInPanel: {
-		gap: spacing.md,
-	},
-	carousel: {
-		marginTop: spacing.md,
-		marginBottom: spacing.sm,
-		// Break out of the screen's horizontal padding so cards can span edge to edge.
-		marginHorizontal: -SCREEN_PADDING,
-	},
-	carouselContent: {
-		// Inset the first/last card so the focused card is centered and neighbors peek.
-		paddingHorizontal: CARD_SIDE,
-	},
-	progressPage: {
-		marginRight: CARD_GAP,
-		justifyContent: 'center',
-	},
 	header: {
-		gap: spacing.xs,
-	},
-	topRow: {
 		flexDirection: 'row',
 		alignItems: 'center',
-		justifyContent: 'space-between',
-		gap: spacing.md,
+		gap: spacing.sm,
 	},
-	profileRow: {
+	headerSide: {
+		width: 42,
+		height: 42,
+		justifyContent: 'center',
+	},
+	headerSideRight: {
+		alignItems: 'flex-end',
+	},
+	headerCenter: {
 		flex: 1,
 		minWidth: 0,
-		flexDirection: 'row',
-		alignItems: 'center',
-		gap: spacing.md,
-	},
-	avatarFrame: {
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
-	avatarCircle: {
-		position: 'absolute',
-		top: 0,
-		left: 0,
-		width: 54,
-		height: 54,
-		borderRadius: 27,
+	// No outline — the portrait fills the circle edge to edge, and a ring round
+	// it read as a second frame drawn over the avatar's own.
+	avatarButton: {
+		width: 42,
+		height: 42,
+		alignItems: 'center',
+		justifyContent: 'center',
+		borderRadius: radius.pill,
+		overflow: 'hidden',
 	},
-	nameBlock: {
+	headerButton: {
+		width: 38,
+		height: 38,
+		alignItems: 'center',
+		justifyContent: 'center',
+		borderRadius: radius.pill,
+		borderWidth: StyleSheet.hairlineWidth,
+	},
+	hero: {
+		// Dropped clear of the header so the greeting opens the scene rather
+		// than crowding the controls above it. Paired with HERO_TOP_GAP, which
+		// feeds the same number into the art's height reservation.
+		marginTop: spacing.xl,
+		// And clear of the first card below it: at the screen's tight 8pt row
+		// gap the tagline sat right on the streak card's edge.
+		marginBottom: spacing.sm,
+	},
+	heroLower: {
+		flexDirection: 'row',
+		// Top-aligned: the copy sits level with Lumo's chest rather than being
+		// centred against the space his art reserves.
+		alignItems: 'flex-start',
+	},
+	heroCopy: {
+		flex: 1,
+		minWidth: 0,
+	},
+	// Serif, like the name under it: the two lines are ONE headline broken over
+	// two sizes, not a label introducing a title.
+	//
+	// The cap is what keeps it off the art. "Good afternoon," is the longest of
+	// the three greetings, and at this size it runs right up to where Lumo's
+	// head starts on the tightest of the five plates.
+	heroGreeting: {
+		fontFamily: fontFamilies.serifBold,
+		fontSize: 30,
+		lineHeight: 38,
+		maxWidth: '68%',
+	},
+	// The screen's one display-size line. Wraps to a second line for a long
+	// nickname rather than shrinking — the column is only about half the screen
+	// wide, since Lumo owns the other half of every backdrop plate.
+	heroName: {
+		fontFamily: fontFamilies.serifBlack,
+		fontSize: 40,
+		lineHeight: 48,
+	},
+	heroTagline: {
+		fontSize: 14,
+		lineHeight: 20,
+		marginTop: spacing.sm,
+	},
+	/**
+	 * What the copy column leaves to Lumo.
+	 *
+	 * His leftmost pixels sit at ~0.50 of the plate's width, but what is out
+	 * there is the pale edge of his cushion or his lunchbox — cream on cream,
+	 * which ink text reads over perfectly well, especially with the halo the
+	 * hero text carries. The line worth respecting is his black hoodie, which
+	 * starts around 0.60 and would swallow anything written on it. 40% puts the
+	 * copy's edge between the two.
+	 */
+	heroArtReserve: {
+		width: '40%',
+	},
+	// Air above and below, so the list reads as its own block rather than as
+	// one more card on the end of the stack. The gap is what separates the
+	// heading from the card it names.
+	exploreSection: {
+		gap: spacing.ml,
+		marginTop: spacing.md,
+		marginBottom: spacing.md,
+	},
+	// The app's list-section heading, matching Habits and the journal's month
+	// headings.
+	sectionTitle: {
+		fontFamily: fontFamilies.lexendBold,
+		fontSize: 16,
+		lineHeight: 22,
+	},
+	// Rows run edge to edge inside the card, so it only insets horizontally —
+	// the rows carry their own vertical padding.
+	resourceCard: {
+		paddingHorizontal: spacing.ml,
+		paddingVertical: spacing.xs,
+	},
+	resourceRow: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: spacing.sm,
+		minHeight: 58,
+		paddingVertical: spacing.sm,
+	},
+	resourceIcon: {
+		width: 40,
+		height: 40,
+		borderRadius: radius.xl,
+		alignItems: 'center',
+		justifyContent: 'center',
+	},
+	resourceText: {
 		flex: 1,
 		minWidth: 0,
 		gap: 1,
 	},
-	nickname: {
-		fontFamily: fontFamilies.lexendBold,
-		fontSize: 21,
-		lineHeight: 26,
-	},
-	dateText: {
-		fontSize: 13,
-		lineHeight: 17,
-	},
-	settingsButton: {
-		width: 44,
-		height: 44,
-		marginRight: -10,
-		alignItems: 'center',
-		justifyContent: 'center',
-	},
-	questionTitle: {
-		fontFamily: fontFamilies.lexendBold,
-		fontSize: 22,
-		lineHeight: 29,
-		marginTop: spacing.xs,
-	},
-	resourceSection: {
-		marginTop: spacing.xs,
-		gap: spacing.sm,
-	},
-	resourceHeader: {
-		fontFamily: fontFamilies.lexendSemiBold,
-		marginBottom: spacing.xxs,
-	},
-	resourceScroller: {
-		marginHorizontal: -SCREEN_PADDING,
-		marginVertical: -spacing.lg,
-	},
-	// Generous vertical padding (offset by the negative margins above) keeps
-	// the soft card shadows from clipping at the scroll view bounds.
-	resourceCards: {
-		gap: spacing.sm,
-		paddingHorizontal: SCREEN_PADDING,
-		paddingVertical: spacing.lg,
-	},
-	groupSection: {
-		marginTop: spacing.xs,
-		gap: spacing.sm,
-	},
-	groupSectionHeader: {
-		fontFamily: fontFamilies.lexendSemiBold,
-		marginBottom: spacing.xxs,
-	},
-	// Break out of the screen padding and inset by CARD_SIDE so the cards line up
-	// exactly with the date carousel above (same width + edges). Generous vertical
-	// padding (cancelled by the negative margin) keeps the card shadow from
-	// clipping at the scroll bounds.
-	groupScroller: {
-		marginHorizontal: -SCREEN_PADDING,
-		marginVertical: -spacing.xl,
-	},
-	groupCards: {
-		paddingHorizontal: CARD_SIDE,
-		paddingVertical: spacing.xl,
-	},
-	groupCardPage: {
-		marginRight: CARD_GAP,
-	},
-	homeGroupCard: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		gap: spacing.md,
-		borderRadius: 30,
-		padding: spacing.lg,
-		shadowOffset: { width: 0, height: 7 },
-		shadowOpacity: 0.09,
-		shadowRadius: 22,
-		elevation: 4,
-	},
-	homeGroupAvatar: {
-		width: 52,
-		height: 52,
-		borderRadius: radius.pill,
-		alignItems: 'center',
-		justifyContent: 'center',
-		overflow: 'hidden',
-	},
-	homeGroupInfo: {
-		flex: 1,
-		minWidth: 0,
-		gap: spacing.xxs,
-	},
-	homeGroupNameRow: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		gap: spacing.xs,
-	},
-	homeGroupName: {
+	resourceLabel: {
 		flexShrink: 1,
 		fontFamily: fontFamilies.lexendSemiBold,
+		fontSize: 14,
+		lineHeight: 21,
 	},
-	homeGroupStreak: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		gap: 3,
-		paddingHorizontal: spacing.xs,
-		paddingVertical: 2,
-		borderRadius: radius.pill,
-	},
-	homeGroupStreakText: {
-		fontFamily: fontFamilies.lexendSemiBold,
-		fontSize: 11,
-	},
-	homeGroupTodo: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		gap: spacing.xs,
-		paddingHorizontal: spacing.sm,
-		paddingVertical: spacing.xs,
-		borderRadius: radius.pill,
-	},
-	homeGroupTodoDone: {
-		textTransform: 'capitalize',
-	},
-	homeGroupTodoNumber: {
-		fontFamily: 'Lexend-Black',
-	},
-	resourceCard: {
-		flex: 1,
-		alignItems: 'flex-start',
-		gap: spacing.xxs,
-		padding: spacing.lg,
-		borderRadius: radius.xl,
-		shadowOffset: { width: 0, height: 3 },
-		shadowOpacity: 0.08,
-		shadowRadius: 10,
-		elevation: 2,
-	},
-	// Clips the decorative shapes to the card's rounded corners. The clip
-	// lives here instead of on the card so the iOS shadow isn't masked away.
-	resourceBackdrop: {
-		alignItems: 'flex-end',
-		borderRadius: radius.xl,
-		overflow: 'hidden',
-	},
-	resourceLabel: {
-		fontFamily: fontFamilies.lexendBold,
-		fontSize: 17,
-		lineHeight: 22,
-		marginTop: spacing.xxs,
-	},
+	// Regular weight, against `caption`'s semibold: the label above it is the
+	// thing being scanned, and at the same weight the two lines competed.
 	resourceDescription: {
 		fontFamily: fontFamilies.lexend,
 		fontSize: 12,

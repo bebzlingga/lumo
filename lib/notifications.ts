@@ -1,6 +1,14 @@
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { AppState, Platform } from "react-native";
+import {
+  CHECK_INS,
+  checkInTimeFor,
+  parseCheckInTime,
+  type CheckInKey,
+  type CheckInSchedule,
+  type CheckInTimes
+} from "@/constants/checkIns";
 import { Habit, RepeatSchedule, Weekday } from "@/types/habit";
 
 Notifications.setNotificationHandler({
@@ -163,6 +171,70 @@ export async function scheduleHabitReminder(habit: Habit) {
   }
 
   return ids;
+}
+
+/**
+ * Deterministic id per check-in, so the reminders can be cancelled without
+ * persisting anything. Expo lets us name a scheduled notification; naming them
+ * means "turn the evening one off" is one call, with no id bookkeeping in
+ * settings that could drift out of sync with what is actually scheduled.
+ */
+function checkInNotificationId(key: CheckInKey) {
+  return `lumo-checkin-${key}`;
+}
+
+/**
+ * Brings the OS schedule in line with `enabled`, which is the whole
+ * implementation of Lumo's daily nudges.
+ *
+ * Cancel-then-reschedule rather than diffing: there are four of them, the calls
+ * are cheap, and it is the only approach that self-heals. A notification left
+ * over from a build with different times, or from a restore, is cleared by the
+ * next sync rather than firing forever at an hour nothing in settings admits to.
+ *
+ * Never throws — a declined permission or an unavailable notification service
+ * must not take a settings toggle or the end of onboarding down with it.
+ */
+export async function syncCheckInReminders(enabled: CheckInSchedule, times?: CheckInTimes) {
+  try {
+    await Promise.all(
+      CHECK_INS.map((checkIn) =>
+        Notifications.cancelScheduledNotificationAsync(checkInNotificationId(checkIn.key)).catch(() => undefined)
+      )
+    );
+
+    const wanted = CHECK_INS.filter((checkIn) => enabled[checkIn.key]);
+
+    if (!wanted.length) {
+      return;
+    }
+
+    const status = await requestNotificationPermissions();
+
+    if (status !== "granted") {
+      return;
+    }
+
+    for (const checkIn of wanted) {
+      // The user's own time when they've moved it, the built-in default when
+      // they haven't. Every sync cancels first (above), so a retimed check-in
+      // never leaves its old trigger behind.
+      const { hour, minute } = parseCheckInTime(checkInTimeFor(checkIn, times));
+
+      await Notifications.scheduleNotificationAsync({
+        identifier: checkInNotificationId(checkIn.key),
+        content: { title: checkIn.title, body: checkIn.body },
+        trigger: {
+          hour,
+          minute,
+          repeats: true
+        } as Notifications.NotificationTriggerInput
+      });
+    }
+  } catch {
+    // Notifications unavailable — the stored preference stands, and the next
+    // sync (app launch, or the next toggle) will try again.
+  }
 }
 
 export async function cancelHabitReminders(notificationIds?: string[]) {

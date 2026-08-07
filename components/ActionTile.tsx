@@ -28,7 +28,7 @@ export function ActionTile({
       style={[
         styles.tile,
         // A subtle shadow vanishes on the dark canvas, so deepen it in dark mode.
-        { backgroundColor: backgroundColor ?? palette.card, shadowColor: palette.shadow, shadowOpacity: isDark ? 0.32 : 0.09 },
+        { backgroundColor: backgroundColor ?? palette.card, shadowColor: palette.shadow, shadowOpacity: isDark ? 0.22 : 0.045 },
         style
       ]}
       onPress={onPress}
@@ -51,10 +51,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: spacing.xs,
-    shadowOffset: { width: 0, height: 7 },
-    shadowOpacity: 0.09,
-    shadowRadius: 22,
-    elevation: 4
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.045,
+    shadowRadius: 8,
+    elevation: 2
   },
   label: {
     fontSize: 14,

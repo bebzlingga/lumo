@@ -1,27 +1,20 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
+import { Alert, Modal, ScrollView, StyleProp, StyleSheet, View, ViewStyle } from "react-native"
 import { WheelTimePicker } from "./WheelTimePicker";
-import { defaultHabitColor, fontFamilies, habitColorPickerOptions, radius, spacing } from "@/constants/theme";
+import { brand, defaultHabitColor, fontFamilies, habitAccent, habitColorPickerOptions, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
-import { alpha } from "@/lib/color";
+import { alpha, readableOn } from "@/lib/color";
 import { dayLabels, dayNames, parseDateKey, toDateKey } from "@/lib/date";
 import { Habit, HabitDraft, GoalType, RepeatSchedule, Weekday, habitCategories } from "@/types/habit";
-import { categoryIcons, categoryNamePlaceholders } from "./CategoryChips";
+import { categoryIcons, categoryNamePlaceholders, categorySuggestions } from "./CategoryChips";
 import { FloatingDropdown } from "./FloatingDropdown";
 import { categoryIconOptions } from "./IconPicker";
 import { HabitIcon } from "./HabitIcon";
 import { Icon, IconName, isIconName } from "./Icon";
-import {
-  AppText,
-  Button,
-  Card,
-  Field,
-  FieldLabel,
-  IconButton,
-  LumoInput,
-  Screen
-} from "./ui";
+import { AppText, Field, FieldLabel, fieldShadow, LumoInput, Screen } from "./ui";
+import { Toggle } from "./controls";
+import { Pressable } from "@/components/Pressable"
 
 const DEFAULT_HABIT_ICON: IconName = "sparkle";
 const ICON_PICKER_BOX_SIZE = 24;
@@ -34,7 +27,7 @@ function createDefaultDraft(): HabitDraft {
     emoji: DEFAULT_HABIT_ICON,
     color: defaultHabitColor,
     createdAt: toDateKey(),
-    reminderEnabled: false,
+    reminderEnabled: true,
     reminderMode: "time",
     reminderTime: "09:00",
     reminderIntervalValue: 1,
@@ -60,8 +53,49 @@ const cadenceOptions: { label: string; value: HabitCadence }[] = [
   { label: "Times per month", value: "monthly" }
 ];
 
-function FormSection({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
-  return <Card style={[styles.formCard, style]}>{children}</Card>;
+/**
+ * A form section. Deliberately NOT a card — onboarding groups fields with a
+ * heading and whitespace rather than nesting surfaces, and the form follows it.
+ *
+ * Exported so the group form uses this rather than its own near-copy: two forms
+ * that look alike but are built differently drift apart on the first change to
+ * either.
+ */
+export function FormSection({
+  heading,
+  hint,
+  trailing,
+  children,
+  style
+}: {
+  heading?: string;
+  hint?: string;
+  trailing?: React.ReactNode;
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { palette } = useLumo();
+
+  return (
+    <View style={[styles.formSection, style]}>
+      {heading ? (
+        <View style={[styles.sectionHeader, { borderBottomColor: palette.hairline }]}>
+          <View style={styles.sectionHeaderText}>
+            <AppText variant="titleSmall" color={palette.ink} style={styles.sectionHeading}>
+              {heading}
+            </AppText>
+            {hint ? (
+              <AppText variant="bodySmall" color={palette.subtle}>
+                {hint}
+              </AppText>
+            ) : null}
+          </View>
+          {trailing}
+        </View>
+      ) : null}
+      {children}
+    </View>
+  );
 }
 
 function isValidDateKey(dateKey: string) {
@@ -211,18 +245,20 @@ function draftFromHabit(habit?: Habit): HabitDraft {
 export function HabitForm({
   habit,
   title,
+  subtitle,
+  backLabel = "Habits",
   onSave
 }: {
   habit?: Habit;
   title: string;
+  /** Lead copy under the title. Falls back to a category-aware suggestion. */
+  subtitle?: string;
+  /** Name of the screen this form was opened from — shown beside the back arrow. */
+  backLabel?: string;
   onSave: (draft: HabitDraft) => Promise<void>;
 }) {
   const router = useRouter();
   const { palette, isDark } = useLumo();
-  // greenDark is a *dark* green in light mode but a *light* green in dark mode,
-  // so a filled button needs the medium green in dark to keep white text legible.
-  const buttonFill = isDark ? palette.green : palette.greenDark;
-  const buttonShadow = isDark ? "transparent" : palette.greenDark;
   const [draft, setDraft] = useState<HabitDraft>(() => draftFromHabit(habit));
   const [customInterval, setCustomInterval] = useState(() => {
     return draft.repeatSchedule.type === "interval" ? String(draft.repeatSchedule.every) : "2";
@@ -250,7 +286,28 @@ export function HabitForm({
   const selectedIconName = isIconName(draft.emoji) ? draft.emoji : DEFAULT_HABIT_ICON;
   // Resting bottom-border for inputs and selects — a tinted green that reads
   // more clearly than the faint cream hairline.
-  const fieldBorderColor = alpha(palette.greenDark, "33");
+  // Fields show no resting edge; only the active/open state draws one.
+  const fieldBorderColor = "transparent";
+  // Accent follows the selected colour swatch, so every cue in the form
+  // previews what the habit will actually look like. greenDark is the fallback
+  // for legacy habits with no colour theme — it is a *dark* green in light mode
+  // but a *light* green in dark mode, so the filled button uses the medium
+  // green in dark to keep white text legible.
+  // The selected colour's card-safe accent. Used raw for the icon's selection
+  // bubble, where it is a 12% wash and legibility is not at stake.
+  const draftColorAccent = habitAccent(draft.color, isDark) ?? palette.greenDark;
+  // Habit icons preview the selected colour. Darkened only as far as needed to
+  // stay legible — the ambers and corals sit under 3:1 on the card surface at
+  // full strength.
+  const draftAccent = readableOn(draftColorAccent, palette.card);
+  // The CTA deliberately stays on the theme green: 12 of the 17 picker accents
+  // cannot carry a white label at 4.5:1, so tinting it per habit colour would
+  // leave the primary button unreadable for most choices.
+  // Matches onboarding's CtaButton exactly: the alpha sits on the FILL only,
+  // so the landscape backdrop shows through the button while the label stays
+  // fully opaque.
+  const ctaFill = alpha(brand.sageStrong, "CC");
+  const saveLabel = habit ? "Save changes" : "Create habit";
 
   const multipleCount = draft.goal.type === "multiple" ? Math.max(2, Number(goalAmount) || 2) : 1;
 
@@ -404,24 +461,31 @@ export function HabitForm({
 
   return (
     <Screen contentStyle={styles.content}>
+      {/* Outlined back circle, title centred, matching the journal editor and
+          the habit screens. The right slot is an empty box of the same width so
+          the title centres on the row rather than on the space left over. */}
       <View style={styles.topBar}>
-        <View>
-          <AppText variant="displaySmall" style={styles.title}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Back to ${backLabel}`}
+          onPress={() => router.back()}
+          hitSlop={10}
+          style={({ pressed }) => [styles.topBarButton, { borderColor: palette.hairline, opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Icon name="arrowLeft" size={20} color={palette.ink} weight="bold" />
+        </Pressable>
+        <View style={styles.topBarCopy}>
+          <AppText color={palette.ink} numberOfLines={1} style={styles.topBarTitle}>
             {title}
           </AppText>
-          <AppText variant="bodySmall" color={palette.subtle} style={styles.subtitle}>
-            Small, gentle, repeatable.
-          </AppText>
         </View>
-        <IconButton
-          icon="close"
-          label="Close"
-          iconWeight="bulk"
-          iconSize={26}
-          buttonSize={48}
-          onPress={() => router.back()}
-          style={{ backgroundColor: palette.surface, borderColor: palette.hairline }}
-        />
+        <View style={styles.topBarSpacer} />
+      </View>
+
+      <View style={styles.titleBlock}>
+        <AppText variant="body" color={palette.subtle} style={styles.subtitle}>
+          {subtitle ?? `Start small enough to manage on a bad day — ${categorySuggestions[draft.category]}. You can always grow it later.`}
+        </AppText>
       </View>
 
       <FormSection>
@@ -448,7 +512,14 @@ export function HabitForm({
                       return { ...current, category, emoji };
                     })
                   }
-                  style={[styles.categoryChip, { backgroundColor: isSelected ? alpha(palette.greenDark, "1F") : "transparent" }]}
+                  // Same treatment as the icon row below: a tinted bubble when
+                  // selected, nothing at rest. Tinted from the theme green
+                  // rather than the habit's colour, because the glyph and label
+                  // inside are green too — a category is not colour-coded.
+                  style={[
+                    styles.categoryChip,
+                    { backgroundColor: isSelected ? alpha(palette.greenDark, "1F") : "transparent" }
+                  ]}
                 >
                   <View style={styles.categoryGlyph}>
                     <Icon
@@ -477,7 +548,7 @@ export function HabitForm({
             value={draft.name}
             onChangeText={(name) => setDraft((current) => ({ ...current, name }))}
             placeholder={categoryNamePlaceholders[draft.category]}
-            style={[styles.flatInput, { borderColor: fieldBorderColor }]}
+            style={[styles.flatInput, { backgroundColor: palette.card }]}
           />
         </Field>
 
@@ -489,7 +560,7 @@ export function HabitForm({
             placeholder="MM / DD / YYYY"
             keyboardType="number-pad"
             maxLength={14}
-            style={[styles.flatInput, { borderColor: fieldBorderColor }]}
+            style={[styles.flatInput, { backgroundColor: palette.card }]}
           />
         </Field>
 
@@ -505,11 +576,13 @@ export function HabitForm({
                   accessibilityRole="button"
                   accessibilityState={{ selected: isSelected }}
                   onPress={() => setDraft((current) => ({ ...current, emoji: iconName }))}
-                  style={[styles.iconChip, { backgroundColor: isSelected ? alpha(palette.greenDark, "1F") : "transparent" }]}
+                  // Selection is a tinted bubble in the habit's OWN colour —
+                  // no border, no resting fill. It was a bordered card tile,
+                  // which put a box round every icon and made the row read as
+                  // eight surfaces rather than eight glyphs.
+                  style={[styles.iconChip, { backgroundColor: isSelected ? alpha(draftColorAccent, "1F") : "transparent" }]}
                 >
-                  <View style={styles.iconGlyph}>
-                    <HabitIcon value={iconName} color={palette.greenDark} size={ICON_PICKER_SIZE} />
-                  </View>
+                  <HabitIcon value={iconName} color={draftAccent} size={ICON_PICKER_SIZE} />
                 </Pressable>
               );
             })}
@@ -531,9 +604,10 @@ export function HabitForm({
                   onPress={() => setDraft((current) => ({ ...current, color: option.color }))}
                   style={[styles.colorChipOuter, { borderColor: isSelected ? option.accent : "transparent" }]}
                 >
-                  <View style={[styles.colorChip, { backgroundColor: option.color, borderColor: palette.hairline }]}>
-                    {isSelected ? <Icon name="checkCircle" size={16} color={option.onColor} weight="bulk" /> : null}
-                  </View>
+                  {/* No tick inside the swatch — the ring around it already
+                      says which is chosen, and a glyph on top obscured the one
+                      colour the control exists to show you. */}
+                  <View style={[styles.colorChip, { backgroundColor: option.color, borderColor: palette.hairline }]} />
                 </Pressable>
               );
             })}
@@ -542,16 +616,10 @@ export function HabitForm({
 
       </FormSection>
 
-      <FormSection>
-        <View style={styles.cardHeader}>
-          <AppText variant="titleSmall" color={palette.ink}>
-            Frequency & goal
-          </AppText>
-          <AppText variant="bodySmall" color={palette.subtle}>
-            Pick the days this habit repeats — or a weekly/monthly target you can hit on any day.
-          </AppText>
-        </View>
-        <View style={[styles.sectionDivider, { backgroundColor: palette.hairline }]} />
+      <FormSection
+        heading="Frequency & goal"
+        hint="Pick the days this habit repeats — or a weekly/monthly target you can hit on any day."
+      >
 
         <Field>
           <FieldLabel>How often?</FieldLabel>
@@ -612,7 +680,7 @@ export function HabitForm({
               value={customInterval}
               onChangeText={setCustomInterval}
               keyboardType="number-pad"
-              style={[styles.flatInput, { borderColor: fieldBorderColor }]}
+              style={[styles.flatInput, { backgroundColor: palette.card }]}
             />
           </Field>
         ) : null}
@@ -625,43 +693,22 @@ export function HabitForm({
             value={goalAmount}
             onChangeText={setAmount}
             keyboardType="number-pad"
-            style={[styles.flatInput, { borderColor: fieldBorderColor }]}
+            style={[styles.flatInput, { backgroundColor: palette.card }]}
           />
         </Field>
       </FormSection>
 
-      <FormSection>
-        <View style={styles.reminderHeaderRow}>
-          <View style={[styles.cardHeader, styles.reminderHeaderText]}>
-            <AppText variant="titleSmall" color={palette.ink}>
-              Reminder
-            </AppText>
-            <AppText variant="bodySmall" color={palette.subtle} numberOfLines={1}>
-              {draft.goal.type === "multiple" ? "A nudge at each check-in time." : "A gentle nudge at your set time."}
-            </AppText>
-          </View>
-          <Pressable
-            accessibilityRole="switch"
+      <FormSection
+        heading="Reminder"
+        hint={draft.goal.type === "multiple" ? "A nudge at each check-in time." : "A gentle nudge at your set time."}
+        trailing={
+          <Toggle
+            value={draft.reminderEnabled}
+            onValueChange={(next) => setDraft((current) => ({ ...current, reminderEnabled: next }))}
             accessibilityLabel="Enable reminders"
-            accessibilityState={{ checked: draft.reminderEnabled }}
-            onPress={() => setDraft((current) => ({ ...current, reminderEnabled: !current.reminderEnabled }))}
-            hitSlop={8}
-            style={({ pressed }) => [styles.switchButton, { opacity: pressed ? 0.76 : 1 }]}
-          >
-            <View
-              style={[
-                styles.switchTrack,
-                {
-                  backgroundColor: draft.reminderEnabled ? palette.green : palette.chartTrack,
-                  borderColor: draft.reminderEnabled ? palette.green : palette.chartTrack
-                }
-              ]}
-            >
-              <View style={[styles.switchThumb, { transform: [{ translateX: draft.reminderEnabled ? 16 : 0 }] }]} />
-            </View>
-          </Pressable>
-        </View>
-        {draft.reminderEnabled ? <View style={[styles.sectionDivider, { backgroundColor: palette.hairline }]} /> : null}
+          />
+        }
+      >
 
         {draft.reminderEnabled ? (
           draft.goal.type === "multiple" ? (
@@ -672,7 +719,7 @@ export function HabitForm({
                   accessibilityRole="button"
                   accessibilityLabel={`Reminder ${index + 1} time, ${formatTime12(time)}`}
                   onPress={() => setPickerTarget(index)}
-                  style={[styles.timeField, { borderColor: fieldBorderColor }]}
+                  style={[styles.timeField, { borderColor: fieldBorderColor, backgroundColor: palette.card, shadowColor: palette.shadow }]}
                 >
                   <AppText variant="body" color={palette.ink} style={styles.timeFieldText}>
                     {formatTime12(time)}
@@ -688,7 +735,7 @@ export function HabitForm({
                 accessibilityRole="button"
                 accessibilityLabel={`Reminder time, ${formatTime12(singleTime)}`}
                 onPress={() => setPickerTarget("single")}
-                style={[styles.timeField, { borderColor: fieldBorderColor }]}
+                style={[styles.timeField, { borderColor: fieldBorderColor, backgroundColor: palette.card, shadowColor: palette.shadow }]}
               >
                 <AppText variant="body" color={palette.ink} style={styles.timeFieldText}>
                   {formatTime12(singleTime)}
@@ -710,7 +757,7 @@ export function HabitForm({
                 accessibilityRole="button"
                 accessibilityLabel="Done"
                 onPress={() => setPickerTarget(null)}
-                style={({ pressed }) => [styles.pickerDoneButton, { backgroundColor: buttonFill, opacity: pressed ? 0.85 : 1 }]}
+                style={({ pressed }) => [styles.pickerDoneButton, { backgroundColor: ctaFill, opacity: pressed ? 0.88 : 1 }]}
               >
                 <AppText variant="button" color={palette.white} style={styles.pickerDoneLabel}>
                   Done
@@ -721,58 +768,111 @@ export function HabitForm({
         </Modal>
       ) : null}
 
-      <View
-        style={{
-          marginTop: spacing.xs,
-          borderRadius: 18,
-          backgroundColor: buttonFill,
-          shadowColor: buttonShadow,
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: 0.28,
-          shadowRadius: 16,
-          elevation: 8
-        }}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={saveLabel}
+        onPress={save}
+        style={({ pressed }) => [styles.cta, { backgroundColor: ctaFill, opacity: pressed ? 0.88 : 1 }]}
       >
-        <Button
-          label={habit ? "Save changes" : "Create habit"}
-          variant="primary"
-          onPress={save}
-          className="min-h-[48px] w-full flex-row items-center justify-center rounded-[18px] px-4 py-2"
-          style={{ backgroundColor: buttonFill, borderRadius: 18, borderWidth: 0 }}
-          labelStyle={{ fontSize: 17 }}
-        />
-      </View>
+        <AppText variant="button" color="#FFFFFF">
+          {saveLabel}
+        </AppText>
+      </Pressable>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
+    // Onboarding pads its screens by spacing.xl — the form follows it.
+    paddingHorizontal: layout.screenPaddingX,
     paddingBottom: spacing.xxl
+  },
+  // Onboarding's CtaButton geometry.
+  cta: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.pill,
+    minHeight: 54,
+    paddingHorizontal: layout.screenPaddingX,
+    marginTop: spacing.xl
   },
   topBar: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: spacing.md
+    alignItems: "center",
+    gap: spacing.sm
   },
-  title: {
-    fontFamily: fontFamilies.lexendBold,
-    fontSize: 34,
-    lineHeight: 40
+  topBarButton: {
+    width: 38,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth
+  },
+  topBarSpacer: {
+    width: 38,
+    height: 38
+  },
+  topBarCopy: {
+    flex: 1,
+    alignItems: "center"
+  },
+  topBarTitle: {
+    fontFamily: fontFamilies.serifBlack,
+    fontSize: 19,
+    lineHeight: 25
+  },
+  titleBlock: {
+    gap: spacing.xs,
+    // Screen gap (20) + the first section's marginTop (20) reads too loose
+    // under the header; pull it back without touching section rhythm.
+    marginBottom: -spacing.sm
   },
   subtitle: {
-    marginTop: spacing.xxs
+    fontSize: 15,
+    lineHeight: 22,
+    maxWidth: 340
   },
-  formCard: {
+  /**
+   * The form rhythm, and the only place it is set — every form in the app
+   * (this one and the group activity screen) inherits it from here:
+   *
+   *   label → control      8   `Field`'s own gap
+   *   field → field       16   this gap
+   *   section → section   24   this margin
+   *   last field → CTA    32   `cta`'s margin
+   *
+   * One 8pt step per level, so a field reads as one unit and a section as one
+   * group without the form spreading out. The steps were 20/32/40, which
+   * separated things clearly but left the sections floating apart; halving the
+   * step keeps the hierarchy legible and pulls the form back together.
+   *
+   * Screens must NOT add a row gap of their own on top of this; two sources for
+   * the same gap is how the forms drifted to 20 and 36 apart.
+   */
+  formSection: {
     gap: spacing.md,
-    padding: spacing.xl
+    marginTop: spacing.lg
   },
-  cardHeader: {
+  // The section's own 20pt gap already follows this, so the header adds only
+  // the room its rule needs. It was paddingBottom 12 plus marginBottom 4 on top
+  // of that gap — 36pt between a heading and the field it introduces.
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingBottom: spacing.xs
+  },
+  sectionHeaderText: {
+    flex: 1,
     gap: spacing.xxs
   },
-  sectionDivider: {
-    height: StyleSheet.hairlineWidth
+  sectionHeading: {
+    fontFamily: fontFamilies.lexendBold,
+    fontSize: 16,
+    lineHeight: 22
   },
   inlineFields: {
     flexDirection: "row",
@@ -783,24 +883,31 @@ const styles = StyleSheet.create({
   },
   iconChipRow: {
     alignItems: "center",
-    paddingRight: spacing.lg
+    gap: spacing.xxs,
+    paddingVertical: spacing.xs,
+    paddingRight: spacing.xl
   },
+  // No marginBottom of its own: the row already carries 8pt of padding under
+  // the cards, and the next section brings its own 24pt on top. All three
+  // stacked to 44pt of nothing under the category picker.
   categoryScroll: {
-    marginHorizontal: -spacing.xl,
-    marginBottom: spacing.sm
+    marginHorizontal: -layout.screenPaddingX
   },
   categoryRow: {
     alignItems: "flex-start",
-    paddingHorizontal: spacing.xl
+    gap: spacing.xxs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: layout.screenPaddingX
   },
+  // No border and no resting fill — selection is the tinted bubble alone.
   categoryChip: {
     alignItems: "center",
     justifyContent: "center",
     gap: spacing.xs,
-    width: 80,
+    width: 84,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.sm,
-    borderRadius: radius.xl
+    borderRadius: radius.card
   },
   categoryGlyph: {
     alignItems: "center",
@@ -811,24 +918,25 @@ const styles = StyleSheet.create({
   categoryLabel: {
     textAlign: "center"
   },
+  // A card per icon — bordered tile on the card surface, matching the
+  // selection rows in onboarding.
+  // Selection changes the border only, never the surface — and the border is
+  // always present at 2pt so selecting doesn't shift the row by 2pt.
+  // No border and no resting fill — selection is the tinted bubble alone.
+  // Rounded, not a full circle: a pill-radius bubble behind a round glyph read
+  // as a second ring around it.
   iconChip: {
     alignItems: "center",
     justifyContent: "center",
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: radius.xl
-  },
-  iconGlyph: {
-    alignItems: "center",
-    justifyContent: "center",
-    width: ICON_PICKER_BOX_SIZE,
-    height: ICON_PICKER_BOX_SIZE
   },
   colorChipRow: {
     alignItems: "center",
     gap: spacing.sm,
     paddingVertical: spacing.xs,
-    paddingRight: spacing.lg
+    paddingRight: spacing.xl
   },
   colorChipOuter: {
     width: 34,
@@ -848,7 +956,7 @@ const styles = StyleSheet.create({
   },
   dayList: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: spacing.md,
     paddingRight: spacing.lg
   },
@@ -870,65 +978,29 @@ const styles = StyleSheet.create({
   dayNameSelected: {
     fontFamily: fontFamilies.lexendSemiBold
   },
+  // Onboarding's field treatment: a boxed, warm 2pt border on the card
+  // surface — not a borderless underline.
   flatInput: {
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    borderBottomWidth: 1,
-    borderRadius: 0,
-    minHeight: 0,
-    paddingHorizontal: 0,
-    paddingTop: spacing.xxs,
-    paddingBottom: spacing.sm,
-    fontFamily: fontFamilies.lexendBold
-  },
-  reminderHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md
-  },
-  reminderHeaderText: {
-    flex: 1
-  },
-  switchButton: {
-    width: 38,
-    height: 22,
-    flexShrink: 0,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  switchTrack: {
-    width: 38,
-    height: 22,
-    borderRadius: radius.pill,
     borderWidth: 1,
-    padding: 3,
-    justifyContent: "center",
-    alignItems: "flex-start",
-    overflow: "hidden"
+    borderRadius: radius.button,
+    minHeight: 52,
+    paddingHorizontal: spacing.md,
+    fontFamily: fontFamilies.lexendSemiBold
   },
-  switchThumb: {
-    width: 16,
-    height: 16,
-    borderRadius: radius.pill,
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#141413",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.14,
-    shadowRadius: 2,
-    elevation: 2
-  },
+  // Same box as an input, so the reminder row reads as a field.
   timeField: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.sm,
-    borderBottomWidth: 1,
-    paddingTop: spacing.xxs,
-    paddingBottom: spacing.sm
+    borderWidth: 1,
+    borderRadius: radius.button,
+    minHeight: 52,
+    paddingHorizontal: spacing.md,
+    ...fieldShadow
   },
   timeFieldText: {
-    fontFamily: fontFamilies.lexendBold
+    fontFamily: fontFamilies.lexendSemiBold
   },
   pickerBackdrop: {
     flex: 1,
@@ -941,13 +1013,13 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 420,
     borderRadius: 40,
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: layout.screenPaddingX,
     paddingVertical: spacing.xl
   },
   pickerDoneButton: {
     marginTop: spacing.md,
     minHeight: 48,
-    borderRadius: 18,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center"
   },

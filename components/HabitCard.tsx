@@ -3,18 +3,21 @@ import { useRouter } from "expo-router";
 import React from "react";
 import { Alert, Animated as RNAnimated, Pressable, StyleSheet, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from "react-native-reanimated";
-import { habitAccent, habitColorOption, radius, spacing } from "@/constants/theme";
+import { fontFamilies, habitAccent, habitColorOption, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
-import { alpha } from "@/lib/color";
+import { alpha, readableOn } from "@/lib/color";
 import { toDateKey } from "@/lib/date";
-import { completionCount, currentStreak, dailyTarget, isDoneOnDate, monthlyCompletionCount, weeklyCompletionCount } from "@/lib/habitMath";
+import { cadenceLabel, completionCount, currentStreak, dailyTarget, isDoneOnDate, monthlyCompletionCount, weeklyCompletionCount } from "@/lib/habitMath";
 import { Habit } from "@/types/habit";
 import { AppText, Button, Card } from "./ui";
 import { DottedProgressChart } from "./DottedProgressChart";
-import { FireIcon } from "./FireIcon";
+import { FIRE_COLOR, FireIcon } from "./FireIcon";
 import { HabitIcon } from "./HabitIcon";
 import { HoldProgressRing } from "./HoldProgressRing";
 import { Icon } from "./Icon";
+
+/** A streak only reads as a streak once it holds — same rule as StreakBadge. */
+const STREAK_MINIMUM = 3;
 
 const UNDO_HOLD_DURATION_MS = 1500;
 // Only reveal the progress ring after this much holding, so a quick tap never
@@ -57,6 +60,10 @@ export function HabitCard({
     : habit.reminderMode === "interval"
       ? `Every ${habit.reminderIntervalValue} ${habit.reminderIntervalUnit === "hours" ? "hr" : "min"}`
       : habit.reminderTime;
+  // What the habit asks of you, rather than how it is going — the streak now
+  // lives in the trailing badge. Shared with the home screen's habit rows.
+  const cadence = React.useMemo(() => cadenceLabel(habit), [habit]);
+
   const goalLabel = React.useMemo(
     () =>
       habit.goal.type === "weekly"
@@ -73,8 +80,10 @@ export function HabitCard({
   // Habits with a color theme carry it through the card; legacy habits keep
   // the app theme's greens.
   const habitColor = habitColorOption(habit.color);
-  const iconBackgroundColor = habitColor ? habitColor.color : isDark ? palette.greenSoft : palette.greenDark;
-  const iconColor = habitColor ? habitColor.onColor : isDark ? palette.greenDark : palette.white;
+  // Onboarding's IconTile treatment: a soft tint carrying a saturated glyph,
+  // rather than a solid fill with a knocked-out white one.
+  const iconBackgroundColor = habitColor ? alpha(habitColor.color, "24") : palette.greenSoft;
+  const iconColor = habitColor ? readableOn(habitColor.color, palette.card) : palette.greenDark;
   const accentColor = habitAccent(habit.color, isDark) ?? palette.greenDark;
   const canUndoCompletion = !disabledActions && habit.status === "active" && count > 0;
 
@@ -176,25 +185,31 @@ export function HabitCard({
   return (
     <Pressable
       onPress={handleOpenHabit}
-      onLongPress={() => handleUndoCompletion("longPress")}
-      onPressIn={handleHoldStart}
-      onPressOut={handleHoldEnd}
-      delayLongPress={UNDO_HOLD_DURATION_MS}
+      {...(compact
+        ? // The list is a browse surface: no completing, and so no hold-to-undo
+          // either — otherwise you could remove a completion here but not add one.
+          null
+        : {
+            onLongPress: () => handleUndoCompletion("longPress"),
+            onPressIn: handleHoldStart,
+            onPressOut: handleHoldEnd,
+            delayLongPress: UNDO_HOLD_DURATION_MS
+          })}
       accessibilityRole="button"
-      accessibilityLabel={canUndoCompletion ? `${habit.name}. Long press to undo completion.` : habit.name}
+      accessibilityLabel={!compact && canUndoCompletion ? `${habit.name}. Long press to undo completion.` : habit.name}
     >
       <Animated.View style={cardAnimatedStyle}>
         <Card style={compact ? styles.compactCard : undefined}>
           <View style={styles.header}>
             <View style={[styles.iconBubble, { backgroundColor: iconBackgroundColor }]}>
               <HabitIcon value={habit.emoji} color={iconColor} size={21} />
-              {canUndoCompletion ? (
+              {!compact && canUndoCompletion ? (
                 <HoldProgressRing progress={holdProgress} size={52} stroke={3} color={accentColor} trackColor={alpha(accentColor, "24")} />
               ) : null}
             </View>
             <View style={styles.titleBlock}>
               <View style={styles.titleRow}>
-                <AppText variant="titleSmall" numberOfLines={1} style={styles.titleText}>
+                <AppText variant="titleSmall" numberOfLines={1} style={[styles.titleText, compact ? styles.titleTextCompact : null]}>
                   {habit.name}
                 </AppText>
                 {habit.status === "paused" ? (
@@ -205,22 +220,38 @@ export function HabitCard({
                   </View>
                 ) : null}
               </View>
-              <View style={styles.metaRow}>
-                <Icon name="clock" size={14} color={palette.muted} weight="bulk" />
-                <AppText variant="bodySmall" color={palette.muted}>
-                  {reminderLabel}
+              {compact ? (
+                <AppText variant="caption" color={palette.muted} numberOfLines={1} style={styles.compactMeta}>
+                  {habit.status === "archived" ? goalLabel : `${cadence} · ${reminderLabel}`}
                 </AppText>
-                {streak >= 3 ? (
-                  <>
-                    <View style={[styles.metaDot, { backgroundColor: palette.hairline }]} />
-                    <FireIcon size={14} />
-                    <AppText variant="bodySmall" color={palette.muted}>
-                      {streak} day streak
-                    </AppText>
-                  </>
-                ) : null}
-              </View>
+              ) : (
+                <View style={styles.metaRow}>
+                  <Icon name="clock" size={14} color={palette.muted} weight="bulk" />
+                  <AppText variant="bodySmall" color={palette.muted}>
+                    {reminderLabel}
+                  </AppText>
+                  {streak >= 3 ? (
+                    <>
+                      <View style={[styles.metaDot, { backgroundColor: palette.hairline }]} />
+                      <FireIcon size={14} />
+                      <AppText variant="bodySmall" color={palette.muted}>
+                        {streak} day streak
+                      </AppText>
+                    </>
+                  ) : null}
+                </View>
+              )}
             </View>
+            {/* Streak, not a completion control — completing happens on Today
+                and the habit's own screen, so the list stays a browse surface. */}
+            {compact && streak >= STREAK_MINIMUM ? (
+              <View style={styles.streakBadge} accessibilityLabel={`${streak} day streak`}>
+                <FireIcon size={15} />
+                <AppText variant="caption" color={readableOn(FIRE_COLOR, palette.card, 4.5)} style={styles.streakBadgeText}>
+                  {streak}
+                </AppText>
+              </View>
+            ) : null}
           </View>
 
           {!compact ? (
@@ -273,20 +304,24 @@ export function HabitCard({
 }
 
 const styles = StyleSheet.create({
+  // Same geometry as an onboarding selection row.
   compactCard: {
-    borderRadius: radius.nav,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md
+    borderRadius: radius.card,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    minHeight: 66
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md
   },
+  // Soft tinted rounded square, matching onboarding's IconTile — not a solid
+  // filled circle.
   iconBubble: {
     width: 44,
     height: 44,
-    borderRadius: radius.pill,
+    borderRadius: radius.lg,
     alignItems: "center",
     justifyContent: "center"
   },
@@ -302,6 +337,11 @@ const styles = StyleSheet.create({
   titleText: {
     flex: 1,
     minWidth: 0
+  },
+  // Matches the starter-pack rows — list titles sit at body size, not title.
+  titleTextCompact: {
+    fontSize: 14,
+    lineHeight: 21
   },
   statusBadge: {
     minHeight: 22,
@@ -320,6 +360,18 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: spacing.xs
   },
+  streakBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3
+  },
+  streakBadgeText: {
+    fontFamily: fontFamilies.lexendSemiBold
+  },
+  compactMeta: {
+    fontSize: 12,
+    lineHeight: 16
+  },
   metaDot: {
     width: 4,
     height: 4,
@@ -327,6 +379,7 @@ const styles = StyleSheet.create({
   },
   chartWrap: {
     marginTop: spacing.lg,
+    // Escapes the Card's padding (spacing.lg), NOT the screen gutter.
     marginHorizontal: -spacing.lg,
     paddingHorizontal: spacing.lg
   },

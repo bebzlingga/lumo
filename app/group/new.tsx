@@ -1,38 +1,20 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Avatar } from "@/components/Avatar";
-import { FloatingDropdown } from "@/components/FloatingDropdown";
 import { HabitIcon } from "@/components/HabitIcon";
-import { Icon, type IconName } from "@/components/Icon";
-import { categoryIconOptions } from "@/components/IconPicker";
+import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { AppText, Card, FieldLabel, LumoInput, Screen } from "@/components/ui";
-import { defaultHabitColor, fontFamilies, habitColorOption, habitColorPickerOptions, radius, spacing } from "@/constants/theme";
+import { FormSection } from "@/components/HabitForm";
+import { AppText, Field, FieldLabel, LumoInput, Screen } from "@/components/ui";
+import { challengeByName } from "@/constants/groupChallenges";
+import { fontFamilies, habitColorOption, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { buildGroupAvatarSvg, defaultAvatar } from "@/lib/avatar";
 import { alpha } from "@/lib/color";
-import { dayLabels, dayNames } from "@/lib/date";
+import { beginActivityEdit } from "@/lib/groupActivityBridge";
 import { friendsService, type Friendship, type GroupHabit } from "@/lib/friends";
-import type { GoalType, RepeatSchedule, Weekday } from "@/types/habit";
-
-// All picker icons in one row (activities have no category).
-const activityIconOptions: IconName[] = [...new Set(Object.values(categoryIconOptions).flat())];
-
-// One merged "How often?" axis, same as the habit form: day-bound schedules
-// and any-day period targets are alternatives, so conflicting combos are
-// inexpressible. "Times per day" applies only to the day-bound choices.
-type ActivityCadence = RepeatSchedule["type"] | "weekly" | "monthly";
-
-const cadenceOptions: { label: string; value: ActivityCadence }[] = [
-  { label: "Every day", value: "daily" },
-  { label: "Weekdays", value: "weekdays" },
-  { label: "Weekends", value: "weekends" },
-  { label: "Specific days", value: "specific" },
-  { label: "Custom interval", value: "interval" },
-  { label: "Times per week", value: "weekly" },
-  { label: "Times per month", value: "monthly" }
-];
+import type { RepeatSchedule } from "@/types/habit";
 
 function frequencyLabel(schedule: RepeatSchedule) {
   switch (schedule.type) {
@@ -93,24 +75,7 @@ export default function NewGroupScreen() {
   const [createPressed, setCreatePressed] = React.useState(false);
   const [addActivityPressed, setAddActivityPressed] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
-  // Activity dialog state — mirrors the habit form's merged "How often?" field.
-  const [dialogVisible, setDialogVisible] = React.useState(false);
-  // Set while editing an existing activity; null means the dialog adds a new one.
-  const [editingActivityId, setEditingActivityId] = React.useState<string | null>(null);
-  const [activityName, setActivityName] = React.useState("");
-  const [activityIcon, setActivityIcon] = React.useState<IconName>("sparkle");
-  const [activityColor, setActivityColor] = React.useState(defaultHabitColor);
-  const [cadence, setCadence] = React.useState<ActivityCadence>("daily");
-  const [specificDays, setSpecificDays] = React.useState<Weekday[]>([1, 2, 3, 4, 5]);
-  const [intervalDays, setIntervalDays] = React.useState("2");
-  const [goalAmount, setGoalAmount] = React.useState("1");
-  const [dialogAddPressed, setDialogAddPressed] = React.useState(false);
-  const [dialogCancelPressed, setDialogCancelPressed] = React.useState(false);
-  const [nameFieldFocused, setNameFieldFocused] = React.useState(false);
-  // Period (weekly/monthly) targets replace the day schedule ("any day").
-  const periodGoal = cadence === "weekly" || cadence === "monthly";
   const buttonFill = isDark ? palette.green : palette.greenDark;
-  const fieldBorderColor = alpha(palette.greenDark, "33");
   const canCreate = Boolean(name.trim()) && activities.length > 0 && !saving;
 
   React.useEffect(() => {
@@ -153,90 +118,23 @@ export default function NewGroupScreen() {
     };
   }, [editId]);
 
-  function openActivityDialog() {
-    setEditingActivityId(null);
-    setActivityName("");
-    setActivityIcon("sparkle");
-    setActivityColor(defaultHabitColor);
-    setCadence("daily");
-    setSpecificDays([1, 2, 3, 4, 5]);
-    setIntervalDays("2");
-    setGoalAmount("1");
-    setDialogVisible(true);
-  }
+  /**
+   * Opens the activity screen. `beginActivityEdit` registers where the result
+   * comes back to — this screen stays mounted underneath, so the handler is
+   * still live when the activity screen calls it.
+   */
+  function openActivityScreen(activity: GroupHabit | null) {
+    const taken = activities.filter((entry) => entry.id !== activity?.id).map((entry) => entry.name);
 
-  function openEditActivity(activity: GroupHabit) {
-    setEditingActivityId(activity.id);
-    setActivityName(activity.name);
-    setActivityIcon(activity.icon);
-    setActivityColor(activity.color ?? defaultHabitColor);
-    setCadence(
-      activity.goal.type === "weekly" || activity.goal.type === "monthly" ? activity.goal.type : activity.repeatSchedule.type
-    );
-    setSpecificDays(activity.repeatSchedule.type === "specific" ? activity.repeatSchedule.days : [1, 2, 3, 4, 5]);
-    setIntervalDays(activity.repeatSchedule.type === "interval" ? String(activity.repeatSchedule.every) : "2");
-    setGoalAmount(
-      activity.goal.type === "multiple"
-        ? String(activity.goal.count)
-        : activity.goal.type === "weekly" || activity.goal.type === "monthly"
-          ? String(activity.goal.target)
-          : "1"
-    );
-    setDialogVisible(true);
-  }
-
-  function toggleSpecificDay(day: Weekday) {
-    setSpecificDays((current) => {
-      const next = current.includes(day) ? current.filter((item) => item !== day) : [...current, day].sort();
-
-      return next.length ? next : [day];
+    beginActivityEdit(activity, taken, (saved) => {
+      setActivities((current) =>
+        current.some((entry) => entry.id === saved.id)
+          ? current.map((entry) => (entry.id === saved.id ? saved : entry))
+          : [...current, saved]
+      );
     });
-  }
 
-  function saveActivity() {
-    const cleaned = activityName.trim();
-
-    if (!cleaned) {
-      return;
-    }
-
-    const duplicate = activities.some(
-      (activity) => activity.id !== editingActivityId && activity.name.toLowerCase() === cleaned.toLowerCase()
-    );
-    if (duplicate) {
-      Alert.alert("Already added", `${cleaned} is already in this group.`);
-      return;
-    }
-
-    // Same shapes the habit form builds (components/HabitForm.tsx save()).
-    const amount = Math.max(1, Number(goalAmount) || 1);
-    const repeatSchedule: RepeatSchedule =
-      cadence === "weekly" || cadence === "monthly"
-        ? { type: "daily" }
-        : cadence === "specific"
-          ? { type: "specific", days: specificDays }
-          : cadence === "interval"
-            ? { type: "interval", every: Math.max(1, Number(intervalDays) || 1) }
-            : { type: cadence };
-    const goal: GoalType =
-      cadence === "weekly" || cadence === "monthly"
-        ? { type: cadence, target: amount }
-        : amount > 1
-          ? { type: "multiple", count: amount }
-          : { type: "once" };
-    const activity: GroupHabit = {
-      id: editingActivityId ?? `act-${Date.now().toString(36)}`,
-      name: cleaned,
-      icon: activityIcon,
-      color: activityColor,
-      repeatSchedule,
-      goal
-    };
-
-    setActivities((current) =>
-      editingActivityId ? current.map((entry) => (entry.id === editingActivityId ? activity : entry)) : [...current, activity]
-    );
-    setDialogVisible(false);
+    router.push("/group/activity");
   }
 
   function removeActivity(activity: GroupHabit) {
@@ -305,29 +203,19 @@ export default function NewGroupScreen() {
 
   return (
     <Screen contentStyle={styles.content}>
-      <ScreenHeader
-        leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }}
-        centerContent={
-          <AppText variant="titleSmall" color={palette.ink} style={styles.headerTitle}>
-            {editId ? "Edit Group" : "New Group"}
-          </AppText>
-        }
-      />
+      <ScreenHeader title={editId ? "Edit Group" : "New Group"} leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }} />
 
-      <Card style={styles.formCard}>
-        <View style={styles.cardHeader}>
-          <AppText variant="titleSmall" color={palette.ink}>
-            Group details
-          </AppText>
-          <AppText variant="bodySmall" color={palette.subtle}>
-            Name your group — you'll add the activities you do together next.
-          </AppText>
-        </View>
-
-        <View style={[styles.sectionDivider, { backgroundColor: palette.hairline }]} />
-
-        <View style={styles.field}>
-          {/* Bleeds to the card edges so the row scrolls edge-to-edge. */}
+      {/* Sections on the canvas, not cards — the habit form's structure, which
+          groups fields with a heading and whitespace rather than nesting one
+          surface inside another. */}
+      <FormSection
+        heading="Group details"
+        hint="Name your group — you'll add the activities you do together next."
+        style={styles.firstSection}
+      >
+        <Field>
+          <FieldLabel>Avatar</FieldLabel>
+          {/* Bleeds to the screen gutter so the row scrolls edge-to-edge. */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.avatarScroll} contentContainerStyle={styles.avatarRow}>
             {avatarSeeds.map((seed) => {
               const selected = seed === avatarSeed;
@@ -346,9 +234,9 @@ export default function NewGroupScreen() {
               );
             })}
           </ScrollView>
-        </View>
+        </Field>
 
-        <View style={styles.field}>
+        <Field>
           <FieldLabel>Group name</FieldLabel>
           <LumoInput
             value={name}
@@ -356,33 +244,32 @@ export default function NewGroupScreen() {
             placeholder="Morning Crew"
             autoCapitalize="words"
             returnKeyType="done"
-            style={[styles.flatInput, { borderColor: fieldBorderColor }]}
+            style={[styles.formInput, { backgroundColor: palette.card }]}
           />
-        </View>
-      </Card>
+        </Field>
+      </FormSection>
 
-      <Card style={styles.formCard}>
-        <View style={styles.cardHeader}>
-          <AppText variant="titleSmall" color={palette.ink}>
-            Activities
-          </AppText>
-          <AppText variant="bodySmall" color={palette.subtle}>
-            What your group does together — like running every weekend. Each activity has its own frequency and target, and lives
-            only in this group.
-          </AppText>
-        </View>
-
-        <View style={[styles.sectionDivider, { backgroundColor: palette.hairline }]} />
-
+      <FormSection
+        heading="Activities"
+        hint="What your group does together — like running every weekend. Each activity has its own frequency and target, and lives only in this group."
+      >
         {activities.length ? (
           <View>
             {activities.map((activity, index) => {
               const colorOption = habitColorOption(activity.color);
+              // Started challenges are fixed — the group logs them by name, so they
+              // can't be renamed/edited here. The owner can still remove them.
+              const isChallenge = Boolean(challengeByName(activity.name));
 
               return (
                 <View
                   key={activity.id}
-                  style={[styles.activityRow, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.hairline }]}
+                  style={[
+                    styles.activityRow,
+                    index === 0 && styles.listRowFirst,
+                    index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.hairline },
+                    index === activities.length - 1 && styles.listRowLast
+                  ]}
                 >
                   <View style={[styles.activityIcon, { backgroundColor: colorOption?.color ?? alpha(palette.greenDark, "12") }]}>
                     <HabitIcon value={activity.icon} color={colorOption?.onColor ?? palette.greenDark} size={16} />
@@ -392,19 +279,21 @@ export default function NewGroupScreen() {
                       {activity.name}
                     </AppText>
                     <AppText variant="caption" color={palette.subtle} numberOfLines={1}>
-                      {activityMeta(activity)}
+                      {isChallenge ? "Challenge · can't be edited" : activityMeta(activity)}
                     </AppText>
                   </View>
                   <View style={styles.activityActions}>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`Edit ${activity.name}`}
-                      onPress={() => openEditActivity(activity)}
-                      hitSlop={6}
-                      style={[styles.activityAction, { backgroundColor: alpha(palette.greenDark, "12") }]}
-                    >
-                      <Icon name="edit" size={14} color={palette.greenDark} weight="bulk" />
-                    </Pressable>
+                    {isChallenge ? null : (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Edit ${activity.name}`}
+                        onPress={() => openActivityScreen(activity)}
+                        hitSlop={6}
+                        style={[styles.activityAction, { backgroundColor: alpha(palette.greenDark, "12") }]}
+                      >
+                        <Icon name="edit" size={14} color={palette.greenDark} weight="bulk" />
+                      </Pressable>
+                    )}
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Remove ${activity.name}`}
@@ -419,16 +308,15 @@ export default function NewGroupScreen() {
               );
             })}
           </View>
-        ) : (
-          <AppText variant="caption" color={palette.subtle} style={styles.hint}>
-            No activities yet — add what you'll do together, like "Weekend run" or "Read 20 pages".
-          </AppText>
-        )}
+        ) : null}
 
+        {/* No "No activities yet" line — the section's own hint already says
+            what an activity is, and the Add button below says what to do about
+            it. A third sentence between them just repeated both. */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Add activity"
-          onPress={openActivityDialog}
+          onPress={() => openActivityScreen(null)}
           onPressIn={() => setAddActivityPressed(true)}
           onPressOut={() => setAddActivityPressed(false)}
           style={[styles.addActivityButton, { backgroundColor: alpha(palette.greenDark, isDark ? "26" : "12"), opacity: addActivityPressed ? 0.8 : 1 }]}
@@ -438,21 +326,10 @@ export default function NewGroupScreen() {
             Add Activity
           </AppText>
         </Pressable>
-      </Card>
+      </FormSection>
 
       {editId ? null : (
-      <Card style={styles.formCard}>
-        <View style={styles.cardHeader}>
-          <AppText variant="titleSmall" color={palette.ink}>
-            Invite friends
-          </AppText>
-          <AppText variant="bodySmall" color={palette.subtle}>
-            Members check in on the group's activities and everyone's progress adds up.
-          </AppText>
-        </View>
-
-        <View style={[styles.sectionDivider, { backgroundColor: palette.hairline }]} />
-
+      <FormSection heading="Invite friends" hint="Members check in on the group's activities and everyone's progress adds up.">
         {friends.length ? (
           friends.map((friendship, index) => {
             const selected = selectedFriends.has(friendship.profile.lumoId);
@@ -466,12 +343,13 @@ export default function NewGroupScreen() {
                 onPress={() => toggleFriend(friendship.profile.lumoId)}
                 style={[
                   styles.friendRow,
+                  index === 0 && styles.listRowFirst,
                   index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.hairline },
-                  index === friends.length - 1 && styles.friendRowLast
+                  index === friends.length - 1 && styles.listRowLast
                 ]}
               >
                 <View style={[styles.friendAvatar, { backgroundColor: alpha(palette.greenDark, "10") }]}>
-                  <Avatar config={friendship.profile.avatar ?? defaultAvatar()} size={34} rounded={false} />
+                  <Avatar config={friendship.profile.avatar ?? defaultAvatar()} size={34} />
                 </View>
                 <View style={styles.friendText}>
                   <AppText variant="titleSmall" color={palette.ink} numberOfLines={1} style={styles.friendName}>
@@ -496,7 +374,7 @@ export default function NewGroupScreen() {
             No friends yet — share your Lumo ID from your profile, then invite friends here.
           </AppText>
         )}
-      </Card>
+      </FormSection>
       )}
 
       <Pressable
@@ -528,254 +406,41 @@ export default function NewGroupScreen() {
         )}
       </Pressable>
 
-      {/* Activity dialog: name + frequency + target, added to the group only. */}
-      <Modal visible={dialogVisible} transparent animationType="fade" onRequestClose={() => setDialogVisible(false)}>
-        {/* Keyboard avoidance is off while the (top-of-dialog) Activity name
-            field is focused so the dialog doesn't jump; lower fields still
-            shift up to stay visible. */}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          enabled={!nameFieldFocused}
-          style={styles.dialogOverlay}
-        >
-          {/* No tap-outside close — dismissing is explicit via the Cancel button. */}
-          <View style={[styles.dialogCard, { backgroundColor: palette.card }]}>
-            <AppText variant="titleSmall" color={palette.ink} style={styles.dialogTitle}>
-              {editingActivityId ? "Edit Activity" : "New Activity"}
-            </AppText>
-
-            <View style={styles.field}>
-              <FieldLabel>Activity</FieldLabel>
-              <LumoInput
-                value={activityName}
-                onChangeText={setActivityName}
-                placeholder="e.g. Weekend run"
-                autoCapitalize="sentences"
-                autoFocus={!editingActivityId}
-                returnKeyType="done"
-                onSubmitEditing={saveActivity}
-                onFocus={() => setNameFieldFocused(true)}
-                onBlur={() => setNameFieldFocused(false)}
-                style={[styles.flatInput, { borderColor: fieldBorderColor }]}
-              />
-            </View>
-
-            <View style={styles.field}>
-              <FieldLabel>Icon</FieldLabel>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dialogBleed} contentContainerStyle={styles.iconChipRow}>
-                {activityIconOptions.map((iconName) => {
-                  const isSelected = activityIcon === iconName;
-
-                  return (
-                    <Pressable
-                      key={iconName}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isSelected }}
-                      onPress={() => setActivityIcon(iconName)}
-                      style={[styles.iconChip, { backgroundColor: isSelected ? alpha(palette.greenDark, "1F") : "transparent" }]}
-                    >
-                      <HabitIcon value={iconName} color={palette.greenDark} size={22} />
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
-
-            <View style={styles.field}>
-              <FieldLabel>Color</FieldLabel>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dialogBleed} contentContainerStyle={styles.colorChipRow}>
-                {habitColorPickerOptions.map((option) => {
-                  const isSelected = activityColor === option.color;
-
-                  return (
-                    <Pressable
-                      key={option.key}
-                      accessibilityRole="button"
-                      accessibilityLabel={option.label}
-                      accessibilityState={{ selected: isSelected }}
-                      onPress={() => setActivityColor(option.color)}
-                      style={[styles.colorChipOuter, { borderColor: isSelected ? option.accent : "transparent" }]}
-                    >
-                      <View style={[styles.colorChip, { backgroundColor: option.color, borderColor: palette.hairline }]}>
-                        {isSelected ? <Icon name="checkCircle" size={16} color={option.onColor} weight="bulk" /> : null}
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
-
-            <View style={styles.field}>
-              <FieldLabel>How often?</FieldLabel>
-              <FloatingDropdown
-                variant="input"
-                options={cadenceOptions}
-                value={cadence}
-                onChange={setCadence}
-                accessibilityLabel="How often"
-                borderColor={fieldBorderColor}
-              />
-              {periodGoal ? (
-                <AppText variant="caption" color={palette.subtle}>
-                  Hit the target on any days that suit the group.
-                </AppText>
-              ) : null}
-            </View>
-
-            {cadence === "specific" ? (
-              <View style={styles.field}>
-                <FieldLabel>Days</FieldLabel>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayList}>
-                  {dayNames.map((dayName, index) => {
-                    const checked = specificDays.includes(index as Weekday);
-
-                    return (
-                      <Pressable
-                        key={dayName}
-                        accessibilityRole="checkbox"
-                        accessibilityLabel={dayName}
-                        accessibilityState={{ checked }}
-                        onPress={() => toggleSpecificDay(index as Weekday)}
-                        style={styles.dayItem}
-                      >
-                        {checked ? (
-                          <Icon name="checkCircle" size={20} color={palette.greenDark} weight="bulk" />
-                        ) : (
-                          <View style={[styles.dayCircle, { borderColor: palette.hairline, backgroundColor: palette.surface }]} />
-                        )}
-                        <AppText variant="body" color={checked ? palette.ink : palette.subtle} style={styles.dayName}>
-                          {dayLabels[index]}
-                        </AppText>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            ) : null}
-
-            {cadence === "interval" ? (
-              <View style={styles.field}>
-                <FieldLabel>Every how many days?</FieldLabel>
-                <LumoInput
-                  value={intervalDays}
-                  onChangeText={setIntervalDays}
-                  keyboardType="number-pad"
-                  style={[styles.flatInput, { borderColor: fieldBorderColor }]}
-                />
-              </View>
-            ) : null}
-
-            <View style={styles.field}>
-              <FieldLabel>{cadence === "weekly" ? "Times per week" : cadence === "monthly" ? "Times per month" : "Times per day"}</FieldLabel>
-              <LumoInput
-                value={goalAmount}
-                onChangeText={setGoalAmount}
-                keyboardType="number-pad"
-                style={[styles.flatInput, { borderColor: fieldBorderColor }]}
-              />
-            </View>
-
-            <View style={styles.dialogActions}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Cancel"
-                onPress={() => setDialogVisible(false)}
-                onPressIn={() => setDialogCancelPressed(true)}
-                onPressOut={() => setDialogCancelPressed(false)}
-                style={[styles.dialogCancel, { backgroundColor: palette.surface, opacity: dialogCancelPressed ? 0.7 : 1 }]}
-              >
-                <AppText variant="button" color={palette.ink} style={styles.dialogActionLabel}>
-                  Cancel
-                </AppText>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={editingActivityId ? "Save this activity" : "Add this activity"}
-                disabled={!activityName.trim()}
-                onPress={saveActivity}
-                onPressIn={() => setDialogAddPressed(true)}
-                onPressOut={() => setDialogAddPressed(false)}
-                style={[
-                  styles.dialogAdd,
-                  { backgroundColor: buttonFill, opacity: !activityName.trim() ? 0.45 : dialogAddPressed ? 0.85 : 1 }
-                ]}
-              >
-                <AppText variant="button" color={palette.white} style={styles.dialogActionLabel}>
-                  {editingActivityId ? "Save Activity" : "Add Activity"}
-                </AppText>
-              </Pressable>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  // No row gap: `FormSection` already carries the space between sections, and
+  // adding one here stacked on top of it.
   content: {
-    paddingBottom: spacing.xxl,
-    gap: spacing.md
+    paddingBottom: spacing.xxl
   },
-  headerTitle: {
-    fontFamily: fontFamilies.lexendBold,
-    fontSize: 22,
-    lineHeight: 28,
-    transform: [{ translateY: -7 }]
+  // `FormSection` carries a spacing.ml top margin to set sections apart from
+  // each other — but the first one has no section above it, only the header
+  // bar, so it stacked on the bar's own margin and the screen's row gap for
+  // 52pt of dead air before the form began.
+  firstSection: {
+    marginTop: 0
   },
-  formCard: {
-    gap: spacing.md,
-    padding: spacing.xl
-  },
-  cardHeader: {
-    gap: spacing.xxs
-  },
-  sectionDivider: {
-    height: StyleSheet.hairlineWidth
-  },
-  field: {
-    gap: spacing.xs
-  },
-  flatInput: {
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    borderBottomWidth: 1,
-    borderRadius: 0,
-    minHeight: 0,
-    paddingHorizontal: 0,
-    paddingTop: spacing.xxs,
-    paddingBottom: spacing.sm,
-    fontFamily: fontFamilies.lexendBold
-  },
-  dayList: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.md,
-    paddingRight: spacing.lg
-  },
-  dayItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    paddingVertical: spacing.xxs
-  },
-  dayCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: radius.pill,
-    borderWidth: 1.5
-  },
-  dayName: {
-    fontSize: 16
+  // The habit form's field box, verbatim: a boxed input with a warm outline,
+  // not the underline this form used to draw. Two forms in one app should not
+  // disagree about what an input looks like.
+  formInput: {
+    borderWidth: 1,
+    borderRadius: radius.button,
+    minHeight: 52,
+    paddingHorizontal: spacing.md,
+    fontFamily: fontFamilies.lexendSemiBold
   },
   avatarScroll: {
-    marginHorizontal: -spacing.xl
+    marginHorizontal: -layout.screenPaddingX
   },
   avatarRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
-    paddingHorizontal: spacing.xl
+    paddingHorizontal: layout.screenPaddingX
   },
   avatarOption: {
     width: 62,
@@ -792,6 +457,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
     paddingVertical: spacing.sm
+  },
+  /**
+   * A list's outer rows sit flush, so the row padding does not stack on the
+   * section's own 20pt gap. Without this a section whose content is a list read
+   * 32pt from its heading while a section of plain fields read 20 — the lists
+   * looked pushed down relative to every other section.
+   */
+  listRowFirst: {
+    paddingTop: 0
+  },
+  listRowLast: {
+    paddingBottom: 0
   },
   activityIcon: {
     width: 34,
@@ -822,43 +499,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center"
   },
-  dialogBleed: {
-    marginHorizontal: -spacing.xl
-  },
-  iconChipRow: {
-    alignItems: "center",
-    gap: spacing.xxs,
-    paddingHorizontal: spacing.xl
-  },
-  iconChip: {
-    alignItems: "center",
-    justifyContent: "center",
-    width: 44,
-    height: 44,
-    borderRadius: radius.xl
-  },
-  colorChipRow: {
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.xl
-  },
-  colorChipOuter: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.pill,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  colorChip: {
-    width: 26,
-    height: 26,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: "center",
-    justifyContent: "center"
-  },
+  // No margin of its own — the section's 20pt gap is the whole separation. The
+  // extra 8 here dated from when that gap was 12; once it went to 20 the button
+  // was sitting 28pt off the list.
   addActivityButton: {
     minHeight: 48,
     flexDirection: "row",
@@ -879,9 +522,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
     paddingVertical: spacing.sm
-  },
-  friendRowLast: {
-    paddingBottom: 0
   },
   friendAddIcon: {
     opacity: 0.6
@@ -904,56 +544,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20
   },
+  // spacing.hero, the same distance the habit and activity forms put between
+  // their last field and their CTA.
   createButton: {
     minHeight: 54,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.pill,
-    marginTop: spacing.sm
+    marginTop: spacing.xl
   },
   createLabel: {
     fontSize: 16,
     lineHeight: 21
   },
-  dialogOverlay: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.lg,
-    backgroundColor: "rgba(0,0,0,0.55)"
-  },
-  dialogCard: {
-    width: "100%",
-    gap: spacing.md,
-    borderRadius: radius.nav,
-    padding: spacing.xl
-  },
-  dialogTitle: {
-    fontFamily: fontFamilies.lexendBold,
-    fontSize: 20,
-    lineHeight: 26
-  },
-  dialogActions: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.xxs
-  },
-  dialogActionLabel: {
-    fontSize: 16,
-    lineHeight: 21
-  },
-  dialogCancel: {
-    flex: 1,
-    minHeight: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radius.pill
-  },
-  dialogAdd: {
-    flex: 1.4,
-    minHeight: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radius.pill
-  }
 });

@@ -21,14 +21,7 @@ export default function FeatureSoonScreen() {
 
   return (
     <Screen contentStyle={styles.content}>
-      <ScreenHeader
-        leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }}
-        centerContent={
-          <AppText variant="titleSmall" color={palette.ink} style={styles.headerTitle}>
-            Feature Board
-          </AppText>
-        }
-      />
+      <ScreenHeader title="Feature Board" leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }} />
 
       <View style={styles.hero}>
         <View style={[styles.badge, { backgroundColor: palette.greenSoft }]}>
@@ -72,12 +65,6 @@ const styles = StyleSheet.create({
   content: {
     paddingBottom: spacing.xxl,
     gap: spacing.lg
-  },
-  headerTitle: {
-    fontFamily: fontFamilies.lexendBold,
-    fontSize: 17,
-    lineHeight: 22,
-    transform: [{ translateY: -6 }]
   },
   hero: {
     alignItems: "center",

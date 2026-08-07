@@ -1,0 +1,43 @@
+{
+  "source": {
+    "file": "Lumo(2).png",
+    "original_pixels": [
+      600,
+      600
+    ],
+    "original_mode": "RGBA"
+  },
+  "production_background": "#FDBD1C",
+  "included": {
+    "brand": [
+      "transparent 1024/2048 masters",
+      "opaque full-bleed 1024/2048 masters",
+      "SVG flame mark in scalable + color variants",
+      "brand color JSON"
+    ],
+    "ios": [
+      "complete AppIcon.appiconset for iPhone/iPad/App Store",
+      "launch logo image set"
+    ],
+    "android": [
+      "legacy launcher icons mdpi through xxxhdpi",
+      "round launcher icons",
+      "adaptive icon layers + v26 XML",
+      "Android 13 monochrome icon + v33 XML",
+      "notification icon vector + density PNGs",
+      "Android 12 splash icon"
+    ],
+    "store": [
+      "App Store 1024x1024 opaque icon",
+      "Google Play 512x512 icon"
+    ],
+    "expo_ready": [
+      "icon.png",
+      "adaptive-icon.png",
+      "splash-icon.png",
+      "notification-icon.png",
+      "favicon.png",
+      "app-config-snippet.json"
+    ]
+  }
+}

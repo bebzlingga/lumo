@@ -2,30 +2,41 @@ import * as Haptics from "expo-haptics";
 import React from "react";
 import { Alert, Animated, Easing, Pressable, StyleSheet, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
-import { fontFamilies, habitAccent, habitColorOption, progressAccents, progressAccentText, radius, spacing } from "@/constants/theme";
+import { fontFamilies, habitAccent, habitColorOption, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { toDateKey } from "@/lib/date";
-import { completionCount, currentStreak, dailyTarget, isDoneOnDate } from "@/lib/habitMath";
+import { cadenceLabel, completionCount, currentStreak, dailyTarget, isDoneOnDate } from "@/lib/habitMath";
 import { Habit } from "@/types/habit";
 import { AppText, Card } from "./ui";
 import { HabitIcon } from "./HabitIcon";
 import { HoldProgressRing } from "./HoldProgressRing";
 import { Icon } from "./Icon";
+import { LumoMascot } from "./LumoMascot";
 
-const UNDO_HOLD_DURATION_MS = 1500;
+/** Exported so the group habits list holds for exactly as long as this one —
+ *  the two are the same gesture on the same kind of row, and a hold that
+ *  completes at a different moment in each place is two gestures. */
+export const UNDO_HOLD_DURATION_MS = 1500;
 // Only reveal the progress ring after this much holding, so a quick tap never
 // flashes it. The ring then fills over the remaining time.
-const HOLD_REVEAL_DELAY_MS = 500;
+export const HOLD_REVEAL_DELAY_MS = 500;
 
-// Shared with the feature board's vote badge — see constants/theme.ts.
-const PROGRESS_ACCENTS = progressAccents;
-const PROGRESS_ACCENT_TEXT = progressAccentText;
-
-const RING_SIZE = 30;
-const RING_STROKE = 5;
+/** The multi-count ring, shared by all three habit lists — home, the friends
+ *  tab's group rows, and a group's own Habits tab. One size for the three of
+ *  them: they are the same control doing the same job, and it should not be a
+ *  few points apart depending on which screen you reached it from. Down from
+ *  30/5, which stood a third taller than the check circle it stands in for. */
+const RING_SIZE = 24;
+const RING_STROKE = 4;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+/** The trailing check target — a filled disc once done, an empty ring before.
+ *  Shared with the friends tab's habit rows, which draw the same 22. A group's
+ *  own Habits tab deliberately runs smaller at 18: that row carries a share bar
+ *  and a fortnight strip under the name where these carry a subtitle. */
+const CHECK_SIZE = 22;
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -33,10 +44,13 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
  * A progress ring split into `total` arc segments with gaps between them.
  * Each segment has its own animated value: the green arc grows over the gray
  * track when it fills (0 -> 1) and shrinks back when a completion is undone.
+ *
+ * No size prop: every caller draws it at RING_SIZE. See that constant for why
+ * the three habit lists share one.
  */
 export function SegmentedRing({ total, filled, fillColor: fillColorOverride }: { total: number; filled: number; fillColor?: string }) {
-  const { palette, settings } = useLumo();
-  const fillColor = fillColorOverride ?? PROGRESS_ACCENTS[settings.colorScheme ?? "green"] ?? palette.glow;
+  const { palette } = useLumo();
+  const fillColor = fillColorOverride ?? palette.glow;
   const slice = RING_CIRCUMFERENCE / total;
   // Round line caps extend half the stroke width into each side of a gap,
   // so pad the gap enough to stay visible after the caps are drawn.
@@ -105,6 +119,8 @@ type Props = {
   disabledActions?: boolean;
   /** Habits that belong to a friends group show a small group marker. */
   groupHabitIds?: Set<string>;
+  /** Card heading — "Today's Habits" on today, plain "Habits" on other days. */
+  title?: string;
 };
 
 function WidgetHabitRow({
@@ -112,7 +128,6 @@ function WidgetHabitRow({
   dateKey,
   disabledActions = false,
   inGroup = false,
-  onCompleted,
   onHoldEnd,
   onHoldStart,
   holdProgress
@@ -121,40 +136,58 @@ function WidgetHabitRow({
   dateKey: string;
   disabledActions?: boolean;
   inGroup?: boolean;
-  onCompleted?: (habitId: string) => void;
   onHoldEnd?: () => void;
   onHoldStart?: () => void;
   /** Drives the hold-to-undo progress ring on this row's icon (0 -> 1). */
   holdProgress?: Animated.Value;
 }) {
-  const { palette, isDark, settings, completeHabit, undoHabit } = useLumo();
+  const { palette, isDark, completeHabit, undoHabit } = useLumo();
   const done = isDoneOnDate(habit, dateKey);
-  const todoBadgeColor = PROGRESS_ACCENTS[settings.colorScheme ?? "green"] ?? palette.glow;
-  const todoBadgeTextColor = PROGRESS_ACCENT_TEXT;
   const count = completionCount(habit, dateKey);
   const target = dailyTarget(habit);
   const isMultiple = habit.goal.type === "multiple";
-  const progressLabel = React.useMemo(() => {
-    if (habit.goal.type === "multiple") {
-      return `${Math.min(count, target)}/${target} today`;
-    }
-    // Streaks only surface once they reach 3 days — shorter runs stay quiet.
-    const streak = currentStreak(habit);
-    return streak >= 3 ? `${streak} day streak` : "";
-  }, [habit, count, target]);
-  // Habits with a color theme carry it through the row; legacy habits keep
-  // the app theme's greens.
-  const habitColor = habitColorOption(habit.color);
-  const habitAccentColor = habitAccent(habit.color, isDark);
-  const iconBackgroundColor = habitColor ? habitColor.color : isDark ? palette.greenSoft : palette.greenDark;
-  const habitIconColor = habitColor ? habitColor.onColor : isDark ? palette.greenDark : palette.white;
-  const doneBadgeTextColor = habitAccentColor ?? palette.greenDark;
-  const holdRingColor = habitAccentColor ?? todoBadgeColor;
-  // When the habit was checked off today — shown on the right once done.
+  // When the habit was checked off — shown in place of the cadence once done.
   const completedTime = React.useMemo(() => {
     const entry = habit.completions.find((item) => item.date === dateKey);
     return entry?.completedAt ? new Date(entry.completedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "";
   }, [habit.completions, dateKey]);
+  // The row's second line: what the habit asks of you, plus whichever of
+  // "3/5 today", "12 day streak" or the completion time is worth saying now.
+  const subtitle = React.useMemo(() => {
+    const cadence = cadenceLabel(habit);
+
+    if (done) {
+      return completedTime ? `Done · ${completedTime}` : "Done";
+    }
+
+    if (isMultiple) {
+      return `${Math.min(count, target)}/${target} today · ${cadence}`;
+    }
+
+    // Streaks only surface once they reach 3 days — shorter runs stay quiet.
+    const streak = currentStreak(habit);
+
+    return streak >= 3 ? `${streak} day streak · ${cadence}` : cadence;
+  }, [habit, done, completedTime, isMultiple, count, target]);
+  // Habits with a color theme carry it through the row; legacy habits keep
+  // the app theme's greens.
+  const habitColor = habitColorOption(habit.color);
+  const habitAccentColor = habitAccent(habit.color, isDark);
+  // Onboarding's IconTile treatment: a soft tint carrying a saturated glyph,
+  // rather than a solid fill with a knocked-out white one.
+  const iconBackgroundColor = habitColor ? alpha(habitColor.color, isDark ? "2E" : "24") : palette.greenSoft;
+  const habitIconColor = habitAccentColor ?? palette.greenDark;
+  const holdRingColor = habitAccentColor ?? palette.glow;
+  // The check target wears the habit's swatch rather than the app accent, so a
+  // row is one colour end to end. `onColor` is the swatch's own paired content
+  // colour — white on the bold hues, the deep family hue on the pale ones — so
+  // the tick stays legible on every option. Habits saved before colour themes
+  // fall back to the app's greens.
+  const checkFill = habitColor ? habitColor.color : palette.greenDark;
+  const checkGlyph = habitColor ? habitColor.onColor : palette.white;
+  // Empty, but tinted: the ring says which habit it belongs to before it is
+  // ticked, without reading as already filled.
+  const checkEmptyBorder = habitAccentColor ? alpha(habitAccentColor, "4D") : palette.hairline;
   const suppressTapUntil = React.useRef(0);
   const promptOpen = React.useRef(false);
   const badgeScale = React.useRef(new Animated.Value(1)).current;
@@ -223,9 +256,6 @@ function WidgetHabitRow({
           onPress: () => {
             promptOpen.current = false;
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-            if (count + 1 >= target) {
-              onCompleted?.(habit.id);
-            }
             completeHabit(habit.id, dateKey);
           }
         }
@@ -285,7 +315,7 @@ function WidgetHabitRow({
         done
           ? `${habit.name}. Completed. Long press to undo completion.`
           : isMultiple
-            ? `${habit.name}. ${progressLabel}. Tap to add a completion.`
+            ? `${habit.name}. ${subtitle}. Tap to add a completion.`
             : `${habit.name}. Tap to complete.`
       }
       delayLongPress={UNDO_HOLD_DURATION_MS}
@@ -296,130 +326,82 @@ function WidgetHabitRow({
       onPressOut={handlePressOut}
       style={styles.widgetRow}
     >
+      {/* Rounded square, not a disc — it reads as a tile of the habit's colour
+          beside the round check target on the other end of the row. */}
       <View style={[styles.widgetIcon, { backgroundColor: iconBackgroundColor }]}>
-        {done ? (
-          <Icon name="checkCircle" size={22} color={habitIconColor} weight="bulk" />
-        ) : (
-          <HabitIcon value={habit.emoji} color={habitIconColor} size={19} />
-        )}
-        {canUndoCompletion && holdProgress ? (
-          <HoldProgressRing progress={holdProgress} size={50} stroke={3} color={holdRingColor} trackColor={alpha(holdRingColor, "24")} />
-        ) : null}
+        <HabitIcon value={habit.emoji} color={habitIconColor} size={21} />
       </View>
+
       <View style={styles.rowText}>
         <View style={styles.nameRow}>
-          <AppText variant="titleSmall" numberOfLines={1} style={styles.nameText}>
+          <AppText variant="titleSmall" color={palette.ink} numberOfLines={1} style={styles.nameText}>
             {habit.name}
           </AppText>
           {inGroup ? <Icon name="friends" size={14} color={palette.muted} weight="bulk" /> : null}
         </View>
-        {progressLabel ? (
-          <AppText variant="caption" color={alpha(palette.muted, "AA")}>
-            {progressLabel}
-          </AppText>
+        <AppText variant="caption" color={palette.muted} numberOfLines={1} style={styles.subtitleText}>
+          {subtitle}
+        </AppText>
+      </View>
+
+      {/* The hold-to-undo ring winds around whatever this slot is showing —
+          the check or the segmented ring. It used to circle the habit's icon,
+          which worked while that icon was a disc; around the rounded-square
+          tile the icon wears now, a circle cuts straight through its corners.
+          Here it also sits on the control the hold actually acts on. */}
+      <View style={styles.trailing}>
+        {isMultiple && !done ? (
+          <View style={{ opacity: disabledActions ? 0.45 : 1 }}>
+            <SegmentedRing total={target} filled={Math.min(count, target)} fillColor={habitAccentColor} />
+          </View>
+        ) : (
+          <Animated.View style={{ transform: [{ scale: badgeScale }] }}>
+            <View
+              style={[
+                styles.check,
+                {
+                  backgroundColor: done ? checkFill : "transparent",
+                  borderColor: done ? checkFill : checkEmptyBorder,
+                  opacity: disabledActions && !done ? 0.45 : 1
+                }
+              ]}
+            >
+              {done ? <Icon name="check" size={12} color={checkGlyph} weight="bold" /> : null}
+            </View>
+          </Animated.View>
+        )}
+        {canUndoCompletion && holdProgress ? (
+          <HoldProgressRing progress={holdProgress} size={36} stroke={2.5} color={holdRingColor} trackColor={alpha(holdRingColor, "24")} />
         ) : null}
       </View>
-      {isMultiple && !done ? (
-        <View style={[styles.ringWrap, { opacity: disabledActions ? 0.45 : 1 }]}>
-          <SegmentedRing total={target} filled={Math.min(count, target)} fillColor={habitAccentColor} />
-        </View>
-      ) : (
-        <Animated.View
-          style={[
-            styles.statusBadge,
-            {
-              backgroundColor: done ? "transparent" : todoBadgeColor,
-              opacity: disabledActions && !done ? 0.45 : 1,
-              transform: [{ scale: badgeScale }]
-            }
-          ]}
-        >
-          {done ? (
-            completedTime ? (
-              <AppText variant="caption" color={doneBadgeTextColor} numberOfLines={1}>
-                {completedTime}
-              </AppText>
-            ) : (
-              <Icon name="checkCircle" size={24} color={doneBadgeTextColor} weight="bulk" />
-            )
-          ) : (
-            <AppText variant="caption" color={todoBadgeTextColor} style={styles.statusBadgeText}>
-              TO DO
-            </AppText>
-          )}
-        </Animated.View>
-      )}
     </Pressable>
   );
 }
 
-function QuickHabitCard({
+/**
+ * One row's hold-to-undo plumbing, plus the hairline that separates it from
+ * the row above.
+ *
+ * There is no enter/exit animation here any more. Ticking a habit used to send
+ * its row to the bottom of the list, and this shell existed to fade and
+ * collapse it out of one position and spring it into the other. Rows now stay
+ * where they are, so the whole apparatus went with the reordering — a habit's
+ * place in the list is a fixed landmark, and moving it under the reader's
+ * finger the moment they tapped it was the opposite of that.
+ */
+function QuickHabitRow({
   children,
-  exiting = false,
-  entering = false,
-  habit,
-  style
+  divided
 }: {
   children: (holdControls: { onHoldEnd: () => void; onHoldStart: () => void; holdProgress: Animated.Value }) => React.ReactNode;
-  exiting?: boolean;
-  // True only for a card that just transitioned into the Completed section, so
-  // the entrance spring doesn't replay on load or on every tab focus.
-  entering?: boolean;
-  habit: Habit;
-  style?: object;
+  /** Draws the hairline above this row (every row but the first). */
+  divided: boolean;
 }) {
-  // All three drive the same view's transform/height together, so they share
-  // the JS driver (height can't animate on the native thread anyway).
-  const holdScale = React.useRef(new Animated.Value(1)).current;
+  const { palette } = useLumo();
   const holdProgress = React.useRef(new Animated.Value(0)).current; // 0 idle -> 1 hold complete
-  const exitProgress = React.useRef(new Animated.Value(0)).current; // 0 present -> 1 gone
-  const enterProgress = React.useRef(new Animated.Value(entering ? 0 : 1)).current; // 0 pre-mount -> 1 settled
-  const [measuredHeight, setMeasuredHeight] = React.useState<number | null>(null);
-
-  // Entrance: a gentle rise + scale so a habit arriving in the Completed
-  // section reads as "landed" rather than popping in. Skipped (starts settled)
-  // for cards that were already there.
-  React.useEffect(() => {
-    if (!entering) {
-      return;
-    }
-
-    enterProgress.setValue(0);
-    Animated.spring(enterProgress, {
-      toValue: 1,
-      friction: 9,
-      tension: 80,
-      useNativeDriver: false
-    }).start();
-  }, [entering, enterProgress]);
-
-  // Exit: fade + settle-scale, then collapse height so the cards below flow up
-  // smoothly instead of jumping when this one is removed.
-  React.useEffect(() => {
-    exitProgress.stopAnimation();
-
-    if (!exiting) {
-      exitProgress.setValue(0);
-      return;
-    }
-
-    Animated.timing(exitProgress, {
-      toValue: 1,
-      duration: 440,
-      easing: Easing.inOut(Easing.cubic),
-      useNativeDriver: false
-    }).start();
-  }, [exitProgress, exiting]);
 
   const handleHoldStart = React.useCallback(() => {
-    holdScale.stopAnimation();
     holdProgress.stopAnimation();
-    Animated.timing(holdScale, {
-      toValue: 1.035,
-      duration: UNDO_HOLD_DURATION_MS,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false
-    }).start();
     // Hold the ring hidden for the reveal delay, then fill over the remaining
     // time so it reaches full exactly as the long-press fires.
     Animated.timing(holdProgress, {
@@ -429,255 +411,198 @@ function QuickHabitCard({
       easing: Easing.linear,
       useNativeDriver: false
     }).start();
-  }, [holdScale, holdProgress]);
+  }, [holdProgress]);
 
   const handleHoldEnd = React.useCallback(() => {
-    holdScale.stopAnimation();
     holdProgress.stopAnimation();
-    Animated.spring(holdScale, {
-      toValue: 1,
-      friction: 7,
-      tension: 120,
-      useNativeDriver: false
-    }).start();
     Animated.timing(holdProgress, {
       toValue: 0,
       duration: 220,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false
     }).start();
-  }, [holdScale, holdProgress]);
-
-  const opacity = Animated.multiply(
-    enterProgress,
-    exitProgress.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 0.35, 0] })
-  );
-  const scale = Animated.multiply(
-    holdScale,
-    Animated.multiply(
-      enterProgress.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }),
-      exitProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0.9] })
-    )
-  );
-  const translateY = enterProgress.interpolate({ inputRange: [0, 1], outputRange: [10, 0] });
-  // Hold the full height until the fade is mostly done, then collapse to 0.
-  const collapseStyle =
-    exiting && measuredHeight != null
-      ? {
-          height: exitProgress.interpolate({
-            inputRange: [0, 0.5, 1],
-            outputRange: [measuredHeight, measuredHeight, 0]
-          }),
-          overflow: "hidden" as const
-        }
-      : null;
+  }, [holdProgress]);
 
   return (
-    <Animated.View
-      key={habit.id}
-      pointerEvents={exiting ? "none" : "auto"}
-      onLayout={(event) => {
-        if (measuredHeight == null) {
-          setMeasuredHeight(event.nativeEvent.layout.height);
-        }
-      }}
-      style={[styles.habitCardScale, collapseStyle, { opacity, transform: [{ translateY }, { scale }] }]}
-    >
-      <Card style={style}>{children({ onHoldEnd: handleHoldEnd, onHoldStart: handleHoldStart, holdProgress })}</Card>
-    </Animated.View>
-  );
-}
-
-export function QuickDoneWidgets({ habits, dateKey = toDateKey(), disabledActions = false, groupHabitIds }: Props) {
-  const [settlingCompletedIds, setSettlingCompletedIds] = React.useState<Set<string>>(() => new Set());
-  // Ids currently playing their entrance in the Completed section (just moved
-  // there via the completion flow).
-  const [enteringCompletedIds, setEnteringCompletedIds] = React.useState<Set<string>>(() => new Set());
-  const settleTimers = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const enterTimers = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const needsCompletion = habits.filter((habit) => !isDoneOnDate(habit, dateKey) || settlingCompletedIds.has(habit.id));
-  const completed = habits.filter((habit) => isDoneOnDate(habit, dateKey) && !settlingCompletedIds.has(habit.id));
-
-  const holdCompletedHabit = React.useCallback((habitId: string) => {
-    setSettlingCompletedIds((current) => {
-      const next = new Set(current);
-      next.add(habitId);
-      return next;
-    });
-
-    if (settleTimers.current[habitId]) {
-      clearTimeout(settleTimers.current[habitId]);
-    }
-
-    // Let the exit fade + height collapse finish (~440ms) before moving the
-    // card, then flag it as entering so it springs into the Completed section.
-    settleTimers.current[habitId] = setTimeout(() => {
-      setSettlingCompletedIds((current) => {
-        const next = new Set(current);
-        next.delete(habitId);
-        return next;
-      });
-      setEnteringCompletedIds((current) => {
-        const next = new Set(current);
-        next.add(habitId);
-        return next;
-      });
-      delete settleTimers.current[habitId];
-
-      enterTimers.current[habitId] = setTimeout(() => {
-        setEnteringCompletedIds((current) => {
-          const next = new Set(current);
-          next.delete(habitId);
-          return next;
-        });
-        delete enterTimers.current[habitId];
-      }, 600);
-    }, 520);
-  }, []);
-
-  React.useEffect(() => {
-    return () => {
-      Object.values(settleTimers.current).forEach(clearTimeout);
-      Object.values(enterTimers.current).forEach(clearTimeout);
-    };
-  }, []);
-
-  if (!habits.length) {
-    return null;
-  }
-
-  return (
-    <View style={styles.wrap}>
-      {needsCompletion.map((habit) => (
-        <QuickHabitCard key={habit.id} exiting={settlingCompletedIds.has(habit.id) && isDoneOnDate(habit, dateKey)} habit={habit} style={styles.habitCard}>
-          {({ onHoldEnd, onHoldStart, holdProgress }) => (
-            <WidgetHabitRow
-              habit={habit}
-              dateKey={dateKey}
-              disabledActions={disabledActions}
-              inGroup={groupHabitIds?.has(habit.id)}
-              onCompleted={holdCompletedHabit}
-              onHoldEnd={onHoldEnd}
-              onHoldStart={onHoldStart}
-              holdProgress={holdProgress}
-            />
-          )}
-        </QuickHabitCard>
-      ))}
-
-      {/* Completed habits simply drop to the bottom of the same list — no
-          separate "Completed" section header or show/hide toggle. */}
-      {completed.map((habit) => (
-        <QuickHabitCard key={habit.id} habit={habit} entering={enteringCompletedIds.has(habit.id)} style={styles.habitCard}>
-          {({ onHoldEnd, onHoldStart, holdProgress }) => (
-            <WidgetHabitRow
-              habit={habit}
-              dateKey={dateKey}
-              disabledActions={disabledActions}
-              inGroup={groupHabitIds?.has(habit.id)}
-              onHoldEnd={onHoldEnd}
-              onHoldStart={onHoldStart}
-              holdProgress={holdProgress}
-            />
-          )}
-        </QuickHabitCard>
-      ))}
-
-      {/* Full iOS WidgetKit or Android widget support would bridge these same
-          completion actions through a native extension, shared storage, and
-          deep-link reconciliation back into the Expo app. */}
+    <View style={divided ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: alpha(palette.hairline, "80") } : null}>
+      {children({ onHoldEnd: handleHoldEnd, onHoldStart: handleHoldStart, holdProgress })}
     </View>
   );
 }
 
+/** Shown inside the card when nothing is scheduled for the selected day. */
+function RestDayState() {
+  const { palette } = useLumo();
+
+  return (
+    <View style={styles.restState}>
+      <LumoMascot mood="happy" width={96} />
+      <AppText variant="titleSmall" color={palette.ink} style={styles.restTitle}>
+        Nothing scheduled
+      </AppText>
+      <AppText variant="bodySmall" color={palette.subtle} style={styles.restBody}>
+        Enjoy the breather — rest is part of the routine.
+      </AppText>
+    </View>
+  );
+}
+
+/**
+ * The day's habits as one panel: a heading with the done count, then a divided
+ * list of rows. Tap a row to complete it; hold a completed one to undo.
+ *
+ * Completed habits drop to the bottom of the same list rather than into a
+ * separate section — the order IS the state.
+ */
+export function QuickDoneWidgets({ habits, dateKey = toDateKey(), disabledActions = false, groupHabitIds, title = "Today's Habits" }: Props) {
+  const { palette } = useLumo();
+  const doneCount = habits.filter((habit) => isDoneOnDate(habit, dateKey)).length;
+
+  return (
+    <Card style={styles.listCard}>
+      <View style={styles.listHeader}>
+        <AppText color={palette.ink} numberOfLines={1} style={styles.listTitle}>
+          {title}
+        </AppText>
+        {habits.length > 0 ? (
+          <AppText variant="caption" color={palette.subtle} numberOfLines={1} style={styles.listCount}>
+            <AppText variant="caption" color={palette.ink} style={styles.listCountValue}>
+              {doneCount}
+            </AppText>{" "}
+            of {habits.length} done
+          </AppText>
+        ) : null}
+      </View>
+
+      {habits.length === 0 ? (
+        <RestDayState />
+      ) : (
+        // No gap between rows — the hairline IS the separator, and a gap on top
+        // of it would be two spacings doing the same job.
+        <View>
+          {habits.map((habit, index) => (
+            <QuickHabitRow key={habit.id} divided={index > 0}>
+              {({ onHoldEnd, onHoldStart, holdProgress }) => (
+                <WidgetHabitRow
+                  habit={habit}
+                  dateKey={dateKey}
+                  disabledActions={disabledActions}
+                  inGroup={groupHabitIds?.has(habit.id)}
+                  onHoldEnd={onHoldEnd}
+                  onHoldStart={onHoldStart}
+                  holdProgress={holdProgress}
+                />
+              )}
+            </QuickHabitRow>
+          ))}
+        </View>
+      )}
+
+      {/* Full iOS WidgetKit or Android widget support would bridge these same
+          completion actions through a native extension, shared storage, and
+          deep-link reconciliation back into the Expo app. */}
+    </Card>
+  );
+}
+
 const styles = StyleSheet.create({
-  wrap: {
+  // The rows carry their own vertical padding and run edge to edge inside the
+  // card, so the card only insets horizontally.
+  listCard: {
+    paddingHorizontal: spacing.ml,
+    paddingVertical: spacing.md,
     gap: spacing.xs
   },
+  listHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    minHeight: 28
+  },
+  // A step under the app's section-heading size. This heading sits INSIDE the
+  // card it names rather than above a group of them, so at the full heading
+  // step it outweighed the habit names underneath it.
+  listTitle: {
+    flexShrink: 1,
+    fontFamily: fontFamilies.lexendBold,
+    fontSize: 14,
+    lineHeight: 19
+  },
+  listCount: {
+    flexShrink: 0,
+    fontFamily: fontFamilies.lexendMedium
+  },
+  listCountValue: {
+    fontFamily: fontFamilies.lexendBold
+  },
+  restState: {
+    alignItems: "center",
+    gap: spacing.xxs,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.ml
+  },
+  restTitle: {
+    fontFamily: fontFamilies.lexendSemiBold,
+    marginTop: spacing.xs
+  },
+  restBody: {
+    textAlign: "center",
+    maxWidth: 260,
+    lineHeight: 20
+  },
+  widgetRow: {
+    minHeight: 68,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.sm
+  },
   widgetIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: radius.pill,
+    width: 46,
+    height: 46,
+    borderRadius: radius.xl,
     alignItems: "center",
     justifyContent: "center"
   },
-  habitCard: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.lg
-  },
-  habitCardScale: {
-    transformOrigin: "center"
-  },
-  widgetRow: {
-    minHeight: 62,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm
-  },
   rowText: {
-    flex: 1
+    flex: 1,
+    minWidth: 0,
+    gap: 1
   },
   nameRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xxs
   },
+  // 14/21 over a 12/16 caption — the same pair the habits list uses for its
+  // rows. This card was running its names a full step larger, so the two lists
+  // of the same habits did not look like the same kind of list.
   nameText: {
-    flexShrink: 1
-  },
-  ringWrap: {
-    minWidth: 56,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  statusBadge: {
-    minWidth: 56,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  statusBadgeText: {
-    fontFamily: "Lexend-Black",
-    fontSize: 10,
-    lineHeight: 14,
-    letterSpacing: 0.6
-  },
-  completedSection: {
-    gap: spacing.sm,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs
-  },
-  completedSectionFlush: {
-    paddingTop: 0
-  },
-  completedCards: {
-    gap: spacing.xs
-  },
-  completedHeader: {
-    minHeight: 28,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md
-  },
-  completedTitle: {
-    fontFamily: fontFamilies.lexendSemiBold
-  },
-  completedHeaderActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs
-  },
-  completedCount: {
+    flexShrink: 1,
     fontFamily: fontFamilies.lexendSemiBold,
-    opacity: 0.5
+    fontSize: 14,
+    lineHeight: 21
   },
-  completedToggle: {
-    width: 34,
-    height: 34,
+  subtitleText: {
+    fontSize: 12,
+    lineHeight: 16
+  },
+  // Sized to the hold ring it hosts, so the ring's absolute fill centres on the
+  // check inside it rather than on a box the check happens to sit in. Kept at
+  // 36 rather than dropping with the check, because the segmented ring that
+  // shares this slot is 30 across and needs the room.
+  trailing: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  check: {
+    width: CHECK_SIZE,
+    height: CHECK_SIZE,
     borderRadius: radius.pill,
+    borderWidth: 1.5,
     alignItems: "center",
     justifyContent: "center"
   }

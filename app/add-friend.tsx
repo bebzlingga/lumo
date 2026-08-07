@@ -98,12 +98,13 @@ export default function AddFriendScreen() {
 		<Screen contentStyle={styles.content}>
 			<ScreenHeader leftAction={{ icon: 'back', label: 'Back', onPress: () => router.back() }} />
 
+			{/* The avatar is the largest thing on the page: this screen exists to
+			    answer "is this the right person?", and the face is the answer. */}
 			<View style={styles.hero}>
 				{profile && !sent ? (
 					<Avatar
 						config={profile.avatar ?? defaultAvatar()}
-						size={96}
-						rounded={false}
+						size={132}
 					/>
 				) : (
 					<View style={[styles.badge, { backgroundColor: palette.greenSoft }]}>
@@ -217,10 +218,14 @@ const styles = StyleSheet.create({
 		fontSize: 18,
 		lineHeight: 24,
 	},
+	// The margin stacks on the hero's own spacing.sm row gap for 24pt above,
+	// which separates the explanation from the identity block it follows — name,
+	// ID and this line were reading as one run of three centred paragraphs.
 	subtitle: {
 		textAlign: 'center',
 		maxWidth: 300,
 		lineHeight: 20,
+		marginTop: spacing.sm,
 	},
 	submitLabel: {
 		textTransform: 'capitalize',

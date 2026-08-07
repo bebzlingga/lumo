@@ -16,6 +16,11 @@ export function completionCount(habit: Habit, dateKey: string) {
   return habit.completions.find((entry) => entry.date === dateKey)?.count ?? 0;
 }
 
+/** Whether the day was deliberately skipped rather than missed. */
+export function isSkippedOnDate(habit: Habit, dateKey: string) {
+  return Boolean(habit.skips?.includes(dateKey));
+}
+
 export function isDoneOnDate(habit: Habit, dateKey: string) {
   if (habit.goal.type === "weekly" || habit.goal.type === "monthly") {
     return completionCount(habit, dateKey) > 0;
@@ -43,6 +48,12 @@ export function isScheduledOnDate(habit: Habit, dateKey: string) {
   }
 
   if (dateKey < habit.createdAt) {
+    return false;
+  }
+
+  // A deliberate skip means the day was never expected, so it neither breaks
+  // the streak nor counts against the completion rate.
+  if (habit.skips?.includes(dateKey)) {
     return false;
   }
 
@@ -116,6 +127,75 @@ export function bestStreak(habit: Habit, todayKey = toDateKey()) {
 }
 
 /**
+ * Every day the user checked SOMETHING in, as ascending date keys.
+ *
+ * This is activity in Lumo rather than progress on one habit: it does not care
+ * which habit was logged, only that the day was shown up for. Schedules are
+ * ignored for the same reason — logging a habit on a day it was not due still
+ * means you opened the app and did the thing.
+ *
+ * Every habit counts, paused and archived included. A check-in is a historical
+ * fact; what later became of the habit it belonged to cannot un-happen it.
+ */
+export function activityDays(habits: Habit[]): string[] {
+  const days = new Set<string>();
+
+  for (const habit of habits) {
+    for (const entry of habit.completions) {
+      if (entry.count > 0) {
+        days.add(entry.date);
+      }
+    }
+  }
+
+  return [...days].sort();
+}
+
+/**
+ * Longest run of consecutive days with at least one check-in — the streak the
+ * badges are awarded on.
+ *
+ * Deliberately NOT `bestStreakAcrossHabits`, which is the best run of a single
+ * habit. Under that rule, checking in on eight different habits over eight
+ * consecutive days scored a streak of 1, while the badges are meant to reward
+ * turning up at all.
+ */
+export function bestActivityStreak(habits: Habit[], todayKey = toDateKey()) {
+  const days = activityDays(habits).filter((day) => day <= todayKey);
+  let best = 0;
+  let run = 0;
+  let previous: string | undefined;
+
+  for (const day of days) {
+    run = previous && addDays(previous, 1) === day ? run + 1 : 1;
+    best = Math.max(best, run);
+    previous = day;
+  }
+
+  return best;
+}
+
+/**
+ * The run of check-in days still alive as of `todayKey`.
+ *
+ * Today not being logged yet does not break it — the day is not over. The run
+ * is measured from yesterday in that case, exactly as `currentStreak` treats a
+ * habit that is due today and not yet done.
+ */
+export function currentActivityStreak(habits: Habit[], todayKey = toDateKey()) {
+  const days = new Set(activityDays(habits));
+  let cursor = days.has(todayKey) ? todayKey : addDays(todayKey, -1);
+  let streak = 0;
+
+  for (let index = 0; index < MAX_HISTORY_DAYS && days.has(cursor); index += 1) {
+    streak += 1;
+    cursor = addDays(cursor, -1);
+  }
+
+  return streak;
+}
+
+/**
  * Best day-streak ever reached across every habit. Status is forced active so a
  * paused or archived habit still counts toward earned streak achievements.
  */
@@ -184,6 +264,105 @@ export function perfectWeeksForHabits(habits: Habit[], weeks = 12, todayKey = to
   }
 
   return total;
+}
+
+export type DaySpanSummary = {
+  /** Habit-days that were on the schedule across the span. */
+  scheduled: number;
+  /** How many of those were checked off. */
+  done: number;
+  /** Days where every scheduled habit was completed. */
+  perfectDays: number;
+  /** `done` over `scheduled`, as a whole percentage. Zero when nothing was due. */
+  rate: number;
+};
+
+/**
+ * Roll a run of days up into one set of totals.
+ *
+ * Days with nothing scheduled are skipped rather than counted as failures — a
+ * rest day is not a miss, so it should neither dent the rate nor be handed out
+ * as a free perfect day.
+ */
+export function summarizeDays(habits: Habit[], days: string[]): DaySpanSummary {
+  let scheduled = 0;
+  let done = 0;
+  let perfectDays = 0;
+
+  for (const day of days) {
+    const dayHabits = habits.filter((habit) => isScheduledOnDate(habit, day));
+
+    if (!dayHabits.length) {
+      continue;
+    }
+
+    const dayDone = dayHabits.filter((habit) => isDoneOnDate(habit, day)).length;
+    scheduled += dayHabits.length;
+    done += dayDone;
+
+    if (dayDone === dayHabits.length) {
+      perfectDays += 1;
+    }
+  }
+
+  return { scheduled, done, perfectDays, rate: scheduled ? Math.round((done / scheduled) * 100) : 0 };
+}
+
+/**
+ * How a single day went across the whole habit set, for the home screen's week
+ * strip: every scheduled habit done, some done, or nothing scheduled at all.
+ *
+ * "none" covers both an empty day and a rest day — neither is a miss, so the
+ * strip draws them the same way.
+ */
+export type DayCompletionState = "complete" | "partial" | "missed" | "none";
+
+export function dayCompletionState(habits: Habit[], dateKey: string): DayCompletionState {
+  const scheduled = habits.filter((habit) => isScheduledOnDate(habit, dateKey));
+
+  if (!scheduled.length) {
+    return "none";
+  }
+
+  const done = scheduled.filter((habit) => isDoneOnDate(habit, dateKey)).length;
+
+  if (done === scheduled.length) {
+    return "complete";
+  }
+
+  return done > 0 ? "partial" : "missed";
+}
+
+/**
+ * What the habit ASKS of you — "Weekdays", "3x a week", "Daily · 2x a day" —
+ * as opposed to how it is going. Lives here rather than inside a card because
+ * the habits list and the home screen's rows both label the same thing, and
+ * two copies of this had already started to drift.
+ */
+export function cadenceLabel(habit: Habit) {
+  if (habit.goal.type === "weekly") {
+    return `${habit.goal.target}x a week`;
+  }
+
+  if (habit.goal.type === "monthly") {
+    return `${habit.goal.target}x a month`;
+  }
+
+  const schedule = habit.repeatSchedule;
+  const days =
+    schedule.type === "weekdays"
+      ? "Weekdays"
+      : schedule.type === "weekends"
+        ? "Weekends"
+        : schedule.type === "specific"
+          ? `${scheduledWeekdays(habit).length} days a week`
+          : schedule.type === "interval"
+            ? `Every ${schedule.every} days`
+            : "Daily";
+  const target = dailyTarget(habit);
+  const perDay = habit.goal.type === "multiple" && target > 1 ? `${target}x a day` : null;
+
+  return perDay ? `${days} · ${perDay}` : days;
 }
 
 export function habitSummary(habit: Habit) {

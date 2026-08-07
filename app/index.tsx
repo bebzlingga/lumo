@@ -1,672 +1,1153 @@
-import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Animated, Easing, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
-import { CategoryChips, categoryNamePlaceholders } from "@/components/CategoryChips";
-import { FloatingDropdown } from "@/components/FloatingDropdown";
-import { Icon, IconName } from "@/components/Icon";
-import { IconPicker, categoryIconOptions } from "@/components/IconPicker";
-import { OnboardingIllustration } from "@/components/OnboardingIllustrations";
-import { ScreenHeader } from "@/components/ScreenHeader";
-import { AppText, FieldLabel, LoadingState, LumoInput, Screen } from "@/components/ui";
-import { defaultHabitColor, fontFamilies, getPalette, radius, spacing } from "@/constants/theme";
-import { useLumo } from "@/context/LumoContext";
-import { alpha } from "@/lib/color";
-import { toDateKey } from "@/lib/date";
-import { type GoalType, type HabitCategory, type HabitDraft, type RepeatSchedule } from "@/types/habit";
+import { useRouter } from 'expo-router'
+import React, { useEffect, useState } from 'react'
+import {
+	AccessibilityInfo,
+	Alert,
+	Animated,
+	BackHandler,
+	Easing,
+	Image,
+	PanResponder,
+	Pressable,
+	ScrollView,
+	StyleProp,
+	StyleSheet,
+	View,
+	ViewStyle,
+	useWindowDimensions,
+} from 'react-native'
+import { Icon, type IconName } from '@/components/Icon'
+import { Toggle } from '@/components/controls'
+import { LumoMascot } from '@/components/LumoMascot'
+import { mascotAspect, type MascotMood } from '@/constants/mascotAssets'
+import { LumoWordmark } from '@/components/LumoWordmark'
+import { AppText, fieldShadow, LoadingState, LumoInput, Screen } from '@/components/ui'
+import { BACKGROUND_ASPECT, backgroundAsset } from '@/constants/backgroundAssets'
+import { CHECK_INS, checkInTimeLabel, defaultCheckIns, type CheckInSchedule } from '@/constants/checkIns'
+import { templateToDraft, type HabitTemplate } from '@/constants/habitTemplates'
+import { brand, fontFamilies, layout, lightPalette, radius, spacing } from '@/constants/theme'
+import { useLumo } from '@/context/LumoContext'
+import { alpha, shadeWithBlack } from '@/lib/color'
 
-const slides = [
-  {
-    title: "Small habits, big change",
-    body: "Real change starts tiny. Two minutes a day, done gently and often, beats any perfect plan — and Lumo makes every check-in feel like a win.",
-    illustration: "habits" as const
-  },
-  {
-    title: "See yourself grow",
-    body: "Progress you can see is motivation you can feel. Every bright dot and streak is proof you showed up — and proof you can do it again tomorrow.",
-    illustration: "progress" as const
-  },
-  {
-    title: "Remember the wins",
-    body: "One honest line a day is enough. On hard days, your own words become the best encouragement to keep going.",
-    illustration: "journal" as const
-  },
-  {
-    title: "Better together",
-    body: "Shared goals are kept goals — you're far more likely to stick with a habit when a friend is cheering you on. Carry each other through the off days.",
-    illustration: "challenge" as const
-  }
-];
+/**
+ * Onboarding runs on a fixed light "LUMO" look — warm cream canvas, navy ink,
+ * sage-green primary actions — rather than the stored theme, because no theme
+ * has been chosen yet at this point in the flow.
+ */
+// Onboarding runs a warmer cream than the in-app canvas (brand.cream),
+// so the intro reads softer than the tracking screens that follow.
+const BG = brand.cream
+const INK = brand.navy
+const SUB = brand.slate
+const SAGE = brand.sage
+const SAGE_STRONG = brand.sageStrong
+const SAGE_SOFT = brand.sageSoft
+const SOFT = brand.creamSoft
+const LINE = brand.border
+// Pure white — only for content ON a coloured fill (button labels, the check
+// glyph, switch thumbs), never for surfaces.
+const WHITE = '#FFFFFF'
+// Card surfaces. Pure white reads cold and glaring against the warm cream
+// canvas; this shares the background's warmth while still lifting off it.
+// Onboarding sits on the warmer cream, so its cards are a touch warmer too.
+const CARD = '#FFFCF4'
+// Warm amber outline shared by the text field and selected cards, so every
+// bordered surface in onboarding uses one colour rather than a per-item hue.
+const FIELD_BORDER = brand.borderWarm
+// Selected cards carry the darkened edge — the same state a focused field
+// shows, so selection and focus read alike across the app.
+const FIELD_BORDER_ACTIVE = lightPalette.hairlineStrong
+// Warm sand for inactive/off states. Deliberately NOT a gray — a neutral track
+// reads cold and dirty against the cream canvas. 1.5:1 keeps it present without
+// competing with the active sage.
+const TRACK_OFF = brand.sand
 
-type OnboardingStep = "welcome" | "profile" | "habit" | "notify";
+type OnboardingStep = 'welcome' | 'about' | 'profile' | 'habits' | 'reminders' | 'ready'
 
-// Onboarding always renders the light "black" look — the user hasn't picked a
-// theme yet, so it must not depend on whatever settings happen to be stored.
-const onboardingPalette = getPalette(false, "black");
+/** Flow order — drives back navigation, swipes, and the step counter. */
+const STEP_ORDER: OnboardingStep[] = ['welcome', 'about', 'profile', 'habits', 'reminders', 'ready']
 
-function ProgressDots({ index }: { index: number }) {
-  const palette = onboardingPalette;
-
-  return (
-    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.dots}>
-      {slides.map((slide, dotIndex) => (
-        <View
-          key={slide.title}
-          style={[
-            styles.dot,
-            {
-              backgroundColor: dotIndex === index ? palette.ink : palette.green,
-              opacity: dotIndex === index ? 1 : 0.32,
-              width: dotIndex === index ? 28 : 5
-            }
-          ]}
-        />
-      ))}
-    </View>
-  );
+/** A horizontal drag, not an incidental diagonal one while scrolling. */
+function isHorizontalSwipe(dx: number, dy: number) {
+	return Math.abs(dx) > 18 && Math.abs(dx) > Math.abs(dy) * 1.25
 }
-type BasicFrequency = Extract<RepeatSchedule["type"], "daily" | "weekdays" | "weekends">;
-const ONBOARDING_PX = spacing.xl;
-const frequencyOptions: { label: string; value: BasicFrequency }[] = [
-  { label: "Daily", value: "daily" },
-  { label: "Weekdays", value: "weekdays" },
-  { label: "Weekends", value: "weekends" }
-];
-const goalOptions: { label: string; value: GoalType["type"] }[] = [
-  { label: "Once per day", value: "once" },
-  { label: "Multiple times", value: "multiple" },
-  { label: "Weekly target", value: "weekly" },
-  { label: "Monthly target", value: "monthly" }
-];
 
-function OnboardingCta({
-  label,
-  onPress,
-  disabled = false,
-  variant = "fill"
+/** Counted setup steps. Welcome and Meet Lumo are intro screens and are
+ * deliberately uncounted — the indicator only tracks real setup. */
+const TOTAL_STEPS = 4
+
+const GOALS: { label: string; icon: IconName; tint: string }[] = [
+	{ label: 'Feel more consistent', icon: 'sparkle', tint: brand.sage },
+	{ label: 'Take better care of myself', icon: 'health', tint: brand.coral },
+	{ label: 'Build a routine with friends', icon: 'friends', tint: brand.blue },
+	{ label: 'Improve my focus', icon: 'taskSquare', tint: brand.lavender },
+	{ label: 'Sleep better', icon: 'moon', tint: brand.lavender },
+	{ label: 'Learn something new', icon: 'book', tint: brand.gold },
+]
+
+/** Curated first habits shown as a 2-up grid; each maps to a real habit draft. */
+const ONBOARDING_HABITS: { template: HabitTemplate; color: string; icon: IconName; tint: string }[] = [
+	{ template: { name: 'Drink more water', category: 'Health', emoji: 'drop', goal: { type: 'multiple', count: 8 } }, color: '#17A38F', icon: 'drop', tint: brand.blue },
+	{ template: { name: 'Exercise', category: 'Fitness', emoji: 'fire' }, color: '#FC7A5E', icon: 'fire', tint: brand.coral },
+	{ template: { name: 'Read', category: 'Learning', emoji: 'book' }, color: '#1D74E4', icon: 'book', tint: brand.gold },
+	{ template: { name: 'Sleep earlier', category: 'Health', emoji: 'moon' }, color: '#5A4B9C', icon: 'moon', tint: brand.lavender },
+	{ template: { name: 'Meditate', category: 'Mind', emoji: 'sparkle' }, color: '#A29FC9', icon: 'sparkle', tint: brand.mint },
+	{ template: { name: 'Learn something new', category: 'Learning', emoji: 'star' }, color: '#F9941E', icon: 'star', tint: brand.gold },
+]
+
+
+
+/** Shared art height for the intro carousel pages. */
+const FEATURE_ART_HEIGHT = 340
+
+/** What you can actually do with Lumo — the intro carousel, one page each. */
+const LUMO_FEATURES: { mood: MascotMood; title: string; body: string }[] = [
+	{
+		mood: 'together',
+		title: 'Do it together',
+		body: 'Share habits with friends in a group, cheer each other on, and take on challenges as a team.',
+	},
+	{
+		mood: 'tracking',
+		title: 'Track habits',
+		body: 'Build routines that fit your week — daily, weekdays, or a few times a month. Checking one off takes a single tap.',
+	},
+	{
+		mood: 'progress',
+		title: 'See progress',
+		body: 'Streaks, completion rates, and a weekly recap that shows where you’re winning and which day trips you up.',
+	},
+	{
+		mood: 'journaling',
+		title: 'Keep a journal',
+		body: 'Write a line about your day, add a photo, note how you felt. Look back whenever you need perspective.',
+	},
+	{
+		mood: 'trophy',
+		title: 'Earn trophies',
+		body: 'Milestones worth chasing. Streaks unlock badges and trophies, from your first three days to a full year.',
+	},
+]
+
+
+// ---------------------------------------------------------------------------
+
+function TopBar({ counter, onBack }: { counter?: number; onBack?: () => void }) {
+	return (
+		<View style={styles.topBarWrap}>
+			<View style={styles.topBar}>
+				<View style={styles.topBarLeft}>
+					{onBack ? (
+						<Pressable
+							accessibilityRole='button'
+							accessibilityLabel='Go back'
+							onPress={onBack}
+							hitSlop={12}
+							style={styles.backButton}
+						>
+							<Icon name='arrowLeft' size={18} color={INK} weight='bold' />
+						</Pressable>
+					) : null}
+					<LumoWordmark size={20} color={INK} />
+				</View>
+				{counter ? (
+					<View
+						style={styles.progressTrack}
+						accessibilityRole='progressbar'
+						accessibilityLabel={`Step ${counter} of ${TOTAL_STEPS}`}
+						accessibilityValue={{ min: 0, max: TOTAL_STEPS, now: counter }}
+					>
+						{Array.from({ length: TOTAL_STEPS }, (_, index) => (
+							<View key={index} style={[styles.progressSegment, { backgroundColor: index < counter ? SAGE : TRACK_OFF }]} />
+						))}
+					</View>
+				) : null}
+			</View>
+		</View>
+	)
+}
+
+/**
+ * Pressable with manually-tracked pressed state.
+ *
+ * NativeWind's css-interop drops function-valued `style` props on Pressable —
+ * a `({ pressed }) => [...]` style silently renders with NO styling at all.
+ * Every pressable in this file therefore takes a plain style array.
+ */
+function PressBox({
+	children,
+	onPress,
+	style,
+	disabled = false,
+	pressedOpacity = 0.85,
+	accessibilityLabel,
+	selected,
 }: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  variant?: "fill" | "ghost";
+	children: React.ReactNode
+	onPress: () => void
+	style: StyleProp<ViewStyle>
+	disabled?: boolean
+	pressedOpacity?: number
+	accessibilityLabel?: string
+	selected?: boolean
 }) {
-  const palette = onboardingPalette;
-  const ghost = variant === "ghost";
+	const [pressed, setPressed] = useState(false)
 
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [styles.onboardingButtonPressable, { opacity: disabled ? 0.45 : pressed ? 0.82 : 1 }]}
-    >
-      <View
-        style={[
-          styles.onboardingButton,
-          ghost
-            ? { backgroundColor: "transparent", shadowOpacity: 0, elevation: 0 }
-            : { backgroundColor: palette.greenDark, shadowColor: palette.greenDark }
-        ]}
-      >
-        <AppText variant="button" color={ghost ? palette.greenDark : palette.white}>
-          {label}
-        </AppText>
-      </View>
-    </Pressable>
-  );
+	return (
+		<Pressable
+			accessibilityRole='button'
+			accessibilityLabel={accessibilityLabel}
+			accessibilityState={{ disabled, selected }}
+			disabled={disabled}
+			onPress={onPress}
+			onPressIn={() => setPressed(true)}
+			onPressOut={() => setPressed(false)}
+			style={[style, { opacity: disabled ? 0.45 : pressed ? pressedOpacity : 1 }]}
+		>
+			{children}
+		</Pressable>
+	)
+}
+
+function CtaButton({
+	label,
+	onPress,
+	disabled = false,
+	tone = 'primary',
+	large = false,
+}: {
+	label: string
+	onPress: () => void
+	disabled?: boolean
+	tone?: 'primary' | 'soft'
+	/** Taller button with a bigger label — used for the welcome hero CTA. */
+	large?: boolean
+}) {
+	const primary = tone === 'primary'
+
+	return (
+		<PressBox
+			onPress={onPress}
+			disabled={disabled}
+			pressedOpacity={0.88}
+			accessibilityLabel={label}
+			// 80% alpha on the FILL only (not the whole view), so the landscape
+			// shows through the button while the label stays fully opaque.
+			style={[styles.button, large && styles.buttonLarge, { backgroundColor: alpha(primary ? SAGE_STRONG : SOFT, 'CC') }]}
+		>
+			<AppText variant='button' color={primary ? WHITE : INK} style={large ? styles.buttonLabelLarge : undefined}>
+				{label}
+			</AppText>
+		</PressBox>
+	)
+}
+
+function Title({ children, center = false, hero = false }: { children: React.ReactNode; center?: boolean; hero?: boolean }) {
+	return (
+		<AppText color={INK} style={[styles.title, hero && styles.titleHero, center && styles.center]}>
+			{children}
+		</AppText>
+	)
+}
+
+function Subtitle({ children, center = false }: { children: React.ReactNode; center?: boolean }) {
+	return (
+		<AppText variant='body' color={SUB} style={[styles.subtitle, center && styles.center]}>
+			{children}
+		</AppText>
+	)
+}
+
+/** Soft rounded tile holding a category icon, tinted per item. */
+function IconTile({ icon, tint, size = 34 }: { icon: IconName; tint: string; size?: number }) {
+	return (
+		<View style={[styles.iconTile, { width: size, height: size, backgroundColor: `${tint}24` }]}>
+			<Icon name={icon} size={size * 0.55} color={tint} weight='bulk' />
+		</View>
+	)
+}
+
+/** Sage check badge used on selected goals and habits. */
+function CheckBadge({ selected }: { selected: boolean }) {
+	if (!selected) {
+		return <View style={[styles.checkEmpty, { borderColor: LINE }]} />
+	}
+	return (
+		<View style={[styles.checkFilled, { backgroundColor: SAGE }]}>
+			<Icon name='check' size={13} color={WHITE} weight='bold' />
+		</View>
+	)
 }
 
 export default function OnboardingScreen() {
-  const router = useRouter();
-  const { createHabit, isReady, hasOnboarded, nickname, setNickname, setEmail, setNotificationsEnabled } = useLumo();
-  const { width, height: windowHeight } = useWindowDimensions();
-  const slideScrollRef = useRef<ScrollView>(null);
-  const palette = onboardingPalette;
-  // Resting bottom-border for inputs and selects — matches the create-habit form.
-  const fieldBorderColor = alpha(palette.greenDark, "33");
-  const [step, setStep] = useState<OnboardingStep>("welcome");
-  const [slideIndex, setSlideIndex] = useState(0);
-  const [nicknameDraft, setNicknameDraft] = useState(nickname);
-  const [emailDraft, setEmailDraft] = useState("");
-  const [firstHabitName, setFirstHabitName] = useState("");
-  const [firstHabitCategory, setFirstHabitCategory] = useState<HabitCategory>("General");
-  const [firstHabitEmoji, setFirstHabitEmoji] = useState<IconName>(categoryIconOptions.General[0]);
-  const [firstHabitFrequency, setFirstHabitFrequency] = useState<BasicFrequency>("daily");
-  const [firstHabitGoalType, setFirstHabitGoalType] = useState<GoalType["type"]>("once");
-  const [firstHabitGoalAmount, setFirstHabitGoalAmount] = useState("3");
-  const [isSavingHabit, setIsSavingHabit] = useState(false);
-  const [notifyBusy, setNotifyBusy] = useState(false);
+	const router = useRouter()
+	const { width: screenWidth } = useWindowDimensions()
+	// Big and centred on the landscape, but capped so it never crowds the
+	// header copy or the CTA on small screens.
+	const mascotWidth = Math.min(screenWidth * 0.86, 340)
+	// The celebrate pose is landscape with generous transparent margin, so it
+	// needs to overflow the screen gutter to read at a hero scale. PAD * 2
+	// cancels the screen's horizontal padding; the extra pushes it wider still.
+	const celebrateWidth = Math.min(screenWidth + PAD * 2 + 60, 560)
+	// Aliased: the local `setCheckIns` below is this step's draft state, and an
+	// unaliased import would shadow it into a silent no-op at save time.
+	const {
+		createHabit,
+		isReady,
+		hasOnboarded,
+		nickname,
+		setNickname,
+		setNotificationsEnabled,
+		setCheckIns: saveCheckIns,
+	} = useLumo()
+	const [step, setStep] = useState<OnboardingStep>('welcome')
+	const [nicknameDraft, setNicknameDraft] = useState(nickname)
+	const [goal, setGoal] = useState<string | null>(null)
+	const [selected, setSelected] = useState<Set<string>>(() => new Set())
+	// Pre-ticked, unlike the all-off default the rest of the app starts from:
+	// this step is where the nudges are being offered, so the two most useful
+	// slots come suggested rather than needing to be discovered.
+	const [checkIns, setCheckIns] = useState<CheckInSchedule>({
+		...defaultCheckIns,
+		morning: true,
+		evening: true,
+	})
+	const [busy, setBusy] = useState(false)
 
-  // Artwork scales with both screen axes (320:250 aspect kept) so small phones
-  // keep room for the copy and CTA instead of overflowing.
-  const { illustrationWidth, illustrationHeight, profileIllustrationHeight } = useMemo(() => {
-    const aspect = 250 / 320;
-    const nextWidth = Math.round(Math.min(width - ONBOARDING_PX * 2, 330, (windowHeight * 0.34) / aspect));
-    const nextHeight = Math.round(nextWidth * aspect);
+	useEffect(() => {
+		if (isReady && hasOnboarded) {
+			router.replace('/(tabs)/today')
+		}
+	}, [hasOnboarded, isReady, router])
 
-    return {
-      illustrationWidth: nextWidth,
-      illustrationHeight: nextHeight,
-      profileIllustrationHeight: Math.min(190, nextHeight)
-    };
-  }, [width, windowHeight]);
-  const slideWidth = width - ONBOARDING_PX * 2;
+	// Android hardware back walks the flow backwards instead of leaving the app.
+	useEffect(() => {
+		const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+			const index = STEP_ORDER.indexOf(step)
+			if (index > 0) {
+				setStep(STEP_ORDER[index - 1])
+				return true
+			}
+			return false
+		})
+		return () => subscription.remove()
+	}, [step])
 
-  useEffect(() => {
-    if (isReady && hasOnboarded) {
-      router.replace("/(tabs)/today");
-    }
-  }, [hasOnboarded, isReady, router]);
+	// --- step slide transition -------------------------------------------------
+	// Incoming step slides in from the side you're travelling toward, so back and
+	// forward feel directional rather than identical.
+	const slide = React.useRef(new Animated.Value(1)).current
+	const slideFrom = React.useRef<'next' | 'previous'>('next')
+	const [reduceMotion, setReduceMotion] = useState(false)
 
-  // Slide + fade the first-habit step in when arriving from the nickname step.
-  const habitStepAnim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (step !== "habit") {
-      return;
-    }
+	useEffect(() => {
+		let active = true
+		AccessibilityInfo.isReduceMotionEnabled()
+			.then((enabled) => {
+				if (active) {
+					setReduceMotion(enabled)
+				}
+			})
+			.catch(() => undefined)
+		const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion)
+		return () => {
+			active = false
+			subscription.remove()
+		}
+	}, [])
 
-    habitStepAnim.setValue(0);
-    Animated.timing(habitStepAnim, {
-      toValue: 1,
-      duration: 340,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true
-    }).start();
-  }, [step, habitStepAnim]);
+	useEffect(() => {
+		if (reduceMotion) {
+			slide.setValue(1)
+			return
+		}
+		slide.setValue(0)
+		Animated.timing(slide, {
+			toValue: 1,
+			duration: 260,
+			easing: Easing.out(Easing.cubic),
+			useNativeDriver: true,
+		}).start()
+	}, [step, reduceMotion, slide])
 
-  if (!isReady || hasOnboarded) {
-    return <LoadingState />;
-  }
+	const [featureIndex, setFeatureIndex] = useState(0)
 
-  function goNext() {
-    if (slideIndex < slides.length - 1) {
-      const nextIndex = slideIndex + 1;
-      setSlideIndex(nextIndex);
-      slideScrollRef.current?.scrollTo({ x: nextIndex * slideWidth, animated: true });
-      return;
-    }
+	// One landscape backdrop across the whole flow, bottom-anchored and held
+	// well back so it never competes with the content on top of it.
+	const onboardingBackdrop = (
+		<View style={StyleSheet.absoluteFill} pointerEvents='none'>
+			<Image
+				source={backgroundAsset('today')}
+				style={{
+					position: 'absolute',
+					bottom: 0,
+					width: screenWidth,
+					height: screenWidth / BACKGROUND_ASPECT,
+					opacity: 0.22,
+				}}
+				resizeMode='cover'
+			/>
+		</View>
+	)
 
-    setStep("profile");
-  }
+	// Leaving the intro unmounts the carousel, so it remounts scrolled to page 0
+	// — but featureIndex would still hold the last page, leaving the dots out of
+	// sync with what's on screen. Reset it whenever the step is entered.
+	useEffect(() => {
+		if (step === 'about') {
+			setFeatureIndex(0)
+		}
+	}, [step])
 
-  function updateSlideIndex(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const nextIndex = Math.round(event.nativeEvent.contentOffset.x / slideWidth);
+	// Created once; reads the current handlers via ref so it never goes stale.
+	const navRef = React.useRef({ back: () => {}, next: () => {} })
+	const swipeResponder = React.useMemo(
+		() =>
+			PanResponder.create({
+				onMoveShouldSetPanResponder: (_, gesture) => isHorizontalSwipe(gesture.dx, gesture.dy),
+				onPanResponderRelease: (_, gesture) => {
+					if (gesture.dx > 56 || gesture.vx > 0.6) {
+						navRef.current.back()
+					} else if (gesture.dx < -56 || gesture.vx < -0.6) {
+						navRef.current.next()
+					}
+				},
+				onPanResponderTerminationRequest: () => false,
+			}),
+		[],
+	)
 
-    if (nextIndex !== slideIndex) {
-      setSlideIndex(Math.min(Math.max(nextIndex, 0), slides.length - 1));
-    }
-  }
+	if (!isReady || hasOnboarded) {
+		return <LoadingState />
+	}
 
-  function handleCategoryChange(category: HabitCategory) {
-    setFirstHabitCategory(category);
-    // Switch the icon to the new category's default so it visibly follows the
-    // category (the name placeholder follows via categoryNamePlaceholders).
-    setFirstHabitEmoji(categoryIconOptions[category][0]);
-  }
+	function toggleHabit(name: string) {
+		setSelected((current) => {
+			const next = new Set(current)
+			if (next.has(name)) {
+				next.delete(name)
+			} else {
+				next.add(name)
+			}
+			return next
+		})
+	}
 
-  function continueToHabit() {
-    const cleanNickname = nicknameDraft.trim();
+	function continueFromProfile() {
+		const clean = nicknameDraft.trim()
+		if (!clean) {
+			Alert.alert('One quick thing', 'What should Lumo call you?')
+			return
+		}
+		if (!goal) {
+			Alert.alert('Pick a goal', 'Choose what you’d like to focus on.')
+			return
+		}
+		setNickname(clean)
+		navigate('habits')
+	}
 
-    if (!cleanNickname) {
-      Alert.alert("Username needed", "What should Lumo call you?");
-      return;
-    }
+	// First word only — a full "Bebz Lingga" would push the title to four lines.
+	const firstName = nicknameDraft.trim().split(/\s+/)[0]
 
-    const cleanEmail = emailDraft.trim();
+	/** Single entry point for step changes, so direction is always recorded. */
+	function navigate(next: OnboardingStep) {
+		slideFrom.current = STEP_ORDER.indexOf(next) > STEP_ORDER.indexOf(step) ? 'next' : 'previous'
+		setStep(next)
+	}
 
-    if (cleanEmail && !/^\S+@\S+\.\S+$/.test(cleanEmail)) {
-      Alert.alert("Check your email", "That email address doesn't look right — or leave it empty to skip.");
-      return;
-    }
+	function goBack() {
+		const index = STEP_ORDER.indexOf(step)
+		if (index > 0) {
+			navigate(STEP_ORDER[index - 1])
+		}
+	}
 
-    setNickname(cleanNickname);
-    setEmail(cleanEmail);
-    setStep("habit");
-  }
+	/**
+	 * Forward navigation runs the same guards as the CTA, so a swipe can never
+	 * skip a required field. The final step is excluded on purpose — it commits
+	 * habits and permissions, which shouldn't be triggerable by a stray gesture.
+	 */
+	function goNext() {
+		switch (step) {
+			case 'welcome':
+				return navigate('about')
+			case 'about':
+				return navigate('profile')
+			case 'profile':
+				return continueFromProfile()
+			case 'habits':
+				return continueFromHabits()
+			case 'reminders':
+				return navigate('ready')
+			default:
+				return undefined
+		}
+	}
 
-  function goToNotify() {
-    if (!firstHabitName.trim()) {
-      Alert.alert("First habit needed", "Start with one small habit you can repeat.");
-      return;
-    }
+	navRef.current = { back: goBack, next: goNext }
+	const canGoBack = STEP_ORDER.indexOf(step) > 0
+	const slideStyle = {
+		opacity: slide,
+		transform: [
+			{
+				translateX: slide.interpolate({
+					inputRange: [0, 1],
+					outputRange: [slideFrom.current === 'next' ? screenWidth * 0.28 : -screenWidth * 0.28, 0],
+				}),
+			},
+		],
+	}
 
-    setStep("notify");
-  }
+	function continueFromHabits() {
+		if (selected.size === 0) {
+			Alert.alert('Pick at least one', 'Choose a habit or two to get started — you can add more later.')
+			return
+		}
+		navigate('reminders')
+	}
 
-  async function handleEnableNotifications() {
-    if (notifyBusy || isSavingHabit) {
-      return;
-    }
+	async function finish() {
+		if (busy) {
+			return
+		}
+		setBusy(true)
+		try {
+			// Save WHICH slots were picked, not just that some were. Before this
+			// the four toggles only decided whether to ask for permission — the
+			// times were never scheduled, so a nudge never actually arrived.
+			// Storing them is enough: the provider reconciles the OS schedule
+			// against this the moment it changes.
+			await saveCheckIns(checkIns)
 
-    setNotifyBusy(true);
+			if (Object.values(checkIns).some(Boolean)) {
+				try {
+					await setNotificationsEnabled(true)
+				} catch {
+					// Permission declined — carry on; they can enable it later.
+				}
+			}
+			for (const item of ONBOARDING_HABITS) {
+				if (selected.has(item.template.name)) {
+					await createHabit(templateToDraft(item.template, item.color))
+				}
+			}
+			router.replace('/(tabs)/today')
+		} finally {
+			setBusy(false)
+		}
+	}
 
-    try {
-      await setNotificationsEnabled(true);
-      // Keep the busy state through habit creation + redirect so the label
-      // doesn't flicker; on success the screen unmounts before it matters.
-      await finishOnboarding();
-    } catch {
-      setNotifyBusy(false);
-    }
-  }
+	// 01 — Welcome
+	if (step === 'welcome') {
+		return (
+			<Screen
+				scroll={false}
+				background={BG}
+				contentStyle={[styles.screen, slideStyle]}
+				gestureHandlers={swipeResponder.panHandlers}
+				// The landscape IS the app background here — no scrim, no separate
+				// header surface. Sized to the plate's own aspect at full width and
+				// pinned to the BOTTOM, so the hills and foliage always stay in frame
+				// and any overflow crops off the (empty) sky instead.
+				backgroundNode={onboardingBackdrop}
+			>
+				<View style={styles.welcomeWordmark}>
+					{/* True black + wide tracking so the wordmark reads as a logotype
+					    here, not as another navy UI label. */}
+					<LumoWordmark size={22} color='#000000' style={styles.welcomeWordmarkText} />
+				</View>
 
-  async function finishOnboarding() {
-    const cleanHabitName = firstHabitName.trim();
+				<View style={styles.welcomeCopy}>
+					<Title center hero>{'Small habits,\nbrighter days.'}</Title>
+					<Subtitle center>Build routines that feel good — and keep going with people you care about.</Subtitle>
+				</View>
 
-    if (!cleanHabitName) {
-      Alert.alert("First habit needed", "Start with one small habit you can repeat.");
-      return;
-    }
+				<View style={styles.welcomeMascot}>
+					<LumoMascot mood='happy' width={mascotWidth} animated />
+				</View>
 
-    const draft: HabitDraft = {
-      name: cleanHabitName,
-      category: firstHabitCategory,
-      emoji: firstHabitEmoji,
-      color: defaultHabitColor,
-      createdAt: toDateKey(),
-      reminderEnabled: false,
-      reminderMode: "time",
-      reminderTime: "09:00",
-      reminderIntervalValue: 1,
-      reminderIntervalUnit: "hours",
-      repeatSchedule: { type: firstHabitFrequency },
-      goal:
-        firstHabitGoalType === "multiple"
-          ? { type: "multiple", count: Math.max(2, Number(firstHabitGoalAmount) || 2) }
-          : firstHabitGoalType === "weekly" || firstHabitGoalType === "monthly"
-            ? { type: firstHabitGoalType, target: Math.max(1, Number(firstHabitGoalAmount) || 1) }
-            : { type: "once" }
-    };
+				<View style={styles.welcomeBottom}>
+					<CtaButton label='Meet Lumo' onPress={() => navigate('about')} large />
+				</View>
+			</Screen>
+		)
+	}
 
-    setIsSavingHabit(true);
+	// 02 — Meet Lumo (intro, uncounted — same hero treatment as Welcome)
+	if (step === 'about') {
+		return (
+			<Screen
+				scroll={false}
+				background={BG}
+				contentStyle={[styles.screen, slideStyle]}
+				// No step-swipe here: this screen's horizontal gesture belongs to the
+				// feature carousel. The screen-level PanResponder refuses to yield
+				// (onPanResponderTerminationRequest -> false), so attaching both means
+				// the step always wins and the carousel never pages.
+				backgroundNode={onboardingBackdrop}
+			>
+				<View style={styles.welcomeWordmark}>
+					<LumoWordmark size={22} color='#000000' style={styles.welcomeWordmarkText} />
+				</View>
 
-    try {
-      await createHabit(draft);
-      router.replace("/(tabs)/today");
-    } finally {
-      setIsSavingHabit(false);
-    }
-  }
+				<View style={styles.welcomeCopy}>
+					<Title center hero>Meet Lumo.</Title>
+					<Subtitle center>Your little spark of motivation. Here’s what you can do together.</Subtitle>
+				</View>
 
-  if (step === "profile") {
-    return (
-      <Screen contentStyle={styles.screen}>
-        <ScreenHeader leftAction={{ icon: "back", label: "Back", onPress: () => setStep("welcome") }} />
-        <View style={styles.formMainContent}>
-          <View style={styles.profileHero}>
-            <OnboardingIllustration name="nickname" palette={palette} width={illustrationWidth} height={profileIllustrationHeight} />
-          </View>
+				{/* One feature per page. This ScrollView claims horizontal drags
+				    before the screen-level step responder (child wins the RN
+				    responder negotiation), so the two never fight. */}
+				<ScrollView
+					horizontal
+					pagingEnabled
+					showsHorizontalScrollIndicator={false}
+					decelerationRate='fast'
+					onMomentumScrollEnd={(event) => setFeatureIndex(Math.round(event.nativeEvent.contentOffset.x / screenWidth))}
+					style={styles.featureCarousel}
+				>
+					{LUMO_FEATURES.map((feature, index) => (
+						<View key={feature.title} style={[styles.featurePage, { width: screenWidth }]}>
+							{/* Width is derived from each pose's own aspect so every page's
+							    art lands at the same visual height. */}
+							<View style={styles.featureArt}>
+								{/* Only the page you're looking at animates — five idle loops
+								    running off-screen is wasted work. */}
+								<LumoMascot
+									mood={feature.mood}
+									width={FEATURE_ART_HEIGHT * mascotAspect(feature.mood)}
+									animated={index === featureIndex}
+								/>
+							</View>
+							<AppText color={INK} style={styles.featurePageTitle}>
+								{feature.title}
+							</AppText>
+							<AppText variant='caption' color={SUB} style={styles.aboutBody}>
+								{feature.body}
+							</AppText>
+						</View>
+					))}
+				</ScrollView>
 
-          <View style={[styles.copy, styles.copyLeft]}>
-            <AppText variant="displaySmall" style={[styles.title, styles.titleLeft]}>
-              Make Lumo yours
-            </AppText>
-            <AppText variant="body" color={palette.subtle} style={[styles.body, styles.bodyLeft]}>
-              Pick a username so your streaks and little wins feel like yours.
-            </AppText>
-          </View>
+				<View style={styles.featureDots}>
+					{LUMO_FEATURES.map((feature, index) => (
+						<View
+							key={feature.title}
+							style={[styles.featureDot, { backgroundColor: index === featureIndex ? SAGE : TRACK_OFF }]}
+						/>
+					))}
+				</View>
+				<View style={styles.welcomeBottom}>
+					<CtaButton label='Get started' onPress={() => navigate('profile')} large />
+				</View>
+			</Screen>
+		)
+	}
 
-          <View style={styles.profileFields}>
-            <View style={styles.formField}>
-              <FieldLabel>Username</FieldLabel>
-              <LumoInput
-                value={nicknameDraft}
-                onChangeText={setNicknameDraft}
-                placeholder="Your username"
-                autoCapitalize="words"
-                autoFocus
-                returnKeyType="next"
-                style={[styles.flatInput, { borderColor: fieldBorderColor }]}
-              />
-            </View>
+	// 03 — Your profile
+	if (step === 'profile') {
+		return (
+			<Screen
+				scroll={false}
+				background={BG}
+				contentStyle={[styles.screen, slideStyle]}
+				gestureHandlers={swipeResponder.panHandlers}
+				backgroundNode={onboardingBackdrop}
+			>
+				<TopBar counter={1} onBack={canGoBack ? goBack : undefined} />
+				<ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={styles.body} keyboardShouldPersistTaps='handled'>
+					<Title>Let’s get to know you.</Title>
+					<Subtitle>This helps make Lumo feel a little more personal.</Subtitle>
 
-            <View style={styles.formField}>
-              <FieldLabel>Email (optional)</FieldLabel>
-              <LumoInput
-                value={emailDraft}
-                onChangeText={setEmailDraft}
-                placeholder="you@example.com"
-                autoCapitalize="none"
-                autoComplete="email"
-                keyboardType="email-address"
-                returnKeyType="done"
-                onSubmitEditing={continueToHabit}
-                style={[styles.flatInput, { borderColor: fieldBorderColor }]}
-              />
-              <AppText variant="caption" color={palette.subtle} style={styles.emailHint}>
-                Only used to recover your data one day — never for spam. You can skip this.
-              </AppText>
-            </View>
-          </View>
-        </View>
+					<View style={styles.field}>
+						<AppText variant='caption' color={INK} style={styles.fieldLabel}>
+							What should we call you?
+						</AppText>
+						<LumoInput
+							value={nicknameDraft}
+							onChangeText={setNicknameDraft}
+							placeholder='Your name'
+							autoCapitalize='words'
+							autoFocus
+							returnKeyType='done'
+							style={[styles.input, styles.cardShadow]}
+						/>
+					</View>
 
-        <View style={styles.bottomAction}>
-          <OnboardingCta label="NEXT" onPress={continueToHabit} disabled={!nicknameDraft.trim()} />
-        </View>
-      </Screen>
-    );
-  }
+					<View style={styles.field}>
+						<AppText variant='caption' color={INK} style={styles.fieldLabel}>
+							What’s your goal?
+						</AppText>
+						<View style={styles.optionList}>
+							{GOALS.map((option) => {
+								const active = goal === option.label
+								return (
+									<PressBox
+										key={option.label}
+										selected={active}
+										accessibilityLabel={option.label}
+										onPress={() => setGoal(option.label)}
+										style={[styles.optionRow, styles.cardShadow, active && { borderColor: FIELD_BORDER_ACTIVE }]}
+									>
+										<IconTile icon={option.icon} tint={option.tint} />
+										<AppText variant='bodySmall' color={INK} style={styles.optionText}>
+											{option.label}
+										</AppText>
+										{active ? <Icon name='check' size={18} color={shadeWithBlack(option.tint, 0.55)} weight='bold' /> : null}
+									</PressBox>
+								)
+							})}
+						</View>
+					</View>
+				</ScrollView>
+				<View style={styles.bottom}>
+					<CtaButton label='Continue' onPress={continueFromProfile} disabled={!nicknameDraft.trim() || !goal} />
+				</View>
+			</Screen>
+		)
+	}
 
-  if (step === "habit") {
-    return (
-      <Screen contentStyle={styles.screen}>
-        <ScreenHeader leftAction={{ icon: "back", label: "Back", onPress: () => setStep("profile") }} />
-        <Animated.View
-          style={[
-            styles.formMainContent,
-            {
-              opacity: habitStepAnim,
-              transform: [{ translateX: habitStepAnim.interpolate({ inputRange: [0, 1], outputRange: [32, 0] }) }]
-            }
-          ]}
-        >
-          <View style={[styles.copy, styles.copyLeft, styles.habitCopy]}>
-            <AppText variant="displaySmall" style={[styles.title, styles.titleLeft]}>
-              Let's add your first habit.
-            </AppText>
-            <AppText variant="body" color={palette.subtle} style={[styles.body, styles.bodyLeft]}>
-              Start with one small promise to yourself. Keep it simple today, and you can update the details later.
-            </AppText>
-          </View>
+	// 04 — Choose habits
+	if (step === 'habits') {
+		return (
+			<Screen
+				scroll={false}
+				background={BG}
+				contentStyle={[styles.screen, slideStyle]}
+				gestureHandlers={swipeResponder.panHandlers}
+				backgroundNode={onboardingBackdrop}
+			>
+				<TopBar counter={2} onBack={canGoBack ? goBack : undefined} />
+				<ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
+					<Title>{firstName ? `${firstName}, what would you like to work on?` : 'What would you like to work on?'}</Title>
+					<Subtitle>Pick a few. You can always edit more later.</Subtitle>
 
-          <View style={styles.firstHabitForm}>
-            <CategoryChips value={firstHabitCategory} onChange={handleCategoryChange} edgePadding={ONBOARDING_PX} />
+					<View style={styles.chipGrid}>
+						{ONBOARDING_HABITS.map((item) => {
+							const active = selected.has(item.template.name)
+							return (
+								<PressBox
+									key={item.template.name}
+									selected={active}
+									accessibilityLabel={item.template.name}
+									onPress={() => toggleHabit(item.template.name)}
+									style={[styles.chip, styles.cardShadow, active && { borderColor: FIELD_BORDER_ACTIVE }]}
+								>
+									<IconTile icon={item.icon} tint={item.tint} />
+									<AppText variant='bodySmall' color={INK} numberOfLines={1} style={styles.chipText}>
+										{item.template.name}
+									</AppText>
+									<CheckBadge selected={active} />
+								</PressBox>
+							)
+						})}
+					</View>
+				</ScrollView>
+				<View style={styles.bottom}>
+					<CtaButton label='Continue' onPress={continueFromHabits} disabled={selected.size === 0} />
+				</View>
+			</Screen>
+		)
+	}
 
-            <View style={styles.formField}>
-              <FieldLabel>Habit name</FieldLabel>
-              <LumoInput
-                value={firstHabitName}
-                onChangeText={setFirstHabitName}
-                placeholder={categoryNamePlaceholders[firstHabitCategory]}
-                autoCapitalize="sentences"
-                autoFocus
-                returnKeyType="next"
-                onSubmitEditing={goToNotify}
-                style={[styles.flatInput, { borderColor: fieldBorderColor }]}
-              />
-            </View>
+	// 05 — Reminders
+	if (step === 'reminders') {
+		return (
+			<Screen
+				scroll={false}
+				background={BG}
+				contentStyle={[styles.screen, slideStyle]}
+				gestureHandlers={swipeResponder.panHandlers}
+				backgroundNode={onboardingBackdrop}
+			>
+				<TopBar counter={3} onBack={canGoBack ? goBack : undefined} />
+				<ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
+					<Title>Want a little nudge?</Title>
+					<Subtitle>Pick the moments you want Lumo to check in. You can change these anytime.</Subtitle>
 
-            <View style={styles.formField}>
-              <FieldLabel>Icon</FieldLabel>
-              <IconPicker category={firstHabitCategory} value={firstHabitEmoji} onChange={setFirstHabitEmoji} />
-            </View>
+					<View style={styles.reminderList}>
+						{CHECK_INS.map((checkIn) => (
+							<View key={checkIn.key} style={[styles.reminderRow, styles.cardShadow]}>
+								<IconTile icon={checkIn.icon} tint={checkIn.tint} />
+								<View style={styles.reminderText}>
+									<AppText variant='bodySmall' color={INK} style={styles.reminderName}>
+										{checkIn.label}
+									</AppText>
+									<AppText variant='caption' color={SUB} style={styles.reminderTime}>
+										{checkInTimeLabel(checkIn)}
+									</AppText>
+								</View>
+								{/* The shared Toggle, not RN's Switch — the native iOS switch
+								    renders translucent and reads as glass on this canvas. */}
+								<Toggle
+									value={checkIns[checkIn.key]}
+									onValueChange={(next) => setCheckIns((current) => ({ ...current, [checkIn.key]: next }))}
+									accessibilityLabel={checkIn.label}
+									onColor={SAGE}
+									offColor={TRACK_OFF}
+								/>
+							</View>
+						))}
+					</View>
 
-            <View style={styles.formField}>
-              <FieldLabel>Frequency</FieldLabel>
-              <FloatingDropdown
-                variant="input"
-                options={frequencyOptions}
-                value={firstHabitFrequency}
-                onChange={setFirstHabitFrequency}
-                accessibilityLabel="First habit frequency"
-                borderColor={fieldBorderColor}
-              />
-            </View>
+				</ScrollView>
+				<View style={styles.bottom}>
+					<CtaButton label='Continue' onPress={() => navigate('ready')} />
+				</View>
+			</Screen>
+		)
+	}
 
-            <View style={styles.formField}>
-              <FieldLabel>Target</FieldLabel>
-              <FloatingDropdown
-                variant="input"
-                options={goalOptions}
-                value={firstHabitGoalType}
-                onChange={setFirstHabitGoalType}
-                accessibilityLabel="First habit target"
-                borderColor={fieldBorderColor}
-              />
-            </View>
+	// 06 — Ready
 
-            {firstHabitGoalType !== "once" ? (
-              <View style={styles.formField}>
-                <FieldLabel>
-                  {firstHabitGoalType === "multiple" ? "Times per day" : firstHabitGoalType === "weekly" ? "Times per week" : "Times per month"}
-                </FieldLabel>
-                <LumoInput
-                  value={firstHabitGoalAmount}
-                  onChangeText={setFirstHabitGoalAmount}
-                  keyboardType="number-pad"
-                  style={[styles.flatInput, { borderColor: fieldBorderColor }]}
-                />
-              </View>
-            ) : null}
-          </View>
-        </Animated.View>
-
-        <View style={styles.bottomAction}>
-          <OnboardingCta label="NEXT" onPress={goToNotify} disabled={!firstHabitName.trim()} />
-        </View>
-      </Screen>
-    );
-  }
-
-  if (step === "notify") {
-    return (
-      <Screen contentStyle={styles.screen}>
-        <ScreenHeader leftAction={{ icon: "back", label: "Back", onPress: () => setStep("habit") }} />
-        <View style={styles.formMainContent}>
-          <View style={styles.notifyHero}>
-            <View style={[styles.notifyIconCircle, { backgroundColor: alpha(palette.greenDark, "12") }]}>
-              <Icon name="notifications" size={52} color={palette.greenDark} weight="bulk" />
-            </View>
-          </View>
-
-          <View style={[styles.copy, styles.copyLeft]}>
-            <AppText variant="displaySmall" style={[styles.title, styles.titleLeft]}>
-              Stay on track
-            </AppText>
-            <AppText variant="body" color={palette.subtle} style={[styles.body, styles.bodyLeft]}>
-              Turn on notifications for gentle reminders that keep your streaks alive — plus cheers when friends check in. No spam, ever.
-            </AppText>
-          </View>
-        </View>
-
-        <View style={styles.bottomAction}>
-          <OnboardingCta
-            label={notifyBusy ? "ENABLING..." : "ENABLE NOTIFICATIONS"}
-            onPress={handleEnableNotifications}
-            disabled={notifyBusy || isSavingHabit}
-          />
-          <Pressable
-            accessibilityRole="button"
-            disabled={notifyBusy || isSavingHabit}
-            onPress={finishOnboarding}
-            style={({ pressed }) => [styles.skipButton, { opacity: notifyBusy || isSavingHabit ? 0.45 : pressed ? 0.6 : 1 }]}
-          >
-            <AppText variant="button" color={palette.subtle}>
-              {isSavingHabit ? "Finishing..." : "Maybe later"}
-            </AppText>
-          </Pressable>
-        </View>
-      </Screen>
-    );
-  }
-
-  return (
-    <Screen scroll={false} contentStyle={styles.screen}>
-      <View style={styles.header}>
-        <ProgressDots index={slideIndex} />
-      </View>
-
-      <View style={styles.mainContent}>
-        <ScrollView
-          ref={slideScrollRef}
-          horizontal
-          pagingEnabled
-          bounces={false}
-          showsHorizontalScrollIndicator={false}
-          scrollEventThrottle={16}
-          onMomentumScrollEnd={updateSlideIndex}
-          onScrollEndDrag={updateSlideIndex}
-        >
-          {slides.map((slide) => (
-            <View key={slide.title} style={[styles.slide, { width: slideWidth }]}>
-              <View style={[styles.heroArea, { minHeight: illustrationHeight + spacing.xs }]}>
-                <OnboardingIllustration name={slide.illustration} palette={palette} width={illustrationWidth} height={illustrationHeight} />
-              </View>
-
-              <View style={styles.copy}>
-                <AppText variant="displaySmall" style={styles.title}>
-                  {slide.title}
-                </AppText>
-                <AppText variant="body" color={palette.subtle} style={styles.body}>
-                  {slide.body}
-                </AppText>
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-      </View>
-
-      <View style={styles.bottomAction}>
-        <OnboardingCta variant="ghost" label={slideIndex === slides.length - 1 ? "GET STARTED" : "NEXT"} onPress={goNext} />
-      </View>
-    </Screen>
-  );
+	return (
+		<Screen
+			scroll={false}
+			background={BG}
+			contentStyle={[styles.screen, slideStyle]}
+			gestureHandlers={swipeResponder.panHandlers}
+			backgroundNode={onboardingBackdrop}
+		>
+			<TopBar counter={4} onBack={canGoBack ? goBack : undefined} />
+			{/* Scrollable rather than a fixed centred column: the badge + mascot +
+			    summary stack is tall enough to clip on smaller phones. */}
+			<ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={styles.readyBody}>
+				<LumoMascot mood='celebrating' width={celebrateWidth} animated />
+				<View style={styles.readyCopy}>
+					<Title center hero>{'You’re ready\nto shine.'}</Title>
+					<Subtitle center>Your first win is just one check-in away.</Subtitle>
+				</View>
+			</ScrollView>
+			<View style={styles.bottom}>
+				<CtaButton label={busy ? 'Setting up…' : 'Let’s go'} onPress={finish} disabled={busy} />
+			</View>
+		</Screen>
+	)
 }
 
+/** Horizontal gutter for every onboarding step — roomier than the in-app
+ * screens, so the flow reads as a wide, uncluttered intro. */
+const PAD = layout.screenPaddingX
+
 const styles = StyleSheet.create({
-  screen: {
-    flexGrow: 1,
-    justifyContent: "space-between",
-    paddingBottom: spacing.xl,
-    paddingHorizontal: ONBOARDING_PX,
-    paddingTop: spacing.xl
-  },
-  mainContent: {
-    flex: 1,
-    justifyContent: "center"
-  },
-  // Form steps (nickname, first habit) align toward the top so the fields sit
-  // higher and stay clear of the keyboard.
-  formMainContent: {
-    flex: 1,
-    justifyContent: "flex-start",
-    paddingTop: spacing.xs
-  },
-  header: {
-    alignItems: "center",
-    minHeight: 24,
-    justifyContent: "center"
-  },
-  slide: {
-    gap: spacing.lg,
-    justifyContent: "center"
-  },
-  heroArea: {
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  dots: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.xs,
-    justifyContent: "center"
-  },
-  dot: {
-    borderRadius: radius.pill,
-    height: 5
-  },
-  copy: {
-    alignItems: "center",
-    gap: spacing.md
-  },
-  // Form steps (profile, first habit) lead with left-aligned copy; the welcome
-  // slides stay centered.
-  copyLeft: {
-    alignSelf: "stretch",
-    alignItems: "flex-start",
-    gap: spacing.xs
-  },
-  title: {
-    fontFamily: fontFamilies.lexendBold,
-    textAlign: "center"
-  },
-  titleLeft: {
-    textAlign: "left"
-  },
-  body: {
-    maxWidth: 310,
-    textAlign: "center"
-  },
-  bodyLeft: {
-    maxWidth: "100%",
-    textAlign: "left"
-  },
-  profileHero: {
-    alignItems: "center",
-    // Tuck the illustration up against the header row.
-    marginTop: -spacing.lg,
-    marginBottom: spacing.md
-  },
-  emailHint: {
-    marginTop: spacing.xs,
-    lineHeight: 16
-  },
-  profileFields: {
-    alignSelf: "stretch",
-    gap: spacing.lg,
-    marginTop: spacing.lg
-  },
-  // Same header tuck as the profile step's hero.
-  habitCopy: {
-    marginTop: -spacing.lg
-  },
-  firstHabitForm: {
-    alignSelf: "stretch",
-    gap: spacing.lg,
-    marginTop: spacing.xl
-  },
-  formField: {
-    gap: spacing.xs
-  },
-  flatInput: {
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    borderBottomWidth: 1,
-    borderRadius: 0,
-    minHeight: 0,
-    paddingHorizontal: 0,
-    paddingTop: spacing.xxs,
-    paddingBottom: spacing.sm,
-    fontSize: 16,
-    fontFamily: fontFamilies.lexendBold
-  },
-  notifyHero: {
-    alignItems: "center",
-    marginTop: spacing.lg,
-    marginBottom: spacing.xl
-  },
-  notifyIconCircle: {
-    alignItems: "center",
-    justifyContent: "center",
-    width: 116,
-    height: 116,
-    borderRadius: 58
-  },
-  bottomAction: {
-    alignItems: "stretch",
-    alignSelf: "stretch",
-    paddingTop: spacing.lg,
-    marginBottom: spacing.xl
-  },
-  skipButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: spacing.md,
-    marginTop: spacing.xs
-  },
-  onboardingButtonPressable: {
-    alignSelf: "stretch"
-  },
-  onboardingButton: {
-    alignItems: "center",
-    alignSelf: "stretch",
-    borderRadius: 18,
-    justifyContent: "center",
-    minHeight: 56,
-    paddingHorizontal: spacing.xl,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
-    elevation: 8
-  }
-});
+	screen: {
+		flexGrow: 1,
+		paddingHorizontal: PAD,
+		paddingTop: spacing.md,
+		paddingBottom: spacing.lg,
+		gap: 0,
+	},
+	topBarWrap: {
+		gap: spacing.sm,
+		marginBottom: spacing.lg,
+	},
+	topBar: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+		minHeight: 32,
+	},
+	topBarLeft: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: spacing.sm,
+	},
+	backButton: {
+		marginLeft: -spacing.xxs,
+	},
+	// Compact step indicator sitting where the "N of 5" label used to be —
+	// five short pills rather than a full-width bar.
+	progressTrack: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: 4,
+	},
+	progressSegment: {
+		width: 14,
+		height: 4,
+		borderRadius: 2,
+	},
+	// The ScrollView clips content to its own frame, which would slice the card
+	// shadows off at the edges. Bleed the scroller out past the screen gutter
+	// and put that inset back on the content, so shadows have room to render.
+	scroll: {
+		flex: 1,
+		marginHorizontal: -PAD,
+		marginTop: -spacing.sm,
+	},
+	body: {
+		gap: spacing.xs,
+		paddingHorizontal: PAD,
+		paddingTop: spacing.sm,
+		paddingBottom: spacing.xl,
+	},
+	center: {
+		textAlign: 'center',
+	},
+	// Koh Santepheap (serif) for headline copy — a deliberate contrast against
+	// the rounded Lexend used for every other UI string.
+	title: {
+		fontFamily: fontFamilies.serifBlack,
+		fontSize: 36,
+		lineHeight: 41,
+	},
+	// The two intro screens carry a larger display size than the setup steps.
+	titleHero: {
+		fontSize: 42,
+		lineHeight: 48,
+	},
+	subtitle: {
+		fontSize: 15,
+		lineHeight: 22,
+		maxWidth: 340,
+	},
+
+	// --- welcome ---
+	// The welcome step has no TopBar — the centred wordmark stands in for it.
+	welcomeWordmarkText: {
+		letterSpacing: 2,
+	},
+	welcomeWordmark: {
+		alignItems: 'center',
+		marginTop: spacing.md,
+	},
+	welcomeCopy: {
+		gap: spacing.xs,
+		alignItems: 'center',
+		marginTop: spacing.lg,
+	},
+	welcomeMascot: {
+		flex: 1,
+		alignItems: 'center',
+		// Biased below centre so the mascot stands on the hills rather than
+		// floating in the middle of the sky.
+		justifyContent: 'center',
+		paddingTop: spacing.hero,
+	},
+
+	// Cards carry depth with a soft shadow instead of a hairline border.
+	cardShadow: {
+		shadowColor: INK,
+		shadowOffset: { width: 0, height: 4 },
+		shadowOpacity: 0.07,
+		shadowRadius: 12,
+		elevation: 2,
+	},
+
+	// --- meet lumo ---
+
+	// --- meet lumo carousel ---
+	// Bleeds past the screen gutter so each page is exactly one screen wide,
+	// which is what makes `pagingEnabled` snap cleanly.
+	featureCarousel: {
+		flex: 1,
+		marginHorizontal: -PAD,
+		marginTop: spacing.lg,
+	},
+	// Art sits centred in the space above; the copy is pinned to the bottom so
+	// every page's text baseline lines up as you swipe.
+	featurePage: {
+		alignItems: 'center',
+		justifyContent: 'flex-end',
+		gap: spacing.sm,
+		paddingHorizontal: spacing.xl,
+		paddingBottom: spacing.hero,
+	},
+	featureArt: {
+		flex: 1,
+		justifyContent: 'center',
+	},
+	// Serif, matching the screen headers rather than the UI sans.
+	featurePageTitle: {
+		fontFamily: fontFamilies.serifBlack,
+		fontSize: 19,
+		lineHeight: 25,
+		textAlign: 'center',
+	},
+	featureDots: {
+		flexDirection: 'row',
+		alignSelf: 'center',
+		gap: spacing.xs,
+		marginTop: spacing.md,
+	},
+	featureDot: {
+		width: 8,
+		height: 8,
+		borderRadius: 4,
+	},
+	aboutBody: {
+		fontFamily: fontFamilies.lexend,
+		fontSize: 14,
+		lineHeight: 21,
+		textAlign: 'center',
+		maxWidth: 300,
+	},
+
+	// --- shared controls ---
+	field: {
+		gap: spacing.sm,
+		marginTop: spacing.lg,
+	},
+	// Form labels are navy and a step up in size/weight from caption, so they
+	// read as headings for their field rather than muted helper text.
+	fieldLabel: {
+		fontFamily: fontFamilies.lexendSemiBold,
+		fontSize: 15,
+		lineHeight: 20,
+	},
+	input: {
+		// Border colour is left to LumoInput: transparent at rest, the warm
+		// darkened edge on focus.
+		borderWidth: 1,
+		borderRadius: radius.button,
+		backgroundColor: CARD,
+		paddingHorizontal: spacing.md,
+		minHeight: 52,
+		fontFamily: fontFamilies.lexendSemiBold,
+		...fieldShadow,
+	},
+	iconTile: {
+		borderRadius: radius.lg,
+		alignItems: 'center',
+		justifyContent: 'center',
+	},
+	optionList: {
+		gap: spacing.xxs,
+	},
+	optionRow: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: spacing.sm,
+		backgroundColor: CARD,
+		// Border is always present, just transparent when unselected — otherwise
+		// selecting a row would shift the layout by 2pt.
+		borderWidth: 1,
+		borderColor: 'transparent',
+		borderRadius: radius.card,
+		paddingHorizontal: spacing.md,
+		paddingVertical: spacing.md,
+		minHeight: 66,
+	},
+	optionText: {
+		flex: 1,
+		fontFamily: fontFamilies.lexendMedium,
+	},
+	checkEmpty: {
+		width: 20,
+		height: 20,
+		borderRadius: 10,
+		borderWidth: 2,
+	},
+	checkFilled: {
+		width: 20,
+		height: 20,
+		borderRadius: 10,
+		alignItems: 'center',
+		justifyContent: 'center',
+	},
+
+	// --- habits grid ---
+	// One habit per row — matches the goal list on the previous step, and gives
+	// longer names room instead of wrapping them inside a half-width tile.
+	chipGrid: {
+		gap: spacing.xxs,
+		marginTop: spacing.lg,
+	},
+	chip: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: spacing.sm,
+		backgroundColor: CARD,
+		borderWidth: 1,
+		borderColor: 'transparent',
+		borderRadius: radius.card,
+		paddingHorizontal: spacing.md,
+		paddingVertical: spacing.md,
+		minHeight: 66,
+	},
+	chipText: {
+		flex: 1,
+		fontFamily: fontFamilies.lexendMedium,
+		fontSize: 15,
+		lineHeight: 20,
+	},
+
+
+	// --- reminders ---
+	// Each check-in is its own card, matching the goal and habit lists.
+	reminderList: {
+		gap: spacing.xxs,
+		marginTop: spacing.lg,
+	},
+	reminderRow: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: spacing.sm,
+		backgroundColor: CARD,
+		borderRadius: radius.card,
+		borderWidth: 1,
+		borderColor: 'transparent',
+		paddingHorizontal: spacing.md,
+		paddingVertical: spacing.md,
+	},
+	reminderText: {
+		flex: 1,
+		gap: 2,
+	},
+	reminderName: {
+		fontFamily: fontFamilies.lexendSemiBold,
+	},
+	// The time is supporting detail — held back so the label leads.
+	reminderTime: {
+		opacity: 0.65,
+	},
+
+	// --- ready ---
+	// flexGrow + centred justify keeps the stack vertically centred on tall
+	// screens while still scrolling when it runs out of room on short ones.
+	readyBody: {
+		flexGrow: 1,
+		alignItems: 'center',
+		justifyContent: 'center',
+		gap: spacing.md,
+		paddingBottom: spacing.lg,
+	},
+	readyCopy: {
+		alignItems: 'center',
+		gap: spacing.xs,
+	},
+
+	// --- bottom ---
+	// Shared by steps 1–5. The bottom inset lifts the CTA clear of the screen
+	// edge so it doesn't read as a docked footer bar.
+	bottom: {
+		gap: spacing.sm,
+		paddingTop: spacing.lg,
+		paddingBottom: spacing.sm,
+	},
+	// Welcome CTA sits higher than the other steps' so it clears the bottom
+	// edge and reads as part of the hero rather than a docked footer. The extra
+	// horizontal inset keeps it from spanning the full width like a form button.
+	welcomeBottom: {
+		gap: spacing.sm,
+		paddingTop: spacing.lg,
+		paddingBottom: spacing.xl,
+		paddingHorizontal: spacing.md,
+	},
+	button: {
+		alignItems: 'center',
+		justifyContent: 'center',
+		borderRadius: radius.pill,
+		minHeight: 54,
+		paddingHorizontal: spacing.xl,
+	},
+	buttonLarge: {
+		minHeight: 62,
+		borderRadius: radius.card,
+	},
+	buttonLabelLarge: {
+		fontSize: 16,
+		lineHeight: 21,
+	},
+})

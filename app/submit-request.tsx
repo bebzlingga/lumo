@@ -5,7 +5,7 @@ import { Alert, Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensi
 import { Icon, type IconName } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Button, FieldLabel, LoadingState, LumoInput, Screen } from "@/components/ui";
-import { fontFamilies, radius, spacing } from "@/constants/theme";
+import { fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { featureBoardService } from "@/lib/featureBoard";
@@ -321,13 +321,13 @@ const styles = StyleSheet.create({
   // Bleed the scroll viewport to the screen edges so cards clip there — the
   // cue that the row scrolls.
   typeScroll: {
-    marginHorizontal: -spacing.lg,
+    marginHorizontal: -layout.screenPaddingX,
     flexGrow: 0
   },
   typeRow: {
     flexDirection: "row",
     gap: spacing.sm,
-    paddingHorizontal: spacing.lg
+    paddingHorizontal: layout.screenPaddingX
   },
   typeCard: {
     gap: spacing.xxs,

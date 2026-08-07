@@ -1,29 +1,24 @@
 import React, { ReactNode } from "react";
-import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
-import { spacing } from "@/constants/theme";
-import { IconName, IconWeight } from "./Icon";
-import { IconButton } from "./ui";
+import { StyleProp, StyleSheet, View, ViewStyle } from "react-native"
+import { badgeAccent, badgeAccentText, fontFamilies, radius, spacing } from "@/constants/theme";
+import { useLumo } from "@/context/LumoContext";
+import { Icon, IconName, IconWeight } from "./Icon";
+import { AppText } from "./ui";
+import { Pressable } from "@/components/Pressable"
 
-const HEADER_BUTTON_SIZE = 44;
-const HEADER_ICON_SIZE = 22;
-const HEADER_VISUAL_ICON_SIZES: Partial<Record<IconName, number>> = {
-  back: 32,
-  edit: 22
-};
-const HEADER_ICON_OFFSETS: Partial<Record<IconName, ViewStyle>> = {
-  back: {
-    transform: [{ translateX: 1 }]
-  },
-  edit: {
-    transform: [{ translateX: -3 }, { translateY: 4 }]
-  },
-  pause: {
-    transform: [{ translateX: -3 }, { translateY: 4 }]
-  },
-  play: {
-    transform: [{ translateX: -3 }, { translateY: 4 }]
-  }
-};
+/**
+ * The app's one page header, defined by the Habits screen: an outlined 38pt
+ * icon button on each side with the title centred between them. A side with no
+ * action still reserves its width, so the title centres on the SCREEN rather
+ * than on whatever space is left beside a button.
+ *
+ * Pass `title` for the standard treatment; `centerContent` is the escape hatch
+ * for a header that needs something other than a line of text.
+ */
+const BUTTON_SIZE = 38;
+// 20, not 18: at 18 the glyph sat small inside its 38pt circle and the header
+// controls read as fainter than everything they sit above.
+const ICON_SIZE = 20;
 
 type ScreenHeaderAction = {
   icon: IconName;
@@ -33,9 +28,50 @@ type ScreenHeaderAction = {
   iconSize?: number;
   iconColor?: string;
   iconStyle?: StyleProp<ViewStyle>;
+  /** Count pip on the button's shoulder. Hidden at 0, capped at "9+". */
+  badge?: number;
 };
 
+function HeaderButton({ action }: { action: ScreenHeaderAction }) {
+  const { palette } = useLumo();
+  const badge = action.badge ?? 0;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      // The count belongs in the name, not just the picture — a screen reader
+      // otherwise announces "Invitations" whether three are waiting or none.
+      accessibilityLabel={badge ? `${action.label}, ${badge} pending` : action.label}
+      onPress={action.onPress}
+      hitSlop={10}
+      style={({ pressed }) => [styles.button, { borderColor: palette.hairline, opacity: pressed ? 0.6 : 1 }]}
+    >
+      <View pointerEvents="none" style={action.iconStyle}>
+        <Icon
+          name={action.icon}
+          size={action.iconSize ?? ICON_SIZE}
+          color={action.iconColor ?? palette.ink}
+          weight={action.iconWeight ?? "bold"}
+        />
+      </View>
+      {badge > 0 ? (
+        // The ring in the canvas colour is what keeps the pip legible where it
+        // overlaps the button's own outline.
+        <View
+          pointerEvents="none"
+          style={[styles.badge, { backgroundColor: badgeAccent, borderColor: palette.canvas }]}
+        >
+          <AppText variant="caption" color={badgeAccentText} style={styles.badgeText}>
+            {badge > 9 ? "9+" : badge}
+          </AppText>
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
 export function ScreenHeader({
+  title,
   centerContent,
   centerLabel,
   onCenterPress,
@@ -44,6 +80,8 @@ export function ScreenHeader({
   rightActions,
   style
 }: {
+  /** Standard centred page title. Ignored when `centerContent` is given. */
+  title?: string;
   centerContent?: ReactNode;
   centerLabel?: string;
   onCenterPress?: () => void;
@@ -52,30 +90,25 @@ export function ScreenHeader({
   rightActions?: ScreenHeaderAction[];
   style?: StyleProp<ViewStyle>;
 }) {
+  const { palette } = useLumo();
   const resolvedRightActions = rightActions ?? (rightAction ? [rightAction] : []);
+  // Both sides reserve the same width so the centre stays centred, even when
+  // one side holds two buttons and the other none.
   const sideWidth =
-    resolvedRightActions.length > 0
-      ? resolvedRightActions.length * HEADER_BUTTON_SIZE + (resolvedRightActions.length - 1) * spacing.md
-      : HEADER_BUTTON_SIZE;
+    resolvedRightActions.length > 1
+      ? resolvedRightActions.length * BUTTON_SIZE + (resolvedRightActions.length - 1) * spacing.sm
+      : BUTTON_SIZE;
+  const center =
+    centerContent ??
+    (title ? (
+      <AppText color={palette.ink} numberOfLines={1} style={styles.title}>
+        {title}
+      </AppText>
+    ) : null);
 
   return (
     <View style={[styles.header, style]}>
-      {leftAction ? (
-        <View style={[styles.sideSlot, { width: sideWidth }]}>
-          <IconButton
-            icon={leftAction.icon}
-            label={leftAction.label}
-            onPress={leftAction.onPress}
-            iconWeight={leftAction.iconWeight ?? "bulk"}
-            iconSize={leftAction.iconSize ?? HEADER_VISUAL_ICON_SIZES[leftAction.icon] ?? HEADER_ICON_SIZE}
-            iconColor={leftAction.iconColor}
-            buttonSize={HEADER_BUTTON_SIZE}
-            iconStyle={HEADER_ICON_OFFSETS[leftAction.icon]}
-          />
-        </View>
-      ) : (
-        <View style={[styles.placeholder, { width: sideWidth }]} />
-      )}
+      <View style={[styles.sideSlot, { width: sideWidth }]}>{leftAction ? <HeaderButton action={leftAction} /> : null}</View>
       {onCenterPress ? (
         <Pressable
           accessibilityRole="button"
@@ -83,60 +116,76 @@ export function ScreenHeader({
           onPress={onCenterPress}
           style={({ pressed }) => [styles.centerContent, { opacity: pressed ? 0.7 : 1 }]}
         >
-          {centerContent}
+          {center}
         </Pressable>
       ) : (
         <View pointerEvents="none" style={styles.centerContent}>
-          {centerContent}
+          {center}
         </View>
       )}
-      {resolvedRightActions.length ? (
-        <View style={[styles.sideSlot, styles.rightSlot, { width: sideWidth }]}>
-          {resolvedRightActions.map((action) => (
-            <IconButton
-              key={action.label}
-              icon={action.icon}
-              label={action.label}
-              onPress={action.onPress}
-              iconWeight={action.iconWeight ?? "bulk"}
-              iconSize={action.iconSize ?? HEADER_VISUAL_ICON_SIZES[action.icon] ?? HEADER_ICON_SIZE}
-              iconColor={action.iconColor}
-              buttonSize={HEADER_BUTTON_SIZE}
-              iconStyle={action.iconStyle ?? HEADER_ICON_OFFSETS[action.icon]}
-            />
-          ))}
-        </View>
-      ) : (
-        <View style={[styles.placeholder, { width: sideWidth }]} />
-      )}
+      <View style={[styles.sideSlot, styles.rightSlot, { width: sideWidth }]}>
+        {resolvedRightActions.map((action) => (
+          <HeaderButton key={action.label} action={action} />
+        ))}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   header: {
-    minHeight: HEADER_BUTTON_SIZE,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md
+    gap: spacing.sm,
+    marginBottom: spacing.md
   },
   sideSlot: {
-    height: HEADER_BUTTON_SIZE
+    height: BUTTON_SIZE,
+    justifyContent: "center"
   },
   rightSlot: {
     flexDirection: "row",
     justifyContent: "flex-end",
-    gap: spacing.md
+    gap: spacing.sm
   },
   centerContent: {
     flex: 1,
-    minHeight: HEADER_BUTTON_SIZE,
+    minWidth: 0,
     alignItems: "center",
     justifyContent: "center"
   },
-  placeholder: {
-    width: HEADER_BUTTON_SIZE,
-    height: HEADER_BUTTON_SIZE
+  title: {
+    fontFamily: fontFamilies.serifBlack,
+    fontSize: 19,
+    lineHeight: 25
+  },
+  // Outlined circle — no fill, so it reads as chrome rather than an action
+  // competing with the page's own cards.
+  button: {
+    width: BUTTON_SIZE,
+    height: BUTTON_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth
+  },
+  // Overhangs the circle deliberately — tucked inside, it reads as part of the
+  // glyph rather than as a count attached to the button.
+  badge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  badgeText: {
+    fontFamily: fontFamilies.lexendBold,
+    fontSize: 10,
+    lineHeight: 13
   }
 });

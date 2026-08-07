@@ -1,26 +1,38 @@
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
-import { fontFamilies, radius, spacing } from "@/constants/theme";
+import { StyleSheet, View } from "react-native";
+import { spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
-import { badges, badgeTierMeta, type Badge } from "@/lib/badges";
-import { bestStreakAcrossHabits } from "@/lib/habitMath";
-import { BadgeArt } from "./BadgeArt";
-import { AppText } from "./ui";
+import { badges, type BadgeProgress } from "@/lib/badges";
+import { BadgeDialog } from "./BadgeDialog";
+import { Button } from "./ui";
+
+/** What the dialog is currently showing: which badge, and whether this is the
+ *  moment it was earned. */
+type Shown = { badge: BadgeProgress; celebrate: boolean };
 
 /**
- * Watches the best streak across habits and pops a congratulatory card the
- * moment it crosses a badge threshold. Only fires on in-session transitions —
- * on app start the current streak is taken as the baseline, so historical
- * badges never re-celebrate.
+ * Watches the best-streak high-water mark and pops the badge card the moment it
+ * crosses a threshold. Only fires on in-session transitions — on app start the
+ * current mark is taken as the baseline, so historical badges never
+ * re-celebrate.
+ *
+ * Reads the persisted mark rather than the live habits precisely because it
+ * only ever rises: computing it from habits meant deleting one could drop the
+ * number back below a threshold and celebrate the same badge twice.
+ *
+ * The card itself is `BadgeDialog` in celebrate mode — the same card the Badges
+ * screen and Profile open, so a badge looks identical whether you just earned
+ * it or tapped it a month later. It brings Share with it, which is worth having
+ * at exactly this moment.
  */
 export function BadgeUnlockCelebration() {
   const router = useRouter();
-  const { habits, isReady, isDark, palette } = useLumo();
-  const bestStreak = bestStreakAcrossHabits(habits);
+  const { settings, isReady, palette } = useLumo();
+  const bestStreak = settings.bestStreakEver;
   const previousStreak = React.useRef<number | null>(null);
-  const [unlocked, setUnlocked] = React.useState<Badge | null>(null);
+  const [shown, setShown] = React.useState<Shown | null>(null);
 
   React.useEffect(() => {
     if (!isReady) {
@@ -39,122 +51,57 @@ export function BadgeUnlockCelebration() {
       const newlyUnlocked = badges.filter((badge) => badge.threshold > previous && badge.threshold <= bestStreak);
 
       if (newlyUnlocked.length) {
-        setUnlocked(newlyUnlocked[newlyUnlocked.length - 1]);
+        // Just crossed the threshold, so it is earned by definition — the card's
+        // locked art would be nonsense on the celebration for it.
+        setShown({ badge: { ...newlyUnlocked[newlyUnlocked.length - 1], earned: true }, celebrate: true });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       }
     }
   }, [bestStreak, isReady]);
 
-  const tier = unlocked ? badgeTierMeta[unlocked.tier] : null;
-  const cardBackground = isDark ? palette.surfaceStrong : palette.greenDark;
-  const cardText = isDark ? palette.ink : palette.white;
-  const cardMuted = isDark ? palette.muted : palette.greenSoft;
-
   function close() {
-    setUnlocked(null);
+    setShown(null);
   }
 
   return (
-    <Modal visible={Boolean(unlocked)} transparent animationType="fade" onRequestClose={close}>
-      <View style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFillObject} accessibilityLabel="Close" onPress={close} />
-        {unlocked && tier ? (
-          <View style={styles.content} pointerEvents="box-none">
-            <View style={[styles.card, { backgroundColor: cardBackground }]}>
-              <AppText variant="caption" color={cardMuted} style={styles.kicker}>
-                BADGE UNLOCKED
-              </AppText>
-              <BadgeArt threshold={unlocked.threshold} tier={unlocked.tier} accent={tier.accent} earned size={140} />
-              <AppText color={cardText} style={styles.title}>
-                {unlocked.threshold}-Day Streak!
-              </AppText>
-              <AppText variant="bodySmall" color={cardMuted} style={styles.subtitle}>
-                You just earned a {tier.name} badge. Keep the light glowing.
-              </AppText>
-            </View>
-            <View style={styles.actions}>
-              <CelebrationButton
-                label="See my badges"
-                background={palette.green}
-                color={palette.white}
-                onPress={() => {
-                  close();
-                  router.push("/badges");
-                }}
-              />
-              <CelebrationButton label="Keep going" background={palette.greenSoft} color={palette.greenDark} onPress={close} />
-            </View>
-          </View>
-        ) : null}
-      </View>
-    </Modal>
-  );
-}
-
-// NativeWind's css-interop drops function-valued `style` props on Pressable,
-// so pressed state is tracked manually and the style is passed as a plain array.
-function CelebrationButton({ label, background, color, onPress }: { label: string; background: string; color: string; onPress: () => void }) {
-  const [pressed, setPressed] = React.useState(false);
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onPress}
-      onPressIn={() => setPressed(true)}
-      onPressOut={() => setPressed(false)}
-      style={[styles.button, { backgroundColor: background, opacity: pressed ? 0.8 : 1 }]}
-    >
-      <AppText variant="button" color={color}>
-        {label}
-      </AppText>
-    </Pressable>
+    <BadgeDialog
+      badge={shown?.badge ?? null}
+      onClose={close}
+      celebrate={shown?.celebrate ?? false}
+      footer={
+        // One action. Dismissing already has two obvious routes — the backdrop
+        // and the system back gesture — so a "Keep going" button was a second
+        // way to do nothing, sitting at the same weight as the real one.
+        <View style={styles.footer}>
+          {/* Ghost, so it sits directly on the dimmed backdrop with no plate of
+              its own and the card keeps every bit of the weight. Ghost's label
+              is palette.ink, which is a dark brown on this overlay — overridden
+              to white, since here the button is on the scrim, not on a card. */}
+          <Button
+            label="Show All Badges"
+            variant="ghost"
+            style={styles.footerButton}
+            labelStyle={{ color: palette.white }}
+            onPress={() => {
+              close();
+              router.push("/badges");
+            }}
+          />
+        </View>
+      }
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.lg,
-    backgroundColor: "rgba(0,0,0,0.55)"
-  },
-  content: {
-    width: "100%",
-    maxWidth: 340,
-    gap: spacing.md
-  },
-  card: {
-    alignItems: "center",
-    gap: spacing.xs,
-    borderRadius: radius.nav,
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.lg
-  },
-  kicker: {
-    fontFamily: fontFamilies.lexendBold,
-    letterSpacing: 1.5
-  },
-  title: {
-    fontFamily: "Lexend-Black",
-    fontSize: 26,
-    lineHeight: 32
-  },
-  subtitle: {
-    fontFamily: fontFamilies.lexendMedium,
-    textAlign: "center"
-  },
-  actions: {
+  // Sits below the card, on the dimmed overlay rather than on the art — the
+  // card's own foot is already occupied by Share.
+  footer: {
     flexDirection: "row",
-    gap: spacing.sm
+    gap: spacing.sm,
+    marginTop: spacing.md
   },
-  button: {
-    flex: 1,
-    minHeight: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md
+  footerButton: {
+    flex: 1
   }
 });

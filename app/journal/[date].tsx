@@ -1,162 +1,86 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, TextInput, View } from "react-native"
 import { Icon } from "@/components/Icon";
-import { MarkdownView } from "@/components/MarkdownView";
-import { ScreenHeader } from "@/components/ScreenHeader";
+import { SubscriptionGate } from "@/components/SubscriptionGate";
 import { AppText, LoadingState, Screen } from "@/components/ui";
-import { fontFamilies, radius, spacing } from "@/constants/theme";
+import { WheelDatePicker } from "@/components/WheelDatePicker";
+import { brand, fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
-import { alpha } from "@/lib/color";
-import { dayNames, parseDateKey, toDateKey } from "@/lib/date";
-import { moodColor, moodIcon, moodOptions } from "@/lib/mood";
-import type { JournalMood } from "@/types/habit";
-
-// Temporarily hidden — flip to true to bring the Voice/Attach/Save bar back.
-const SHOW_FLOATING_MENU = false;
-
-const PHOTO_DIRECTORY = `${FileSystem.documentDirectory}journal-photos/`;
-
-const MOOD_MENU_WIDTH = 216;
-
-/**
- * Mood picker styled like the view-mode badge: a round tinted face that opens
- * a small anchored menu (same pattern as FloatingDropdown, with a title row).
- */
-function MoodDropdown({ value, onChange }: { value: JournalMood; onChange: (mood: JournalMood) => void }) {
-  const { palette, isDark } = useLumo();
-  const [isOpen, setIsOpen] = useState(false);
-  const [rect, setRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
-  const triggerRef = useRef<View>(null);
-  const tint = moodColor(palette, value);
-
-  function open() {
-    triggerRef.current?.measureInWindow((x, y, width, height) => {
-      setRect({ x, y, width, height });
-      setIsOpen(true);
-    });
-  }
-
-  return (
-    <View ref={triggerRef} collapsable={false}>
-      {/* NativeWind's css-interop drops function-valued `style` props on
-          Pressable, so these use plain style arrays. */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`How are you feeling today? Currently ${moodOptions.find((option) => option.value === value)?.label}`}
-        accessibilityState={{ expanded: isOpen }}
-        onPress={open}
-        style={[styles.moodBadge, { backgroundColor: alpha(tint, "1F") }]}
-      >
-        <Icon name={moodIcon(value)} size={24} color={tint} weight="bulk" />
-      </Pressable>
-
-      <Modal visible={isOpen} transparent animationType="none" onRequestClose={() => setIsOpen(false)}>
-        <Pressable accessibilityLabel="Close menu" style={StyleSheet.absoluteFillObject} onPress={() => setIsOpen(false)} />
-        {rect ? (
-          <View
-            style={[
-              styles.moodMenu,
-              {
-                top: rect.y + rect.height + 6,
-                left: rect.x + rect.width - MOOD_MENU_WIDTH,
-                backgroundColor: palette.card,
-                shadowColor: isDark ? "transparent" : palette.shadow
-              }
-            ]}
-          >
-            <AppText variant="bodySmall" color={palette.subtle} style={styles.moodMenuTitle}>
-              How are you feeling today?
-            </AppText>
-            {moodOptions.map((option) => {
-              const selected = option.value === value;
-              const optionTint = moodColor(palette, option.value);
-
-              return (
-                <Pressable
-                  key={option.value}
-                  accessibilityRole="button"
-                  accessibilityLabel={option.label}
-                  accessibilityState={{ selected }}
-                  onPress={() => {
-                    onChange(option.value);
-                    setIsOpen(false);
-                  }}
-                  style={[styles.moodOption, { backgroundColor: selected ? alpha(optionTint, "1F") : "transparent" }]}
-                >
-                  <Icon name={option.icon} size={22} color={optionTint} weight="bulk" />
-                  <AppText variant="bodySmall" color={selected ? optionTint : palette.body} style={styles.moodOptionText}>
-                    {option.label}
-                  </AppText>
-                  {selected ? <Icon name="checkCircle" size={18} color={optionTint} weight="bulk" /> : null}
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : null}
-      </Modal>
-    </View>
-  );
-}
-
-async function persistPhoto(uri: string, dateKey: string) {
-  await FileSystem.makeDirectoryAsync(PHOTO_DIRECTORY, { intermediates: true });
-  const extension = uri.split("?")[0].split(".").pop() || "jpg";
-  const destination = `${PHOTO_DIRECTORY}${dateKey}-${new Date().getTime()}.${extension}`;
-  await FileSystem.copyAsync({ from: uri, to: destination });
-  return destination;
-}
-
-async function removePhotoFile(uri?: string) {
-  if (!uri || !uri.startsWith(PHOTO_DIRECTORY)) {
-    return;
-  }
-  await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => undefined);
-}
-
-function joinText(base: string, addition: string) {
-  if (!addition) {
-    return base;
-  }
-  return base ? `${base} ${addition}` : addition;
-}
-
-type SttSubscription = { remove: () => void };
-type SttModule = {
-  requestPermissionsAsync: () => Promise<{ granted: boolean }>;
-  start: (options: { lang: string; interimResults?: boolean; continuous?: boolean }) => void;
-  stop: () => void;
-  abort: () => void;
-  addListener: (event: string, listener: (payload: { isFinal?: boolean; results?: { transcript: string }[] }) => void) => SttSubscription;
-};
-
-// Loaded lazily so a missing native module (before a rebuild) doesn't crash the
-// whole screen at import time — voice just degrades to a helpful message.
-function loadSpeechRecognition(): SttModule | null {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    return require("expo-speech-recognition").ExpoSpeechRecognitionModule as SttModule;
-  } catch {
-    return null;
-  }
-}
+import { dayLabels, parseDateKey, toDateKey } from "@/lib/date";
+import { journalHasContent } from "@/lib/journal";
+import { journalPhotoUri, persistJournalPhoto, removeJournalPhoto } from "@/lib/journalPhotos";
+import { createId } from "@/lib/id";
+import { MAX_JOURNALS_PER_DAY, type JournalMood } from "@/types/habit";
+import { Pressable } from "@/components/Pressable"
 
 export default function JournalEditorScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ date: string }>();
-  const { journals, isReady, isDark, palette, saveJournal } = useLumo();
+  const params = useLocalSearchParams<{ date: string; id?: string; new?: string }>();
+  const { journals, isReady, isDark, palette, saveJournal, canCreateJournal } = useLumo();
   const textColor = isDark ? palette.ink : "#1C1B19";
 
-  const dateKey = typeof params.date === "string" ? params.date : toDateKey();
-  const existing = journals.find((entry) => entry.date === dateKey);
+  const openedDateKey = typeof params.date === "string" ? params.date : toDateKey();
 
+  // Resolved once, at mount: the entry can be re-filed under another day from
+  // here, and re-running this against the new day would swap the screen onto
+  // whatever entry lives there.
+  const [opened] = useState(() => {
+    const written = (key: string) => journals.filter((entry) => entry.date === key && journalHasContent(entry));
+
+    // `?id=` edits that entry, wherever it is filed.
+    if (params.id) {
+      const byId = journals.find((entry) => entry.id === params.id);
+
+      if (byId) {
+        return { entry: byId, date: byId.date };
+      }
+    }
+
+    // `?new=1` always means a NEW record — never the one already on the day.
+    // A full day only moves the starting date back to one with room; the date
+    // picker takes it from there.
+    if (params.new) {
+      const cursor = parseDateKey(openedDateKey);
+
+      for (let step = 0; step < 366; step += 1) {
+        const key = toDateKey(cursor);
+
+        if (written(key).length < MAX_JOURNALS_PER_DAY) {
+          return { entry: undefined, date: key };
+        }
+
+        cursor.setDate(cursor.getDate() - 1);
+      }
+
+      return { entry: undefined, date: openedDateKey };
+    }
+
+    // Neither: open whatever the day already holds, or start it.
+    const dayEntries = journals.filter((entry) => entry.date === openedDateKey).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const latest = dayEntries[dayEntries.length - 1];
+
+    return { entry: latest, date: latest?.date ?? openedDateKey };
+  });
+
+  const existing = opened.entry;
+
+  // Fixed for the life of the screen so every save lands on the same entry,
+  // including the first one for a brand new entry.
+  const [entryId] = useState(() => existing?.id ?? createId());
+
+  const [dateKey, setDateKey] = useState(opened.date);
+  const [pickingDate, setPickingDate] = useState(false);
+  // The wheels move freely against this; only Done commits it.
+  const [draftDate, setDraftDate] = useState(dateKey);
+  const [title, setTitle] = useState(existing?.title ?? "");
   const [content, setContent] = useState(existing?.content ?? "");
+  // Kept, not edited: the simple page writes title, date and body only, so an
+  // entry keeps whatever mood and tags it already carried.
+  const [tags] = useState<string[]>(existing?.tags ?? []);
   const [photoUri, setPhotoUri] = useState<string | undefined>(existing?.photoUri);
-  const [mood, setMood] = useState<JournalMood>(existing?.mood ?? "neutral");
-  const [mode, setMode] = useState<"view" | "edit">(existing ? "view" : "edit");
-  const [listening, setListening] = useState(false);
+  const [mood] = useState<JournalMood | undefined>(existing?.mood);
 
   const moodRef = useRef(mood);
   moodRef.current = mood;
@@ -164,250 +88,295 @@ export default function JournalEditorScreen() {
   contentRef.current = content;
   const photoRef = useRef(photoUri);
   photoRef.current = photoUri;
+  const titleRef = useRef(title);
+  titleRef.current = title;
+  const tagsRef = useRef(tags);
+  tagsRef.current = tags;
+  // Read through a ref like every other field, so re-filing the entry does not
+  // re-run the save effect and write it out twice.
+  const dateRef = useRef(dateKey);
+  dateRef.current = dateKey;
   const skipSaveRef = useRef(false);
-  // Text captured before dictation started, so recognised speech appends to it.
-  const voiceBaseRef = useRef("");
-  const sttRef = useRef<SttModule | null>(null);
-  const sttSubsRef = useRef<SttSubscription[]>([]);
-
-  function clearVoiceSubs() {
-    sttSubsRef.current.forEach((sub) => sub.remove());
-    sttSubsRef.current = [];
-  }
-
-  useEffect(() => {
-    return () => {
-      try {
-        sttRef.current?.abort();
-      } catch {
-        // module went away; nothing to clean up
-      }
-      clearVoiceSubs();
-    };
-  }, []);
 
   useEffect(() => {
     return () => {
       if (!skipSaveRef.current) {
-        // The editor no longer has a title field; carry any previously saved
-        // title through untouched.
-        saveJournal(dateKey, contentRef.current, photoRef.current, moodRef.current, existing?.title);
+        saveJournal(entryId, dateRef.current, contentRef.current, photoRef.current, moodRef.current, titleRef.current, tagsRef.current);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateKey]);
+  }, [entryId]);
 
   if (!isReady) {
     return <LoadingState />;
   }
 
+  // New entries only. Opening or editing something already written is never
+  // blocked — the cap is on how many you keep, and locking someone out of
+  // their own writing to sell them a purchase would be a different thing
+  // entirely.
+  if (!existing && !canCreateJournal) {
+    return <SubscriptionGate product="unlimited" />;
+  }
+
   const entryDate = parseDateKey(dateKey);
-  const weekday = dayNames[entryDate.getDay()];
-  const fullDate = `${String(entryDate.getDate()).padStart(2, "0")} ${entryDate.toLocaleDateString(undefined, { month: "long" })} ${entryDate.getFullYear()}`;
-
-  const dateBlock = (
-    <View style={styles.dateBlock}>
-      <AppText color={palette.ink} style={styles.dateWeekday}>
-        {weekday}
-      </AppText>
-      <AppText variant="bodySmall" color={palette.subtle}>
-        {fullDate}
-      </AppText>
-    </View>
-  );
-
-  function toggleMode() {
-    setMode((current) => {
-      if (current === "edit") {
-        Keyboard.dismiss();
-        return "view";
-      }
-      return "edit";
-    });
-  }
-
-  async function toggleVoice() {
-    if (listening) {
-      sttRef.current?.stop();
-      setListening(false);
-      return;
-    }
-
-    const stt = loadSpeechRecognition();
-    if (!stt) {
-      Alert.alert("Voice unavailable", "Rebuild the app to enable voice-to-text (run: npx expo run:ios).");
-      return;
-    }
-
-    const permission = await stt.requestPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert("Microphone needed", "Allow microphone and speech access to dictate your journal.");
-      return;
-    }
-
-    sttRef.current = stt;
-    clearVoiceSubs();
-    sttSubsRef.current = [
-      stt.addListener("result", (event) => {
-        const transcript = event.results?.[0]?.transcript ?? "";
-        if (event.isFinal) {
-          voiceBaseRef.current = joinText(voiceBaseRef.current, transcript);
-          setContent(voiceBaseRef.current);
-        } else {
-          setContent(joinText(voiceBaseRef.current, transcript));
-        }
-      }),
-      stt.addListener("end", () => {
-        setListening(false);
-        clearVoiceSubs();
-      }),
-      stt.addListener("error", () => {
-        setListening(false);
-        clearVoiceSubs();
-      })
-    ];
-
-    voiceBaseRef.current = content.trim();
-    setListening(true);
-    stt.start({ lang: "en-US", interimResults: true, continuous: true });
-  }
+  // "Tue, August 4, 2026" — the day the entry is filed under, shown under its
+  // title rather than in the top bar.
+  const fullDate = `${dayLabels[entryDate.getDay()]}, ${entryDate.toLocaleDateString(undefined, { month: "long" })} ${entryDate.getDate()}, ${entryDate.getFullYear()}`;
 
   async function pickPhoto() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert("Photo access needed", "Allow photo access to attach an image to your journal.");
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: false, quality: 0.8 });
-    if (result.canceled || !result.assets?.length) {
-      return;
-    }
     try {
-      const previous = photoUri;
-      const stored = await persistPhoto(result.assets[0].uri, dateKey);
-      setPhotoUri(stored);
-      if (previous && previous !== stored) {
-        removePhotoFile(previous);
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      // iOS "limited" access reports granted: false but still opens a picker
+      // over the photos the user chose to share — only a hard denial that
+      // cannot be re-asked is worth blocking on.
+      if (!permission.granted && !permission.canAskAgain) {
+        Alert.alert("Photo access needed", "Allow photo access for Lumo in Settings to attach an image.");
+        return;
       }
-    } catch {
-      Alert.alert("Couldn't attach photo", "Something went wrong saving that image. Please try again.");
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsMultipleSelection: false,
+        quality: 0.8
+      });
+
+      if (result.canceled || !result.assets?.length) {
+        return;
+      }
+
+      const previous = photoUri;
+      const stored = await persistJournalPhoto(result.assets[0].uri, dateKey);
+      setPhotoUri(stored);
+
+      if (previous && previous !== stored) {
+        removeJournalPhoto(previous);
+      }
+    } catch (error) {
+      // Surface the reason — a silent "something went wrong" made this
+      // impossible to diagnose.
+      Alert.alert("Couldn't attach photo", error instanceof Error ? error.message : "Please try again.");
     }
   }
 
   function removePhoto() {
     const current = photoUri;
     setPhotoUri(undefined);
-    removePhotoFile(current);
+    removeJournalPhoto(current);
   }
 
-  function handleSave() {
-    if (listening) {
-      sttRef.current?.stop();
+  /**
+   * A day is open if it is not already carrying its share of entries. Checked
+   * against the draft while the wheels move rather than on save, where the
+   * write would just be dropped.
+   */
+  function dayIsOpen(candidate: string) {
+    return journals.filter((entry) => entry.date === candidate && entry.id !== entryId && journalHasContent(entry)).length < MAX_JOURNALS_PER_DAY;
+  }
+
+  /** Re-files the entry — for catching up on a day you missed writing. */
+  function confirmDate() {
+    if (dayIsOpen(draftDate)) {
+      setDateKey(draftDate);
     }
-    Keyboard.dismiss();
-    router.back();
+
+    setPickingDate(false);
   }
 
-  const toggleAction =
-    mode === "view"
-      ? ({ icon: "edit", label: "Edit", onPress: toggleMode, iconSize: 21, iconStyle: { transform: [{ translateY: 5 }] } } as const)
-      : ({ icon: "eye", label: "Preview", onPress: toggleMode, iconSize: 25, iconStyle: { transform: [{ translateY: 5 }] } } as const);
+  function openDatePicker() {
+    setDraftDate(dateKey);
+    setPickingDate(true);
+  }
 
   return (
     <Screen scroll={false} contentStyle={styles.content} edges={["top", "left", "right", "bottom"]}>
-      <ScreenHeader leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }} rightActions={[toggleAction]} />
+      <View style={styles.topBar}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          onPress={() => router.back()}
+          hitSlop={10}
+          style={({ pressed }) => [styles.topBarButton, { borderColor: palette.hairline, opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Icon name="arrowLeft" size={20} color={palette.ink} weight="bold" />
+        </Pressable>
+        <View style={styles.topBarSpacer} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Attach a photo"
+          onPress={pickPhoto}
+          hitSlop={10}
+          style={({ pressed }) => [styles.topBarButton, { borderColor: palette.hairline, opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Icon name="attachment" size={20} color={palette.ink} weight="bold" />
+        </Pressable>
+      </View>
 
       <KeyboardAvoidingView style={[styles.flex, styles.editorBody]} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={8}>
-        {mode === "edit" ? (
-          <>
-            <ScrollView style={styles.flex} contentContainerStyle={styles.editContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              <View style={styles.editHeader}>
-                {dateBlock}
-                <MoodDropdown value={mood} onChange={setMood} />
-              </View>
-
-              {photoUri ? (
-                <View style={styles.photoWrap}>
-                  <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Remove photo"
-                    onPress={removePhoto}
-                    style={({ pressed }) => [styles.photoRemove, { backgroundColor: alpha("#000000", "8C"), opacity: pressed ? 0.7 : 1 }]}
-                  >
-                    <Icon name="close" size={16} color={palette.white} weight="bulk" />
-                  </Pressable>
-                </View>
-              ) : null}
-              <TextInput
-                value={content}
-                onChangeText={setContent}
-                placeholder="Write about your day…"
-                placeholderTextColor={`${palette.body}66`}
-                multiline
-                autoFocus={!existing}
-                textAlignVertical="top"
-                style={[styles.bodyInput, { color: textColor }]}
-              />
-            </ScrollView>
-
-            {SHOW_FLOATING_MENU ? (
-            <View style={styles.floatingWrap} pointerEvents="box-none">
-              <View style={[styles.floatingBar, { backgroundColor: palette.card, shadowColor: palette.shadow, borderColor: palette.hairline }]}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={listening ? "Stop dictation" : "Dictate with voice"}
-                  onPress={toggleVoice}
-                  style={({ pressed }) => [styles.floatingButton, listening ? { backgroundColor: alpha(palette.danger, "1F") } : null, { opacity: pressed ? 0.7 : 1 }]}
-                >
-                  <Icon name={listening ? "microphone" : "microphone"} size={22} color={listening ? palette.danger : palette.ink} weight="bulk" />
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Attach a photo"
-                  onPress={pickPhoto}
-                  style={({ pressed }) => [styles.floatingButton, { opacity: pressed ? 0.7 : 1 }]}
-                >
-                  <Icon name="attachment" size={22} color={palette.ink} weight="bulk" />
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Save journal"
-                  onPress={handleSave}
-                  style={({ pressed }) => [styles.floatingSave, { backgroundColor: palette.green, opacity: pressed ? 0.85 : 1 }]}
-                >
-                  <Icon name="checkCircle" size={22} color={palette.white} weight="bulk" />
-                </Pressable>
-              </View>
+        <ScrollView style={styles.flex} contentContainerStyle={styles.editContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          {/* The page itself: the attachment leads, then title, the day it is
+              filed under, and the entry. No fields, no frames — just text on
+              the canvas. */}
+          {photoUri ? (
+            <View style={styles.photoWrap}>
+              {/* Resolved now, not stored — see lib/journalPhotos. */}
+              <Image source={{ uri: journalPhotoUri(photoUri) }} style={styles.photo} resizeMode="cover" />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Remove photo"
+                onPress={removePhoto}
+                style={({ pressed }) => [styles.photoRemove, { opacity: pressed ? 0.6 : 1 }]}
+              >
+                <Icon name="close" size={22} color={brand.navy} weight="fill" />
+              </Pressable>
             </View>
-            ) : null}
-          </>
-        ) : (
-          <ScrollView style={styles.flex} contentContainerStyle={styles.viewContent} showsVerticalScrollIndicator={false}>
-            <View style={styles.viewHeader}>
-              {dateBlock}
-              <View style={[styles.moodBadge, { backgroundColor: alpha(moodColor(palette, mood), "1F") }]}>
-                <Icon name={moodIcon(mood)} size={24} color={moodColor(palette, mood)} weight="bulk" />
-              </View>
-            </View>
-            {photoUri ? <Image source={{ uri: photoUri }} style={styles.photoView} resizeMode="cover" /> : null}
-            {content.trim() ? (
-              <MarkdownView content={content} textColor={textColor} />
-            ) : (
-              <Pressable accessibilityRole="button" accessibilityLabel="Start writing" onPress={toggleMode}>
-                <AppText variant="body" color={palette.muted} style={styles.emptyView}>
-                  Nothing written yet. Tap the edit icon to start.
+          ) : null}
+
+          <TextInput
+            value={title}
+            onChangeText={setTitle}
+            placeholder="Give today a title"
+            placeholderTextColor={`${palette.body}59`}
+            multiline
+            autoFocus={!existing}
+            style={[styles.titleInput, { color: textColor }]}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Entry date, ${fullDate}. Tap to change.`}
+            onPress={openDatePicker}
+            hitSlop={8}
+            style={({ pressed }) => [styles.dateLine, { opacity: pressed ? 0.6 : 1 }]}
+          >
+            <AppText variant="bodySmall" color={palette.muted}>
+              {fullDate}
+            </AppText>
+            <Icon name="calendar" size={14} color={palette.muted} weight="bulk" />
+          </Pressable>
+
+          <TextInput
+            value={content}
+            onChangeText={setContent}
+            placeholder="Write your thoughts…"
+            placeholderTextColor={`${palette.body}59`}
+            multiline
+            textAlignVertical="top"
+            style={[styles.bodyInput, { color: textColor }]}
+          />
+
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {pickingDate ? (
+        <Modal transparent animationType="none" visible onRequestClose={() => setPickingDate(false)}>
+          <View style={styles.pickerBackdrop}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setPickingDate(false)} />
+            <View style={[styles.pickerSheet, { backgroundColor: palette.card }]}>
+              <AppText color={palette.ink} style={styles.pickerTitle}>
+                Entry date
+              </AppText>
+              {/* Today is the newest day on the wheels — there is nothing to
+                  record about a day you have not lived yet. */}
+              <WheelDatePicker value={draftDate} onChange={setDraftDate} max={toDateKey()} />
+              <AppText variant="caption" color={dayIsOpen(draftDate) ? palette.muted : palette.danger} style={styles.pickerHint}>
+                {dayIsOpen(draftDate) ? "Move this entry to a day you missed." : "That day already has an entry."}
+              </AppText>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Done"
+                accessibilityState={{ disabled: !dayIsOpen(draftDate) }}
+                disabled={!dayIsOpen(draftDate)}
+                onPress={confirmDate}
+                style={({ pressed }) => [
+                  styles.pickerDoneButton,
+                  { backgroundColor: palette.green, opacity: !dayIsOpen(draftDate) ? 0.45 : pressed ? 0.88 : 1 }
+                ]}
+              >
+                <AppText variant="button" color={palette.white} style={styles.pickerDoneLabel}>
+                  Done
                 </AppText>
               </Pressable>
-            )}
-          </ScrollView>
-        )}
-      </KeyboardAvoidingView>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  // No padding of its own — the Screen already insets by screenPaddingX, and
+  // adding it again pushed both buttons a full gutter in from the edges.
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingBottom: spacing.sm
+  },
+  // Outlined circle, the same header button the habit screens and the journal
+  // list use.
+  topBarButton: {
+    width: 38,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth
+  },
+  topBarSpacer: {
+    flex: 1
+  },
+  // The entry's own headline, set like one — serif, no field around it.
+  titleInput: {
+    fontFamily: fontFamilies.serifBlack,
+    fontSize: 36,
+    lineHeight: 46,
+    padding: 0
+  },
+  dateLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: spacing.xxs,
+    marginTop: spacing.xs
+  },
+  // The same sheet the reminder-time picker uses.
+  pickerBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg,
+    backgroundColor: "rgba(0, 0, 0, 0.35)"
+  },
+  pickerSheet: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 40,
+    paddingHorizontal: layout.screenPaddingX,
+    paddingVertical: spacing.xl
+  },
+  pickerTitle: {
+    fontFamily: fontFamilies.lexendBold,
+    fontSize: 20,
+    lineHeight: 26,
+    textAlign: "center",
+    marginBottom: spacing.md
+  },
+  pickerHint: {
+    marginTop: spacing.sm,
+    textAlign: "center"
+  },
+  pickerDoneButton: {
+    marginTop: spacing.md,
+    minHeight: 48,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  pickerDoneLabel: {
+    fontSize: 17
+  },
   content: {
     flex: 1
   },
@@ -419,82 +388,28 @@ const styles = StyleSheet.create({
   editorBody: {
     marginTop: -spacing.md
   },
-  dateBlock: {
-    gap: 2
-  },
-  dateWeekday: {
-    fontFamily: fontFamilies.lexendBold,
-    fontSize: 26,
-    lineHeight: 32
-  },
-  editHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-    marginBottom: spacing.xs
-  },
-  viewHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-    // With the container's sm gap, matches edit mode's 24pt header→text gap.
-    marginBottom: spacing.sm
-  },
-  moodBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  moodMenu: {
-    position: "absolute",
-    width: MOOD_MENU_WIDTH,
-    borderRadius: radius.nav,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    gap: spacing.xxs,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.16,
-    shadowRadius: 28,
-    elevation: 16
-  },
-  moodMenuTitle: {
-    fontFamily: fontFamilies.lexendSemiBold,
-    fontSize: 15,
-    lineHeight: 20,
-    paddingHorizontal: spacing.xs,
-    paddingBottom: spacing.xs
-  },
-  moodOption: {
-    minHeight: 40,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.xs
-  },
-  moodOptionText: {
-    flex: 1,
-    fontFamily: fontFamilies.lexendSemiBold
-  },
   editContent: {
     paddingHorizontal: spacing.xs,
-    paddingTop: spacing.sm,
-    paddingBottom: 120
+    // No lead-in: the attachment (or the title) starts right under the bar.
+    paddingTop: 0,
+    // The floating action bar it used to clear is gone, so this only needs to
+    // keep the last row off the very bottom edge.
+    paddingBottom: spacing.sm
   },
   bodyInput: {
     fontFamily: fontFamilies.lexend,
-    fontSize: 17,
+    fontSize: 16,
     lineHeight: 26,
-    paddingTop: spacing.md,
-    minHeight: 200
+    padding: 0,
+    marginTop: spacing.xl,
+    minHeight: 220
   },
+  // Full width now that the attachment lives in the top bar rather than in a
+  // row of thumbnails.
+  // Leads the page, so it sits flush at the top and spaces the title below it.
   photoWrap: {
-    marginTop: spacing.sm,
-    borderRadius: radius.lg,
+    marginBottom: spacing.xl,
+    borderRadius: radius.card,
     overflow: "hidden"
   },
   photo: {
@@ -511,53 +426,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center"
-  },
-  floatingWrap: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: spacing.md,
-    alignItems: "center"
-  },
-  floatingBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    padding: spacing.xs,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.14,
-    shadowRadius: 18,
-    elevation: 8
-  },
-  floatingButton: {
-    width: 46,
-    height: 46,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  floatingSave: {
-    width: 46,
-    height: 46,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  viewContent: {
-    flexGrow: 1,
-    paddingHorizontal: spacing.xs,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xl,
-    gap: spacing.sm
-  },
-  photoView: {
-    width: "100%",
-    height: 200,
-    borderRadius: radius.lg
-  },
-  emptyView: {
-    paddingTop: spacing.md
   }
 });

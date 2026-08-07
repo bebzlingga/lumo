@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native'
-import { fontFamilies, radius, spacing } from '@/constants/theme'
+import { ScrollView, StyleSheet, View } from 'react-native'
+import { fontFamilies, layout, radius, spacing } from '@/constants/theme'
 import { useLumo } from '@/context/LumoContext'
 import { alpha } from '@/lib/color'
 import { monthRange, parseDateKey, toDateKey } from '@/lib/date'
 import { completionCount, isDoneOnDate, isScheduledOnDate } from '@/lib/habitMath'
 import { Habit } from '@/types/habit'
 import { AppText } from './ui'
+import { Pressable } from '@/components/Pressable'
 
 const ITEM_GAP = 4
 const DATE_CARD_WIDTH = 44
@@ -204,7 +205,7 @@ const styles = StyleSheet.create({
 	scrollerWrap: {
 		alignItems: 'center',
 		alignSelf: 'stretch',
-		marginHorizontal: -spacing.lg,
+		marginHorizontal: -layout.screenPaddingX,
 		paddingTop: spacing.sm,
 		paddingBottom: spacing.sm,
 	},
