@@ -410,16 +410,23 @@ struct LumoWidget: Widget {
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: "LumoWidget", provider: Provider()) { entry in
       let theme = entry.snapshot.theme ?? .fallback
+      // A soft diagonal wash rather than a flat fill, so the widget reads as
+      // Lumo's own surface instead of a plain colour block — and so the medium
+      // and large sizes, which have far more empty area than the small one,
+      // don't look washed out.
+      let background = LinearGradient(
+        colors: [Color(hex: theme.background), Color(hex: theme.card)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+      )
       if #available(iOS 17.0, *) {
-        LumoWidgetView(entry: entry).containerBackground(Color(hex: theme.background), for: .widget)
+        LumoWidgetView(entry: entry).containerBackground(for: .widget) { background }
       } else {
-        LumoWidgetView(entry: entry).background(Color(hex: theme.background))
+        LumoWidgetView(entry: entry).background(background)
       }
     }
     .configurationDisplayName("Today's Habits")
     .description("Check off today's habits right from the home screen.")
-    // One size only — the square box. Offering all three made the gallery show
-    // three variants of the same widget, which read as three separate widgets.
-    .supportedFamilies([.systemSmall])
+    .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
   }
 }

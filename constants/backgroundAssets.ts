@@ -179,7 +179,18 @@ export const HOME_PLATE_FIT: Record<HomePeriod, HomePlateFit> = {
 	// could overlap onto that is neither cream nor open sky. If a tagline line
 	// ever reaches it, that is the plate it will show on first.
 	afternoon: { scale: 1.13, shiftY: 0.062, sceneBottom: 0.281 },
-	evening: { scale: 1, shiftY: 0.02, sceneBottom: 0.3 },
+	// Sitting with a book. This plate is the odd one out: the art is 887x1774
+	// against the other four's 724x2172, so `cover` scales it to the box's
+	// height and crops ~17% off each side. That crop is doing real work — it
+	// lands Lumo 218pt tall with his head at 111pt and his cushion at 329pt,
+	// all within a few points of the reference. Do NOT "fix" the aspect here:
+	// rendering this art at its true 1:2 would halve his size or push him off
+	// the right edge, and all three numbers below would need refitting.
+	//
+	// Only `sceneBottom` was ever wrong. Left at a round 0.3 it put the first
+	// card 32pt BELOW the cushion instead of crossing it — every other plate
+	// overlaps by ~44pt — which is the gap under the greeting this closes.
+	evening: { scale: 1, shiftY: 0.02, sceneBottom: 0.243 },
 }
 
 const homeArt: Record<HomePeriod, ImageSourcePropType> = {

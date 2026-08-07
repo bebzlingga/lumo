@@ -344,6 +344,24 @@ export const type = {
  * setting, which AppText caps via maxFontSizeMultiplier instead.
  * AppText / LumoInput apply this globally.
  */
+/**
+ * Points added to every rendered type and icon size, per accessibility step,
+ * applied AFTER `fontScaleForWidth` has done its proportional work.
+ *
+ * Additive rather than a multiplier on purpose: a multiplier would move a 28pt
+ * title four times as far as a 12pt caption, so long headings would start
+ * wrapping well before body copy became comfortable to read.
+ *
+ * Read in exactly two places — `scaleTextStyle` in components/ui.tsx, which
+ * every AppText and LumoInput passes through, and the `Icon` component. Icons
+ * move with the text so that a row's glyph doesn't shrink against its label.
+ */
+export const TEXT_SIZE_BUMP: Record<"default" | "large" | "larger", number> = {
+  default: 0,
+  large: 2,
+  larger: 4
+};
+
 export function fontScaleForWidth(width: number) {
   if (width >= 390) {
     return Math.min(1.04, 1 + ((width - 390) / 390) * 0.4);

@@ -16,10 +16,16 @@ import { fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha, readableOn } from "@/lib/color";
 import { PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legal";
-import { BackupFrequency } from "@/types/habit";
+import { BackupFrequency, TextSize } from "@/types/habit";
 import { Pressable } from "@/components/Pressable"
 
 const LUMO_FACEBOOK_URL = "https://www.facebook.com/lumo.habitcompanion";
+/** Accessibility text sizes, labelled by what they do rather than by point size. */
+const textSizeOptions: { label: string; value: TextSize }[] = [
+  { label: "Default", value: "default" },
+  { label: "Large", value: "large" },
+  { label: "Larger", value: "larger" }
+];
 const backupFrequencyOptions: { label: string; value: BackupFrequency }[] = [
   { label: "Daily", value: "daily" },
   { label: "Weekly", value: "weekly" },
@@ -183,6 +189,7 @@ export default function SettingsScreen() {
     setCheckInTime,
     setAutoBackupEnabled,
     setBackupFrequency,
+    setTextSize,
     exportData,
     createDataBackup,
     importData
@@ -462,6 +469,27 @@ export default function SettingsScreen() {
             last
           />
         ) : null}
+      </SettingsGroup>
+
+      {/* Accessibility, on its own card. Lumo caps the OS Dynamic Type
+          multiplier so a device's own Text Size can't distort these layouts,
+          which makes this the only way to get larger type — it deserves its own
+          heading rather than sitting as one line among notification toggles. */}
+      <SettingsGroup>
+        <SettingsRow
+          icon="sliders"
+          title="Text size"
+          body="Make text and icons easier to read"
+          right={
+            <FloatingDropdown
+              options={textSizeOptions}
+              value={settings.textSize ?? "default"}
+              onChange={setTextSize}
+              accessibilityLabel="Text size"
+            />
+          }
+          last
+        />
       </SettingsGroup>
 
       <SettingsGroup>

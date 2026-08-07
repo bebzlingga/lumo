@@ -39,7 +39,7 @@ import { getExpoPushToken } from "@/lib/notifications";
 import { subscribeToUserNotifications } from "@/lib/realtime";
 import { ensureSignedIn } from "@/lib/supabase";
 import { readPendingWidgetToggles, updateTodayWidget } from "@/lib/widget";
-import { AppSettings, BackupFrequency, CompletionEntry, FeatureRequest, Habit, HabitCategory, habitCategories, HabitDraft, JournalEntry, JournalMood, MAX_JOURNALS_PER_DAY } from "@/types/habit";
+import { AppSettings, BackupFrequency, CompletionEntry, FeatureRequest, Habit, HabitCategory, habitCategories, HabitDraft, JournalEntry, JournalMood, MAX_JOURNALS_PER_DAY, TextSize } from "@/types/habit";
 
 // Persisted local state key. Do not change — it would orphan existing
 // installs' local data.
@@ -159,6 +159,7 @@ type LumoContextValue = StoredState & {
   setCheckInTime: (key: CheckInKey, time: string) => Promise<void>;
   setAutoBackupEnabled: (enabled: boolean) => Promise<void>;
   setBackupFrequency: (frequency: BackupFrequency) => void;
+  setTextSize: (size: TextSize) => void;
   refreshNotificationStatus: () => Promise<void>;
   requestNotifications: () => Promise<void>;
   createHabit: (draft: HabitDraft) => Promise<Habit>;
@@ -191,6 +192,7 @@ const defaultSettings: AppSettings = {
   notificationsEnabled: true,
   autoBackupEnabled: false,
   backupFrequency: "weekly",
+  textSize: "default",
   isPro: false,
   isUnlimited: false,
   bestStreakEver: 0,
@@ -1006,6 +1008,12 @@ export function LumoProvider({ children }: { children: ReactNode }) {
         setState((current) => ({
           ...current,
           settings: { ...current.settings, backupFrequency: frequency }
+        }));
+      },
+      setTextSize(size) {
+        setState((current) => ({
+          ...current,
+          settings: { ...current.settings, textSize: size }
         }));
       },
       async createHabit(draft) {

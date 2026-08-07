@@ -1,5 +1,7 @@
 import React from "react";
 import type { StyleProp, TextStyle, ViewStyle } from "react-native";
+import { TEXT_SIZE_BUMP } from "@/constants/theme";
+import { useLumo } from "@/context/LumoContext";
 import {
   ArchiveIcon,
   ArrowClockwiseIcon,
@@ -325,8 +327,15 @@ export function Icon({
   weight?: IconWeight;
   style?: StyleProp<ViewStyle | Omit<TextStyle, "cursor">>;
 }) {
+  // Icons move with the reader's text size, so a row's glyph never shrinks
+  // against the label beside it. Only numeric sizes are liftable — a percentage
+  // string is already relative to its container.
+  const { settings } = useLumo();
+  const bump = TEXT_SIZE_BUMP[settings.textSize] ?? 0;
+  const sized = typeof size === "number" ? size + bump : size;
+
   if (name === "streakFire") {
-    return <FireIcon size={typeof size === "number" ? size : 20} />;
+    return <FireIcon size={typeof sized === "number" ? sized : 20} />;
   }
 
   const Component = iconMap[name];
@@ -335,7 +344,7 @@ export function Icon({
   return (
     <Component
       color={color}
-      size={size}
+      size={sized}
       weight={phosphorWeight}
       style={style}
       duotoneOpacity={phosphorWeight === "duotone" ? DUOTONE_OPACITY : undefined}

@@ -151,8 +151,18 @@ export type ThemeMode = "system" | "light" | "dark";
 
 export type BackupFrequency = "daily" | "weekly" | "monthly";
 
+/**
+ * Accessibility text size. Lumo caps the OS Dynamic Type multiplier (see
+ * AppText's `maxFontSizeMultiplier`) so that a device's own Text Size setting
+ * cannot distort the layout — which leaves this as the only way to get larger
+ * type, so it has to exist.
+ */
+export type TextSize = "default" | "large" | "larger";
+
 export type AppSettings = {
   themeMode: ThemeMode;
+  /** Points added to every type and icon size. See TEXT_SIZE_BUMP. */
+  textSize: TextSize;
   notificationStatus: "unknown" | "granted" | "denied" | "undetermined";
   notificationsEnabled: boolean;
   autoBackupEnabled: boolean;

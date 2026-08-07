@@ -4,7 +4,7 @@ import { ActivityIndicator, Animated, type GestureResponderHandlers, LayoutChang
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect as SvgRect, Stop } from "react-native-svg";
 import { DEFAULT_BACKGROUND, type BackgroundVariant } from "@/constants/backgroundAssets";
-import { control, fontFamilies, fontScaleForWidth, layout, radius, spacing, type } from "@/constants/theme";
+import { control, fontFamilies, fontScaleForWidth, layout, radius, spacing, TEXT_SIZE_BUMP, type } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { useTabBarVisibility } from "@/context/TabBarVisibility";
 import { alpha } from "@/lib/color";
@@ -14,17 +14,22 @@ import { Pressable } from "@/components/Pressable"
 
 type TextVariant = keyof typeof type;
 
-// Scales fontSize/lineHeight in an already-flattened text style; leaves every
-// other property untouched. scale === 1 short-circuits to the same object.
-function scaleTextStyle(flat: TextStyle, scale: number): TextStyle {
-  if (scale === 1) {
+// Scales fontSize/lineHeight in an already-flattened text style, then adds the
+// reader's accessibility uplift; leaves every other property untouched.
+//
+// The short-circuit has to test the uplift as well as the scale. A 390pt-wide
+// screen — the size the type is designed at — scales to exactly 1, so
+// returning early on `scale === 1` alone would silently skip the uplift on
+// precisely the reference device.
+function scaleTextStyle(flat: TextStyle, scale: number, bump: number): TextStyle {
+  if (scale === 1 && bump === 0) {
     return flat;
   }
 
   return {
     ...flat,
-    fontSize: typeof flat.fontSize === "number" ? Math.round(flat.fontSize * scale) : flat.fontSize,
-    lineHeight: typeof flat.lineHeight === "number" ? Math.round(flat.lineHeight * scale) : flat.lineHeight
+    fontSize: typeof flat.fontSize === "number" ? Math.round(flat.fontSize * scale) + bump : flat.fontSize,
+    lineHeight: typeof flat.lineHeight === "number" ? Math.round(flat.lineHeight * scale) + bump : flat.lineHeight
   };
 }
 type ChipOption = {
@@ -190,8 +195,11 @@ export function AppText({
   className?: string;
   numberOfLines?: number;
 }) {
-  const { palette } = useLumo();
+  const { palette, settings } = useLumo();
   const { width } = useWindowDimensions();
+  // `?? 0` because installs that predate the setting have no `textSize` in
+  // their persisted state, and an undefined key here would make every size NaN.
+  const textBump = TEXT_SIZE_BUMP[settings.textSize] ?? 0;
   // Flatten first so explicit fontSize overrides passed via `style` scale too.
   const flat = StyleSheet.flatten([type[variant], { color: color ?? palette.ink }, style]) as TextStyle;
 
@@ -202,7 +210,7 @@ export function AppText({
       // Ignore the OS Dynamic Type multiplier upward — otherwise the same
       // device size renders bigger text when iOS Text Size is raised.
       maxFontSizeMultiplier={1}
-      style={scaleTextStyle(flat, fontScaleForWidth(width))}
+      style={scaleTextStyle(flat, fontScaleForWidth(width), textBump)}
     >
       {children}
     </Text>
@@ -475,8 +483,9 @@ export function controlBorderColor(palette: ReturnType<typeof useLumo>["palette"
 }
 
 export function LumoInput(props: TextInputProps) {
-  const { palette, isDark } = useLumo();
+  const { palette, isDark, settings } = useLumo();
   const { width } = useWindowDimensions();
+  const textBump = TEXT_SIZE_BUMP[settings.textSize] ?? 0;
   const [focused, setFocused] = React.useState(false);
   // Card, not surface — onboarding's fields sit on the lighter surface so
   // they read as inputs rather than as part of the canvas.
@@ -512,7 +521,7 @@ export function LumoInput(props: TextInputProps) {
         setFocused(false);
         props.onBlur?.(event);
       }}
-      style={scaleTextStyle(flat, fontScaleForWidth(width))}
+      style={scaleTextStyle(flat, fontScaleForWidth(width), textBump)}
     />
   );
 }

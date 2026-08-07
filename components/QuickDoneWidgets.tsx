@@ -128,6 +128,7 @@ function WidgetHabitRow({
   dateKey,
   disabledActions = false,
   inGroup = false,
+  last = false,
   onHoldEnd,
   onHoldStart,
   holdProgress
@@ -136,6 +137,8 @@ function WidgetHabitRow({
   dateKey: string;
   disabledActions?: boolean;
   inGroup?: boolean;
+  /** Drops this row's bottom padding — the card's own already closes the list. */
+  last?: boolean;
   onHoldEnd?: () => void;
   onHoldStart?: () => void;
   /** Drives the hold-to-undo progress ring on this row's icon (0 -> 1). */
@@ -324,7 +327,7 @@ function WidgetHabitRow({
       onPress={handleRowPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      style={styles.widgetRow}
+      style={[styles.widgetRow, last && styles.widgetRowLast]}
     >
       {/* Rounded square, not a disc — it reads as a tile of the habit's colour
           beside the round check target on the other end of the row. */}
@@ -488,6 +491,7 @@ export function QuickDoneWidgets({ habits, dateKey = toDateKey(), disabledAction
                   dateKey={dateKey}
                   disabledActions={disabledActions}
                   inGroup={groupHabitIds?.has(habit.id)}
+                  last={index === habits.length - 1}
                   onHoldEnd={onHoldEnd}
                   onHoldStart={onHoldStart}
                   holdProgress={holdProgress}
@@ -557,6 +561,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
     paddingVertical: spacing.sm
+  },
+  // The card's own paddingVertical already closes the list, so the last row's
+  // bottom padding was stacking on top of it — 12 + 16 under the final habit
+  // against 12 above the first one.
+  widgetRowLast: {
+    paddingBottom: 0
   },
   widgetIcon: {
     width: 46,
