@@ -295,11 +295,17 @@ export default function OnboardingScreen() {
 		createHabit,
 		isReady,
 		hasOnboarded,
+		habitLimit,
+		isUnlimited,
 		nickname,
 		setNickname,
 		setNotificationsEnabled,
 		setCheckIns: saveCheckIns,
 	} = useLumo()
+	// Read from the context rather than importing FREE_HABIT_LIMIT, so this
+	// can't drift from the cap the rest of the app enforces. A fresh install
+	// owns no habits, so the whole allowance is available here.
+	const habitCap = isUnlimited ? ONBOARDING_HABITS.length : habitLimit
 	const [step, setStep] = useState<OnboardingStep>('welcome')
 	const [nicknameDraft, setNicknameDraft] = useState(nickname)
 	const [goal, setGoal] = useState<string | null>(null)
@@ -421,14 +427,25 @@ export default function OnboardingScreen() {
 		return <LoadingState />
 	}
 
+	/**
+	 * Selection is capped at what a free account can actually keep. Onboarding
+	 * used to let all six be picked and then created them all, which handed new
+	 * users double the free limit and left them permanently over it — the caps
+	 * only bite on creation, so nothing ever pulled those extras back.
+	 *
+	 * Deselecting is never blocked, only adding past the cap.
+	 */
 	function toggleHabit(name: string) {
 		setSelected((current) => {
 			const next = new Set(current)
 			if (next.has(name)) {
 				next.delete(name)
-			} else {
-				next.add(name)
+				return next
 			}
+			if (next.size >= habitCap) {
+				return current
+			}
+			next.add(name)
 			return next
 		})
 	}
@@ -527,9 +544,17 @@ export default function OnboardingScreen() {
 					// Permission declined — carry on; they can enable it later.
 				}
 			}
+			// Sliced as well as capped in the picker: `createHabit` enforces no
+			// limit of its own, so this loop is the last thing standing between a
+			// stale selection and an account that starts over its allowance.
+			let created = 0
 			for (const item of ONBOARDING_HABITS) {
+				if (created >= habitCap) {
+					break
+				}
 				if (selected.has(item.template.name)) {
 					await createHabit(templateToDraft(item.template, item.color))
+					created += 1
 				}
 			}
 			router.replace('/(tabs)/today')
@@ -721,18 +746,31 @@ export default function OnboardingScreen() {
 				<TopBar counter={2} onBack={canGoBack ? goBack : undefined} />
 				<ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
 					<Title>{firstName ? `${firstName}, what would you like to work on?` : 'What would you like to work on?'}</Title>
-					<Subtitle>Pick a few. You can always edit more later.</Subtitle>
+					<Subtitle>
+						{selected.size >= habitCap
+							? `That's your ${habitCap}. Deselect one to swap it, or add more later.`
+							: `Pick up to ${habitCap}. You can always edit more later.`}
+					</Subtitle>
 
 					<View style={styles.chipGrid}>
 						{ONBOARDING_HABITS.map((item) => {
 							const active = selected.has(item.template.name)
+							// Dim what can no longer be added, so the cap is visible before
+							// a tap does nothing rather than only after.
+							const blocked = !active && selected.size >= habitCap
 							return (
 								<PressBox
 									key={item.template.name}
 									selected={active}
 									accessibilityLabel={item.template.name}
+									disabled={blocked}
 									onPress={() => toggleHabit(item.template.name)}
-									style={[styles.chip, styles.cardShadow, active && { borderColor: FIELD_BORDER_ACTIVE }]}
+									style={[
+										styles.chip,
+										styles.cardShadow,
+										active && { borderColor: FIELD_BORDER_ACTIVE },
+										blocked && { opacity: 0.45 }
+									]}
 								>
 									<IconTile icon={item.icon} tint={item.tint} />
 									<AppText variant='bodySmall' color={INK} numberOfLines={1} style={styles.chipText}>

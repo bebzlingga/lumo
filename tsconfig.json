@@ -18,6 +18,12 @@
   ],
   "exclude": [
     "node_modules",
-    "supabase/functions"
+    "supabase/functions",
+    // Standalone Vite web prototype with its own toolchain, its own
+    // node_modules, and a `@/App` import that collides with `app/` on
+    // case-insensitive filesystems. It is already kept out of builds by
+    // .easignore; including it here made `npm run typecheck` permanently
+    // red (48 errors, none of them the app's) and therefore useless.
+    "habit-journey"
   ]
 }

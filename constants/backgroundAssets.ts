@@ -1,4 +1,5 @@
 import type { ImageSourcePropType } from 'react-native'
+import type { ThemeId } from '@/constants/theme'
 
 /**
  * Central registry for the pastel landscape backdrops.
@@ -179,18 +180,26 @@ export const HOME_PLATE_FIT: Record<HomePeriod, HomePlateFit> = {
 	// could overlap onto that is neither cream nor open sky. If a tagline line
 	// ever reaches it, that is the plate it will show on first.
 	afternoon: { scale: 1.13, shiftY: 0.062, sceneBottom: 0.281 },
-	// Sitting with a book. This plate is the odd one out: the art is 887x1774
-	// against the other four's 724x2172, so `cover` scales it to the box's
-	// height and crops ~17% off each side. That crop is doing real work — it
-	// lands Lumo 218pt tall with his head at 111pt and his cushion at 329pt,
-	// all within a few points of the reference. Do NOT "fix" the aspect here:
-	// rendering this art at its true 1:2 would halve his size or push him off
-	// the right edge, and all three numbers below would need refitting.
+	// Sitting with a book. The odd one out: the art is 887x1774 against the
+	// other four's 724x2172, so `cover` scales it to the box's height and crops
+	// ~17% off each side. Do NOT "fix" the aspect — rendering it at its true 1:2
+	// would shrink Lumo by a third, and all three numbers here would need
+	// refitting.
 	//
-	// Only `sceneBottom` was ever wrong. Left at a round 0.3 it put the first
-	// card 32pt BELOW the cushion instead of crossing it — every other plate
-	// overlaps by ~44pt — which is the gap under the greeting this closes.
-	evening: { scale: 1, shiftY: 0.02, sceneBottom: 0.243 },
+	// `sceneBottom` is the one that matters, and it is fitted to the SAME rule
+	// as the other four rather than to this plate's own art: every plate lands
+	// the first card at 290pt on a 390pt screen (319pt at 430). Left at a round
+	// 0.3 this one put the card at 361pt, which is the gap under the greeting.
+	//
+	// `shiftY` drops from 0.02 to 0.01 so Lumo's head lands at 124pt, matching
+	// morning's exactly.
+	//
+	// `scale` stays at 1, and that is a compromise worth knowing. This Lumo is
+	// framed smaller in a wider plate, so he renders 218pt tall against
+	// morning's 254pt. Matching that height takes scale 1.165 — which puts his
+	// right edge 83pt past the screen and cuts the plant and table off
+	// entirely. Being 14% short is the better of the two.
+	evening: { scale: 1, shiftY: 0.01, sceneBottom: 0.257 },
 }
 
 const homeArt: Record<HomePeriod, ImageSourcePropType> = {
@@ -223,8 +232,20 @@ export function homePeriodForHour(hour: number): HomePeriod {
 	return 'earlyMorning'
 }
 
-export function homeBackgroundAsset(period: HomePeriod): ImageSourcePropType {
-	return homeArt[period] ?? homeArt.morning
+/**
+ * Per-theme home plates. Same contract as `themeArt`: override what exists,
+ * fall back to the cream scene for the rest.
+ *
+ * Note the home plates carry per-period fitting numbers in HOME_PLATE_FIT that
+ * are tuned to THESE images. A theme supplying its own home art needs its own
+ * fitting pass, or Lumo lands in the wrong place on the hill.
+ */
+const themeHomeArt: Partial<Record<ThemeId, Partial<Record<HomePeriod, ImageSourcePropType>>>> = {
+	// forest: { morning: require('../assets/bg/forest/HomeMorning.webp') as ImageSourcePropType, ... },
+}
+
+export function homeBackgroundAsset(period: HomePeriod, themeId: ThemeId = 'cream'): ImageSourcePropType {
+	return themeHomeArt[themeId]?.[period] ?? homeArt[period] ?? homeArt.morning
 }
 
 /**
@@ -235,8 +256,31 @@ export function homeBackgroundAsset(period: HomePeriod): ImageSourcePropType {
  */
 export const DEFAULT_BACKGROUND: BackgroundVariant = 'today'
 
-export function backgroundAsset(variant: BackgroundVariant): ImageSourcePropType {
-	return registry[variant] ?? art.onboarding
+/**
+ * Per-theme plate overrides.
+ *
+ * The eight plates above are the CREAM set — warm illustrations drawn for the
+ * brand canvas. A theme may ship its own art for any subset of variants; what
+ * it does not override falls back to the cream plate, so a half-finished set is
+ * a partial improvement rather than a broken screen.
+ *
+ * Until a theme has art here, `themePlateOpacity` in constants/theme.ts is what
+ * keeps the cream plates from clashing with a cooler canvas — that opacity step
+ * is a stopgap, and a theme with a full set here can raise it back to 1.
+ *
+ * To add a set: drop the plates in assets/bg/<theme>/ and list them below.
+ */
+const themeArt: Partial<Record<ThemeId, Partial<Record<BackgroundVariant, ImageSourcePropType>>>> = {
+	// forest: { today: require('../assets/bg/forest/02_today.webp') as ImageSourcePropType, ... },
+}
+
+export function backgroundAsset(variant: BackgroundVariant, themeId: ThemeId = 'cream'): ImageSourcePropType {
+	return themeArt[themeId]?.[variant] ?? registry[variant] ?? art.onboarding
+}
+
+/** True once a theme brings its own plate for this variant — see `themeArt`. */
+export function hasThemeArt(variant: BackgroundVariant, themeId: ThemeId): boolean {
+	return Boolean(themeArt[themeId]?.[variant])
 }
 
 /** Variants still borrowing another screen's plate — art is outstanding. */

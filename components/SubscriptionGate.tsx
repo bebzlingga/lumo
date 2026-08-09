@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import React from "react";
-import { ActivityIndicator, Alert, Image, Linking, Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Alert, Animated, Linking, type NativeScrollEvent, type NativeSyntheticEvent, Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Icon, type IconName } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Screen } from "@/components/ui";
@@ -26,6 +26,17 @@ const PLATE = require("../assets/Purchase.webp");
  * The offer starts below it, so nothing is written across his arms.
  */
 const PLATE_HILL_TOP = 0.233;
+
+/**
+ * How far the page scrolls before the plate reaches its faded weight, and what
+ * that weight is — the same treatment HomeBackground gives the home plate, so
+ * a scroll behaves the same wherever art sits behind the content.
+ *
+ * It does not fade to nothing: a backdrop that vanishes reads as a loading
+ * glitch and leaves the rest of the page as flat canvas.
+ */
+const FADE_DISTANCE = 300;
+const FADED_OPACITY = 0.3;
 
 /**
  * What sits above the hero before it starts: the screen's own top padding, the
@@ -186,6 +197,19 @@ export function SubscriptionGate({ product = "friends" }: { product?: PaywallPro
    * hill's edge whatever the copy grows to.
    */
   const heroTopPad = Math.max(0, Math.round(plateHeight * PLATE_HILL_TOP) - (insets.top + HEADER_BAND)) + HERO_CLEARANCE;
+  // Fade the plate out of the way as the offer scrolls up over it. Driven off a
+  // plain listener rather than useNativeDriver, because opacity on an image
+  // behind a ScrollView is the same thing HomeBackground animates this way.
+  const scrollY = React.useRef(new Animated.Value(0)).current;
+  const handleScroll = React.useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => scrollY.setValue(event.nativeEvent.contentOffset.y),
+    [scrollY]
+  );
+  const plateOpacity = scrollY.interpolate({
+    inputRange: [0, FADE_DISTANCE],
+    outputRange: [1, FADED_OPACITY],
+    extrapolate: "clamp"
+  });
   const buttonFill = isDark ? palette.green : palette.greenDark;
   const [busy, setBusy] = React.useState(false);
   const [restoring, setRestoring] = React.useState(false);
@@ -258,9 +282,14 @@ export function SubscriptionGate({ product = "friends" }: { product?: PaywallPro
       backgroundVariant={null}
       backgroundNode={
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
-          <Image source={PLATE} style={{ position: "absolute", top: 0, width, height: plateHeight }} resizeMode="cover" />
+          <Animated.Image
+            source={PLATE}
+            style={{ position: "absolute", top: 0, width, height: plateHeight, opacity: plateOpacity }}
+            resizeMode="cover"
+          />
         </View>
       }
+      onScroll={handleScroll}
     >
       {/* The app's page bar, so this looks like a screen of Lumo rather than a
           modal that arrived from somewhere else. The back button is dropped

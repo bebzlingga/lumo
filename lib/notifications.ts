@@ -136,7 +136,7 @@ export async function scheduleHabitReminder(habit: Habit) {
     const seconds = habit.reminderIntervalUnit === "hours" ? value * 60 * 60 : value * 60;
     const id = await Notifications.scheduleNotificationAsync({
       content,
-      trigger: { seconds, repeats: true } as Notifications.NotificationTriggerInput
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds, repeats: true }
     });
 
     return [id];
@@ -155,7 +155,7 @@ export async function scheduleHabitReminder(habit: Habit) {
     if (!days) {
       const id = await Notifications.scheduleNotificationAsync({
         content,
-        trigger: { hour, minute, repeats: true } as Notifications.NotificationTriggerInput
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour, minute }
       });
       ids.push(id);
       continue;
@@ -164,7 +164,7 @@ export async function scheduleHabitReminder(habit: Habit) {
     for (const day of days) {
       const id = await Notifications.scheduleNotificationAsync({
         content,
-        trigger: { weekday: expoWeekday(day), hour, minute, repeats: true } as Notifications.NotificationTriggerInput
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.WEEKLY, weekday: expoWeekday(day), hour, minute }
       });
       ids.push(id);
     }
@@ -225,10 +225,10 @@ export async function syncCheckInReminders(enabled: CheckInSchedule, times?: Che
         identifier: checkInNotificationId(checkIn.key),
         content: { title: checkIn.title, body: checkIn.body },
         trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
           hour,
-          minute,
-          repeats: true
-        } as Notifications.NotificationTriggerInput
+          minute
+        }
       });
     }
   } catch {

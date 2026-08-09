@@ -3,12 +3,15 @@ import { TextStyle } from "react-native";
 /**
  * LUMO design tokens.
  *
- * Colour is light/dark only — there is no per-accent colour scheme. Every
- * surface pulls from `getPalette(isDark)`, so re-introducing extra schemes
- * later means adding one lookup here rather than touching call sites.
+ * Colour is a THEME (hue family) crossed with a MODE (light/dark). Every
+ * surface pulls from `getPalette(themeId, isDark)`, which is the one lookup the
+ * whole app goes through — adding a theme means adding an entry to `THEMES`
+ * below and touching no call sites.
  *
- * Palette values come from the LUMO brand spec: warm cream canvas, navy ink,
- * sage-green primary actions, golden highlights, and pastel accents.
+ * `cream` is the LUMO brand spec and the default: warm cream canvas, amber-brown
+ * ink, sage-green primary actions, golden highlights. Its two palettes are the
+ * original `lightPalette`/`darkPalette` verbatim, so an install that never opens
+ * the picker renders exactly as it did before themes existed.
  */
 
 // --- brand ramp (raw values; prefer the palette below at call sites) --------
@@ -140,6 +143,256 @@ export const darkPalette: LumoPalette = {
   shadow: "#000000"
 };
 
+// --- themes ----------------------------------------------------------------
+
+export type ThemeId = "cream" | "forest" | "ocean" | "sunset";
+
+export type ThemeDefinition = {
+  /** Shown in the picker. */
+  label: string;
+  light: LumoPalette;
+  dark: LumoPalette;
+  /**
+   * Three colours for the picker's swatch, darkest last. These are drawn from
+   * the LIGHT palette even in dark mode: the swatch names a hue family, and a
+   * chip that restyles itself with the mode stops being recognisable as the
+   * thing you picked.
+   */
+  swatch: [string, string, string];
+  /**
+   * How strongly the background plates show through, per mode.
+   *
+   * The eight plates in assets/bg/ are warm cream illustrations and are NOT
+   * re-tinted per theme — `LumoBackground` only varies their opacity. So the
+   * further a theme's canvas sits from cream, the further its art has to
+   * recede before the mismatch reads as a mistake rather than as texture.
+   * Cream keeps 1 (its art is at home); the cooler themes step down.
+   *
+   * Multiplied into the intensity `LumoBackground` already computes, so the
+   * per-screen `subtle`/`medium`/`full` ladder still applies on top.
+   */
+  plateOpacity: { light: number; dark: number };
+};
+
+/**
+ * Every theme carries all 25 palette tokens because `LumoPalette` is
+ * `typeof lightPalette` — a theme missing one fails to compile, which is how a
+ * new token stays impossible to forget.
+ *
+ * Contrast is not eyeballed: `constants/__tests__/theme.test.ts` asserts every
+ * theme × mode clears the floors cream already ships (ink 7:1 on canvas/card,
+ * subtle 4.5:1, accent labels 4.5:1). Change a value here and that test is what
+ * tells you whether it is still readable.
+ */
+export const THEMES: Record<ThemeId, ThemeDefinition> = {
+  cream: {
+    label: "Cream",
+    light: lightPalette,
+    dark: darkPalette,
+    swatch: [brand.goldSoft, brand.gold, brand.sageStrong],
+    plateOpacity: { light: 1, dark: 1 }
+  },
+
+  // Cool botanical green. Ink and primary are the same hue family, so the
+  // amber accent is doing all the warm work — which is why it stays close to
+  // cream's gold rather than going green too.
+  forest: {
+    label: "Forest",
+    light: {
+      canvas: "#F2F5EE",
+      surface: "#E8EDE1",
+      surfaceStrong: "#DCE3D2",
+      card: "#FAFCF7",
+      ink: "#23301C",
+      body: "#23301C",
+      muted: "#8A9682",
+      subtle: "#59654F",
+      hairline: "#CFD9C2",
+      hairlineStrong: "#9FAF8E",
+      green: "#5D9150",
+      greenActive: "#46743B",
+      greenDark: "#46743B",
+      greenSoft: "#E0EBD6",
+      chartTrack: "#CFD9C2",
+      chartPartial: "#E8A33D",
+      glow: "#E8A33D",
+      glowSoft: "#FBEBCF",
+      accent: "#E8A33D",
+      accentBorder: "#D08E28",
+      onAccent: "#23301C",
+      danger: "#D9614F",
+      dangerFill: "#A94636",
+      white: "#FFFFFF",
+      shadow: "#23301C"
+    },
+    dark: {
+      canvas: "#101A12",
+      surface: "#1B2A1E",
+      surfaceStrong: "#223526",
+      card: "#16231A",
+      ink: "#F2F7F0",
+      body: "#C2CFBE",
+      muted: "#8FA08C",
+      subtle: "#A6B5A2",
+      hairline: "#263A2A",
+      hairlineStrong: "#4E6B52",
+      green: "#7FB06E",
+      greenActive: "#9BCB88",
+      greenDark: "#9BCB88",
+      greenSoft: "#1E2E1C",
+      chartTrack: "#1B2A1E",
+      chartPartial: "#E8A33D",
+      glow: "#E8A33D",
+      glowSoft: "#33290F",
+      accent: "#E8A33D",
+      accentBorder: "#D08E28",
+      onAccent: "#23301C",
+      danger: "#EE8878",
+      // Dark canvas: a filled destructive button carries the deep ink as its
+      // label, so the fill stays bright rather than darkening. Same reasoning
+      // as cream's dark palette.
+      dangerFill: "#EE8878",
+      white: "#FFFFFF",
+      shadow: "#000000"
+    },
+    swatch: ["#E0EBD6", "#5D9150", "#23301C"],
+    plateOpacity: { light: 0.7, dark: 0.85 }
+  },
+
+  // Cool blue-teal. The furthest from cream, so its plates recede the most.
+  ocean: {
+    label: "Ocean",
+    light: {
+      canvas: "#F0F4F7",
+      surface: "#E5ECF1",
+      surfaceStrong: "#D6E1E9",
+      card: "#F9FCFD",
+      ink: "#16303D",
+      body: "#16303D",
+      muted: "#8496A0",
+      subtle: "#52646F",
+      hairline: "#C7D6DF",
+      hairlineStrong: "#94AAB8",
+      green: "#3E93A0",
+      greenActive: "#2C7280",
+      greenDark: "#2C7280",
+      greenSoft: "#D9EDF0",
+      chartTrack: "#C7D6DF",
+      chartPartial: "#E9A83C",
+      glow: "#E9A83C",
+      glowSoft: "#FBEDD1",
+      accent: "#E9A83C",
+      accentBorder: "#D0912A",
+      onAccent: "#16303D",
+      danger: "#DE6257",
+      dangerFill: "#AD4739",
+      white: "#FFFFFF",
+      shadow: "#16303D"
+    },
+    dark: {
+      canvas: "#0D1620",
+      surface: "#17242F",
+      surfaceStrong: "#1F2E3C",
+      card: "#121D28",
+      ink: "#F0F6FA",
+      body: "#BCC9D3",
+      muted: "#8A9AA8",
+      subtle: "#A2B1BD",
+      hairline: "#22323F",
+      hairlineStrong: "#4A6274",
+      green: "#58A9B6",
+      greenActive: "#76C4D0",
+      greenDark: "#76C4D0",
+      greenSoft: "#172E33",
+      chartTrack: "#17242F",
+      chartPartial: "#E9A83C",
+      glow: "#E9A83C",
+      glowSoft: "#322914",
+      accent: "#E9A83C",
+      accentBorder: "#D0912A",
+      onAccent: "#16303D",
+      danger: "#EF8B7E",
+      dangerFill: "#EF8B7E",
+      white: "#FFFFFF",
+      shadow: "#000000"
+    },
+    swatch: ["#D9EDF0", "#3E93A0", "#16303D"],
+    plateOpacity: { light: 0.6, dark: 0.8 }
+  },
+
+  // Warm rose and terracotta. Closest in warmth to cream, so its plates keep
+  // most of their weight.
+  sunset: {
+    label: "Sunset",
+    light: {
+      canvas: "#FBF2EE",
+      surface: "#F5E8E2",
+      surfaceStrong: "#EBD9D1",
+      card: "#FEF9F7",
+      ink: "#3F2029",
+      body: "#3F2029",
+      muted: "#A08C8F",
+      subtle: "#705A5E",
+      hairline: "#E8D0C6",
+      hairlineStrong: "#C0A79C",
+      green: "#C4674A",
+      greenActive: "#A44F35",
+      greenDark: "#A44F35",
+      greenSoft: "#FADFD4",
+      chartTrack: "#E8D0C6",
+      chartPartial: "#E2A32F",
+      glow: "#E2A32F",
+      glowSoft: "#FBEBCB",
+      accent: "#E2A32F",
+      accentBorder: "#C88C1F",
+      onAccent: "#3F2029",
+      danger: "#D6544F",
+      dangerFill: "#A83C37",
+      white: "#FFFFFF",
+      shadow: "#3F2029"
+    },
+    dark: {
+      canvas: "#1A1016",
+      surface: "#291A22",
+      surfaceStrong: "#33212B",
+      card: "#20141B",
+      ink: "#FAF2F4",
+      body: "#D0BEC4",
+      muted: "#A08E95",
+      subtle: "#B4A2A8",
+      hairline: "#2E1D26",
+      hairlineStrong: "#614350",
+      green: "#D9805F",
+      greenActive: "#EE9C79",
+      greenDark: "#EE9C79",
+      greenSoft: "#33201A",
+      chartTrack: "#291A22",
+      chartPartial: "#E2A32F",
+      glow: "#E2A32F",
+      glowSoft: "#382A12",
+      accent: "#E2A32F",
+      accentBorder: "#C88C1F",
+      onAccent: "#3F2029",
+      danger: "#EE8078",
+      dangerFill: "#EE8078",
+      white: "#FFFFFF",
+      shadow: "#000000"
+    },
+    swatch: ["#FADFD4", "#C4674A", "#3F2029"],
+    plateOpacity: { light: 0.85, dark: 0.9 }
+  }
+};
+
+/** Picker order. Cream leads because it is the default and the brand. */
+export const THEME_IDS = Object.keys(THEMES) as ThemeId[];
+
+export const DEFAULT_THEME_ID: ThemeId = "cream";
+
+/** Narrows anything stored (or imported from an older build) to a real theme. */
+export function normalizeThemeId(value: unknown): ThemeId {
+  return typeof value === "string" && value in THEMES ? (value as ThemeId) : DEFAULT_THEME_ID;
+}
+
 /**
  * Contrasting pop colour for "to do" badges and vote counts — deliberately not
  * the primary sage, so it reads as a distinct state rather than an action.
@@ -160,8 +413,22 @@ export const progressAccentText = "#141413";
 export const badgeAccent = "#D0405E";
 export const badgeAccentText = "#FFFFFF";
 
-export function getPalette(isDark: boolean): LumoPalette {
-  return isDark ? darkPalette : lightPalette;
+/**
+ * The app's single colour lookup. `themeId` is tolerant of anything stored —
+ * a theme removed in a later build resolves back to cream rather than crashing
+ * an install that had it selected.
+ */
+export function getPalette(themeId: ThemeId, isDark: boolean): LumoPalette {
+  const theme = THEMES[themeId] ?? THEMES[DEFAULT_THEME_ID];
+
+  return isDark ? theme.dark : theme.light;
+}
+
+/** How far the background plates recede for this theme and mode. See `plateOpacity`. */
+export function themePlateOpacity(themeId: ThemeId, isDark: boolean): number {
+  const theme = THEMES[themeId] ?? THEMES[DEFAULT_THEME_ID];
+
+  return isDark ? theme.plateOpacity.dark : theme.plateOpacity.light;
 }
 
 export const spacing = {

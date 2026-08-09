@@ -84,11 +84,19 @@ export function reflectionPromptFor(dateKey: string) {
   return REFLECTION_PROMPTS[Math.abs(dayIndex(dateKey) + 3) % REFLECTION_PROMPTS.length];
 }
 
-/** "Good morning" / "Good afternoon" / "Good evening" for the given hour. */
+/**
+ * "Good morning" / "Good afternoon" / "Good evening" for the given hour, which
+ * callers read from `new Date().getHours()` — the device's own timezone.
+ *
+ * Evening opens at 18:00 to match `homePeriodForHour`, which switches to the
+ * evening plate on the same hour. These were 17 and 18: for that hour the
+ * greeting read "Good evening" over the afternoon scene, with a tagline still
+ * written for the afternoon.
+ */
 export function greetingFor(hour: number) {
   if (hour < 12) {
     return "Good morning";
   }
 
-  return hour < 17 ? "Good afternoon" : "Good evening";
+  return hour < 18 ? "Good afternoon" : "Good evening";
 }

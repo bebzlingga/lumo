@@ -48,6 +48,23 @@ const HEADER_FILL_ALPHA = 'A6'
  * trace of where it goes. It survives from when these were picture tiles; the
  * list treatment keeps the colour and drops the pictures.
  */
+/**
+ * One hue per Explore destination, sampled from that screen's own art.
+ *
+ * Deliberately NOT palette tokens and NOT theme-dependent — the same call
+ * `badgeAccent` makes. These are wayfinding: the gold tile means Badges the way
+ * a sign's colour means a line on a map, and a row that changed hue with the
+ * theme would stop being the thing you learned to reach for. `ResourceRow`
+ * walks each one to 3:1 against the current card, so they stay legible in every
+ * theme without giving up the identity.
+ */
+const EXPLORE_ACCENT = {
+	tips: '#74BC97',
+	faqs: '#B390F3',
+	badges: '#FAD686',
+	featureBoard: '#AE8FFB',
+} as const
+
 function ResourceRow({
 	icon,
 	label,
@@ -293,11 +310,11 @@ export default function TodayScreen() {
 				    screen; as a list they sit where they belong, under the day's
 				    actual work. */}
 				<Card style={styles.resourceCard}>
-					<ResourceRow accent='#74BC97' icon='sparkle' label='Habit Journey' description='Habit science, made simple' divided={false} onPress={() => router.push('/tips')} />
-					<ResourceRow accent='#B390F3' icon='note' label='FAQs' description='Quick answers about Lumo' divided onPress={() => router.push('/faqs')} />
-					<ResourceRow accent='#FAD686' icon='award' label='Badges' description='Celebrate your milestones' divided onPress={() => router.push('/badges')} />
+					<ResourceRow accent={EXPLORE_ACCENT.tips} icon='sparkle' label='Habit Journey' description='Habit science, made simple' divided={false} onPress={() => router.push('/tips')} />
+					<ResourceRow accent={EXPLORE_ACCENT.faqs} icon='note' label='FAQs' description='Quick answers about Lumo' divided onPress={() => router.push('/faqs')} />
+					<ResourceRow accent={EXPLORE_ACCENT.badges} icon='award' label='Badges' description='Celebrate your milestones' divided onPress={() => router.push('/badges')} />
 					{/* Feature Board entry hidden for now — restore when the feature ships.
-					<ResourceRow accent='#AE8FFB' icon='star' label="What's next" description='Vote on what we build' divided onPress={() => router.push('/feature-soon')} />
+					<ResourceRow accent={EXPLORE_ACCENT.featureBoard} icon='star' label="What's next" description='Vote on what we build' divided onPress={() => router.push('/feature-soon')} />
 					*/}
 				</Card>
 			</View>

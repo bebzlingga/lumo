@@ -128,7 +128,6 @@ function WidgetHabitRow({
   dateKey,
   disabledActions = false,
   inGroup = false,
-  last = false,
   onHoldEnd,
   onHoldStart,
   holdProgress
@@ -137,8 +136,6 @@ function WidgetHabitRow({
   dateKey: string;
   disabledActions?: boolean;
   inGroup?: boolean;
-  /** Drops this row's bottom padding — the card's own already closes the list. */
-  last?: boolean;
   onHoldEnd?: () => void;
   onHoldStart?: () => void;
   /** Drives the hold-to-undo progress ring on this row's icon (0 -> 1). */
@@ -327,7 +324,7 @@ function WidgetHabitRow({
       onPress={handleRowPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      style={[styles.widgetRow, last && styles.widgetRowLast]}
+      style={styles.widgetRow}
     >
       {/* Rounded square, not a disc — it reads as a tile of the habit's colour
           beside the round check target on the other end of the row. */}
@@ -491,7 +488,6 @@ export function QuickDoneWidgets({ habits, dateKey = toDateKey(), disabledAction
                   dateKey={dateKey}
                   disabledActions={disabledActions}
                   inGroup={groupHabitIds?.has(habit.id)}
-                  last={index === habits.length - 1}
                   onHoldEnd={onHoldEnd}
                   onHoldStart={onHoldStart}
                   holdProgress={holdProgress}
@@ -514,7 +510,16 @@ const styles = StyleSheet.create({
   // card, so the card only insets horizontally.
   listCard: {
     paddingHorizontal: spacing.ml,
-    paddingVertical: spacing.md,
+    paddingTop: spacing.md,
+    // The last row brings its own 12pt, so this adds 12 on top of it — landing
+    // on 24 under the final habit against the 16 above the header. The asymmetry
+    // is deliberate: the list ends here, and a flush bottom edge made the last
+    // habit look clipped against the card boundary.
+    //
+    // Taken off the card rather than off that row, because zeroing or growing
+    // one row's padding makes its icon sit off-centre against every other
+    // row's 12/12.
+    paddingBottom: spacing.sm,
     gap: spacing.xs
   },
   listHeader: {
@@ -561,12 +566,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
     paddingVertical: spacing.sm
-  },
-  // The card's own paddingVertical already closes the list, so the last row's
-  // bottom padding was stacking on top of it — 12 + 16 under the final habit
-  // against 12 above the first one.
-  widgetRowLast: {
-    paddingBottom: 0
   },
   widgetIcon: {
     width: 46,

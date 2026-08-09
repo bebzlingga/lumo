@@ -19,7 +19,8 @@
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.lumo.habits"
-        ]
+        ],
+        "aps-environment": "production"
       }
     },
     "android": {
@@ -47,7 +48,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Lumo needs photo access to attach images to your journal."
+          "photosPermission": "Lumo needs photo access to attach images to your journal.",
+          "cameraPermission": false
         }
       ],
       [

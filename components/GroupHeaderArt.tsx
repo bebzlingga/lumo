@@ -2,10 +2,20 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Stop } from "react-native-svg";
 
-// Theme-aware palette — a soft green wash plus a friendly cast of avatar
-// "bubbles", a connecting garland and hearts. Bottom fades out so the roll-call
-// card overlapping the lower half blends cleanly.
-const THEMES = {
+/**
+ * This illustration's own colours — a soft green wash plus a friendly cast of
+ * avatar "bubbles", a connecting garland and hearts. Bottom fades out so the
+ * roll-call card overlapping the lower half blends cleanly.
+ *
+ * Deliberately NOT the app's `THEMES` from constants/theme.ts, and not named
+ * that either: these are composed values for one drawing — the pink cheeks
+ * against the green wash, the highlight opacity — and deriving them from
+ * palette tokens would produce a worse picture than the one that is here. It
+ * varies by light/dark only, like every other SVG scene in the app.
+ *
+ * A group header drawn per theme is art work, not a refactor.
+ */
+const ART = {
   light: {
     fadeTop: "#D2EEDC",
     fadeMid: "#E7F5ED",
@@ -94,7 +104,7 @@ export function GroupHeaderArt({ isDark, width, height }: { isDark: boolean; wid
   const [measured, setMeasured] = React.useState({ w: 0, h: 0 });
   const w = width ?? measured.w;
   const h = height ?? measured.h;
-  const c = isDark ? THEMES.dark : THEMES.light;
+  const c = isDark ? ART.dark : ART.light;
   const centers = BUBBLES.map((b) => ({ x: b.x * w, y: b.y * h }));
 
   return (

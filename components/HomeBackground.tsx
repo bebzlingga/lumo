@@ -7,6 +7,7 @@ import {
 	homePeriodForHour,
 	type HomePeriod,
 } from '@/constants/backgroundAssets'
+import { themePlateOpacity } from '@/constants/theme'
 import { useLumo } from '@/context/LumoContext'
 
 /**
@@ -52,12 +53,16 @@ const FADED_OPACITY = 0.3
 const FORCED_PERIOD: HomePeriod | null = null
 
 export function HomeBackground({ period, scrollY }: { period: HomePeriod; scrollY?: Animated.Value }) {
-	const { isDark } = useLumo()
+	const { isDark, themeId } = useLumo()
 	const { width } = useWindowDimensions()
 	const fit = HOME_PLATE_FIT[period]
 	const plateWidth = width * fit.scale
 	const plateHeight = plateWidth / HOME_BACKGROUND_ASPECT
-	const restOpacity = isDark ? PLATE_OPACITY.dark : PLATE_OPACITY.light
+	// These scenes are drawn on cream, and here the plate IS the canvas rather
+	// than a wash behind it — so a theme with a different canvas needs them held
+	// back further than any other screen does. Same source of truth as
+	// LumoBackground, so the two never drift.
+	const restOpacity = (isDark ? PLATE_OPACITY.dark : PLATE_OPACITY.light) * themePlateOpacity(themeId, isDark)
 	// Scaled FROM the resting weight rather than toward a fixed number, so dark
 	// mode — already at 0.16 — recedes by the same proportion instead of getting
 	// brighter on the way down.
@@ -72,7 +77,7 @@ export function HomeBackground({ period, scrollY }: { period: HomePeriod; scroll
 	return (
 		<View style={StyleSheet.absoluteFill} pointerEvents='none'>
 			<Animated.Image
-				source={homeBackgroundAsset(period)}
+				source={homeBackgroundAsset(period, themeId)}
 				style={{
 					position: 'absolute',
 					top: -plateHeight * fit.shiftY,

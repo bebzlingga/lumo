@@ -1,7 +1,8 @@
 import React from 'react'
 import { Image, StyleSheet, View, useWindowDimensions } from 'react-native'
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg'
-import { BACKGROUND_ASPECT, backgroundAsset, type BackgroundVariant } from '@/constants/backgroundAssets'
+import { BACKGROUND_ASPECT, backgroundAsset, hasThemeArt, type BackgroundVariant } from '@/constants/backgroundAssets'
+import { themePlateOpacity } from '@/constants/theme'
 import { useLumo } from '@/context/LumoContext'
 
 /**
@@ -47,17 +48,21 @@ export function LumoBackground({
 	variant: BackgroundVariant
 	intensity?: BackgroundIntensity
 }) {
-	const { isDark, palette } = useLumo()
+	const { isDark, palette, themeId } = useLumo()
 	const { width } = useWindowDimensions()
+	// The plates are drawn for the cream canvas, so a theme whose canvas sits
+	// further away holds them further back — unless it ships its own art for this
+	// variant, in which case the plate belongs to the theme and keeps full weight.
+	const themeFade = hasThemeArt(variant, themeId) ? 1 : themePlateOpacity(themeId, isDark)
 	// Dark mode: the plates are pastel-light, so they're dimmed hard to keep the
 	// deep-navy canvas dominant.
-	const opacity = INTENSITY_OPACITY[intensity] * (isDark ? 0.35 : 1)
+	const opacity = INTENSITY_OPACITY[intensity] * (isDark ? 0.35 : 1) * themeFade
 	const plateHeight = width / BACKGROUND_ASPECT
 
 	return (
 		<View style={StyleSheet.absoluteFill} pointerEvents='none'>
 			<Image
-				source={backgroundAsset(variant)}
+				source={backgroundAsset(variant, themeId)}
 				style={{
 					position: 'absolute',
 					bottom: 0,

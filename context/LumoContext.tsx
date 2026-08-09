@@ -4,8 +4,8 @@ import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, useColorScheme } from "react-native";
-import { getPalette, LumoPalette } from "@/constants/theme";
+import { Alert, AppState, useColorScheme } from "react-native";
+import { DEFAULT_THEME_ID, getPalette, LumoPalette, normalizeThemeId, type ThemeId } from "@/constants/theme";
 import { toDateKey } from "@/lib/date";
 import { bestActivityStreak, completionCount } from "@/lib/habitMath";
 import {
@@ -44,6 +44,10 @@ import { AppSettings, BackupFrequency, CompletionEntry, FeatureRequest, Habit, H
 // Persisted local state key. Do not change — it would orphan existing
 // installs' local data.
 const STORAGE_KEY = "@lumo/state/v1";
+// Where an unreadable blob is copied before anything else touches storage, so a
+// truncated or partially-written state can still be recovered by hand. Nothing
+// reads this back automatically — it exists so a bad read is not a lost account.
+const QUARANTINE_KEY = "@lumo/state/v1/unreadable";
 // What a free account can keep. Both caps are lifted by the one-off unlimited
 // unlock (₱149) — NOT by the Friends subscription, which buys a different
 // thing entirely.
@@ -150,6 +154,9 @@ type LumoContextValue = StoredState & {
   setEmail: (value: string) => void;
   setAvatar: (config: AvatarConfig) => void;
   setThemeMode: (mode: AppSettings["themeMode"]) => void;
+  /** Which colour family the app wears. Independent of light/dark. */
+  themeId: ThemeId;
+  setThemeId: (id: ThemeId) => void;
   setNotificationsEnabled: (enabled: boolean) => Promise<void>;
   /** Turn one of Lumo's daily nudges on or off, rescheduling it immediately. */
   setCheckInEnabled: (key: CheckInKey, enabled: boolean) => Promise<void>;
@@ -188,6 +195,7 @@ const defaultSettings: AppSettings = {
   // Fresh installs start light (warm cream + navy + sage, the LUMO brand);
   // users can switch to dark or follow the system in Settings.
   themeMode: "light",
+  themeId: DEFAULT_THEME_ID,
   notificationStatus: "unknown",
   notificationsEnabled: true,
   autoBackupEnabled: false,
@@ -279,9 +287,18 @@ function normalizeState(parsed: StoredState): StoredState {
   // Until onboarding completes the user never chose a theme — any stored
   // values are stale defaults, so keep pre-onboarding installs on the current
   // default look (light black).
+  //
+  // `themeId` deliberately does NOT join this reset. `themeMode`'s stored value
+  // can be a stale default from a build whose default differed; `themeId` has
+  // no such history, so resetting it could only ever throw away a deliberate
+  // choice — including one made from a future theme step in onboarding.
   if (!(parsed.hasOnboarded ?? false)) {
     settings.themeMode = defaultSettings.themeMode;
   }
+
+  // Falls back to cream for anything unrecognised: a blob written by a build
+  // with a theme this one no longer has must still open.
+  settings.themeId = normalizeThemeId(settings.themeId);
 
   // Seed the high-water mark from the habits being loaded. This is what
   // migrates installs saved before the field existed, and it is also the floor
@@ -464,29 +481,75 @@ export function LumoProvider({ children }: { children: ReactNode }) {
   stateRef.current = state;
 
   const isDark = state.settings.themeMode === "dark" || (state.settings.themeMode === "system" && systemScheme === "dark");
-  const palette = useMemo(() => getPalette(isDark), [isDark]);
+  const themeId = state.settings.themeId ?? DEFAULT_THEME_ID;
+  const palette = useMemo(() => getPalette(themeId, isDark), [themeId, isDark]);
+
+  /**
+   * Hydration has three outcomes, and only one of them may be written back.
+   *
+   * "loaded" covers both a good read and a fresh install (nothing stored yet) —
+   * the in-memory state is the truth, so persisting it is correct.
+   *
+   * "blocked" is a stored blob we could not read: the bytes are still on disk
+   * and may well be recoverable by hand, so writing over them is the one thing
+   * that turns a bad read into permanent loss. Persisting stays off for the
+   * whole session; the user is told, and the unreadable bytes are copied aside
+   * before anything else touches storage.
+   */
+  const [hydration, setHydration] = useState<"pending" | "loaded" | "blocked">("pending");
 
   useEffect(() => {
     async function hydrate() {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      let raw: string | null = null;
 
-      if (raw) {
-        setState(normalizeState(JSON.parse(raw) as StoredState));
+      try {
+        raw = await AsyncStorage.getItem(STORAGE_KEY);
+      } catch {
+        // The read itself failed, so we know nothing about what is on disk.
+        // Assume there is something worth keeping.
+        return "blocked" as const;
       }
 
-      setIsReady(true);
+      if (!raw) {
+        return "loaded" as const;
+      }
+
+      try {
+        setState(normalizeState(JSON.parse(raw) as StoredState));
+        return "loaded" as const;
+      } catch {
+        // Keep the unreadable bytes under a key nothing else writes, so a
+        // truncated-but-mostly-intact blob can still be recovered.
+        await AsyncStorage.setItem(QUARANTINE_KEY, raw).catch(() => undefined);
+        return "blocked" as const;
+      }
     }
 
-    hydrate().catch(() => setIsReady(true));
+    hydrate()
+      .catch(() => "blocked" as const)
+      .then((outcome) => {
+        setHydration(outcome);
+        setIsReady(true);
+
+        if (outcome === "blocked") {
+          Alert.alert(
+            "Couldn't open your Lumo data",
+            "Your saved habits and journals could not be read, so Lumo has started empty. Nothing has been deleted — a copy of the unreadable data is kept on this device. To avoid overwriting it, changes made now will not be saved. Reopening the app may fix it; if it doesn't, please get in touch before reinstalling."
+          );
+        }
+      });
   }, []);
 
   useEffect(() => {
-    if (!isReady) {
+    // Never `hydration !== "loaded"` — see the note on the state above. A
+    // blocked read must not be written over, and "pending" would race the
+    // hydrate itself.
+    if (hydration !== "loaded") {
       return;
     }
 
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => undefined);
-  }, [isReady, state]);
+  }, [hydration, state]);
 
   // Raise the badge high-water mark whenever a streak beats it. Keyed on the
   // habits themselves so a check-in moves it the moment it lands, and it only
@@ -555,7 +618,10 @@ export function LumoProvider({ children }: { children: ReactNode }) {
     // don't re-run the backup check. The latest state is read through stateRef.
     const snapshot = stateRef.current;
 
-    if (!isReady || !shouldRunScheduledBackup(snapshot.settings) || backupInFlightRef.current) {
+    // Gated on `hydration`, not `isReady`: after an unreadable read the snapshot
+    // is the empty default, and backing that up would bury the real backups
+    // under timestamped empties.
+    if (hydration !== "loaded" || !shouldRunScheduledBackup(snapshot.settings) || backupInFlightRef.current) {
       return;
     }
 
@@ -572,7 +638,7 @@ export function LumoProvider({ children }: { children: ReactNode }) {
       .finally(() => {
         backupInFlightRef.current = false;
       });
-  }, [backupTick, isReady]);
+  }, [backupTick, hydration]);
 
   useEffect(() => {
     if (!isReady) {
@@ -780,6 +846,7 @@ export function LumoProvider({ children }: { children: ReactNode }) {
       isReady,
       isDark,
       palette,
+      themeId,
       lastMessage,
       isPro,
       isUnlimited,
@@ -905,6 +972,12 @@ export function LumoProvider({ children }: { children: ReactNode }) {
         setState((current) => ({
           ...current,
           settings: { ...current.settings, themeMode: mode }
+        }));
+      },
+      setThemeId(id) {
+        setState((current) => ({
+          ...current,
+          settings: { ...current.settings, themeId: id }
         }));
       },
       async setNotificationsEnabled(enabled) {
@@ -1258,7 +1331,7 @@ export function LumoProvider({ children }: { children: ReactNode }) {
         });
       }
     };
-  }, [isDark, isReady, lastMessage, palette, state]);
+  }, [isDark, isReady, lastMessage, palette, themeId, state]);
 
   return <LumoContext.Provider value={value}>{children}</LumoContext.Provider>;
 }

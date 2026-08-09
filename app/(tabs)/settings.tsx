@@ -12,11 +12,12 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, LoadingState, LumoInput, Screen } from "@/components/ui";
 import { WheelTimePicker } from "@/components/WheelTimePicker";
 import { CHECK_INS, checkInTimeFor, checkInTimeLabel, type CheckIn } from "@/constants/checkIns";
-import { fontFamilies, layout, radius, spacing } from "@/constants/theme";
+import { fontFamilies, layout, radius, spacing, THEME_IDS, THEMES, type ThemeId } from "@/constants/theme";
+import { SegmentedControl } from "@/components/controls";
 import { useLumo } from "@/context/LumoContext";
 import { alpha, readableOn } from "@/lib/color";
 import { PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legal";
-import { BackupFrequency, TextSize } from "@/types/habit";
+import { BackupFrequency, TextSize, ThemeMode } from "@/types/habit";
 import { Pressable } from "@/components/Pressable"
 
 const LUMO_FACEBOOK_URL = "https://www.facebook.com/lumo.habitcompanion";
@@ -30,6 +31,16 @@ const backupFrequencyOptions: { label: string; value: BackupFrequency }[] = [
   { label: "Daily", value: "daily" },
   { label: "Weekly", value: "weekly" },
   { label: "Monthly", value: "monthly" }
+];
+/**
+ * Light and dark are the explicit choices; "System" follows the device. Ordered
+ * light → dark → system so the two concrete options sit together and the
+ * deferring one closes the row.
+ */
+const themeModeOptions: { label: string; value: ThemeMode }[] = [
+  { label: "Light", value: "light" },
+  { label: "Dark", value: "dark" },
+  { label: "System", value: "system" }
 ];
 
 function timeAgo(iso: string) {
@@ -172,6 +183,53 @@ function SettingsSwitch({
   );
 }
 
+/**
+ * One theme in the picker: its three brand colours stacked into a tile, named
+ * underneath.
+ *
+ * Selection is a ring around the tile rather than a tick inside it — the same
+ * call the habit-colour picker makes, and for the same reason: a glyph laid
+ * over the swatch hides the one thing the control exists to show.
+ *
+ * The swatch colours come from the theme's LIGHT palette in both modes. A chip
+ * that restyles itself with the mode stops being recognisable as the thing you
+ * picked, and the point here is naming a hue family, not previewing a surface.
+ */
+function ThemeSwatch({ themeId, selected, onPress }: { themeId: ThemeId; selected: boolean; onPress: () => void }) {
+  const { palette } = useLumo();
+  const theme = THEMES[themeId];
+
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={`${theme.label} theme`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.themeSwatch, { opacity: pressed ? 0.76 : 1 }]}
+    >
+      <View
+        style={[
+          styles.themeTile,
+          {
+            borderColor: selected ? palette.greenDark : palette.hairline,
+            // 2pt when selected so the ring reads at a glance; the hairline
+            // resting state keeps the tiles the same size either way, so
+            // nothing shifts when the selection moves.
+            borderWidth: selected ? 2 : StyleSheet.hairlineWidth
+          }
+        ]}
+      >
+        {theme.swatch.map((color, index) => (
+          <View key={color} style={[styles.themeBand, { backgroundColor: color }, index === 0 && styles.themeBandFirst]} />
+        ))}
+      </View>
+      <AppText variant="caption" color={selected ? palette.ink : palette.subtle} numberOfLines={1}>
+        {theme.label}
+      </AppText>
+    </Pressable>
+  );
+}
+
 export default function SettingsScreen() {
   const router = useRouter();
   const {
@@ -182,7 +240,9 @@ export default function SettingsScreen() {
     deletedHabits,
     isDark,
     avatar,
+    themeId,
     setNickname,
+    setThemeId,
     setThemeMode,
     setNotificationsEnabled,
     setCheckInEnabled,
@@ -367,15 +427,44 @@ export default function SettingsScreen() {
         />
       </View>
 
+      {/* Appearance, on its own card and above notifications: it is the setting
+          people come here to change, and it is the only one whose effect is
+          visible while you are still looking at it.
+
+          Not a SettingsRow — a swatch strip and a three-way control both want
+          the full width, and squeezing either into a row's trailing slot is
+          what makes settings screens feel cramped. */}
       <SettingsGroup>
-        {/* Dark mode hidden for now — restore when the dark palette ships.
-        <SettingsRow
-          icon={isDark ? "moon" : "sun"}
-          title="Dark mode"
-          body="Use the warmer low-light palette."
-          right={<SettingsSwitch checked={isDark} accessibilityLabel="Dark mode" onPress={() => setThemeMode(isDark ? "light" : "dark")} />}
-        />
-        */}
+        <View style={styles.appearanceBlock}>
+          <View style={styles.appearanceLabel}>
+            <AppText color={palette.ink} style={styles.appearanceTitle}>
+              Theme
+            </AppText>
+            <AppText variant="bodySmall" color={palette.subtle}>
+              The colour Lumo wears.
+            </AppText>
+          </View>
+          {/* radiogroup, so a screen reader announces this as one control with
+              four choices rather than four unrelated buttons. */}
+          <View accessibilityRole="radiogroup" style={styles.themeRow}>
+            {THEME_IDS.map((id) => (
+              <ThemeSwatch key={id} themeId={id} selected={id === themeId} onPress={() => setThemeId(id)} />
+            ))}
+          </View>
+
+          <View style={styles.appearanceLabel}>
+            <AppText color={palette.ink} style={styles.appearanceTitle}>
+              Appearance
+            </AppText>
+            <AppText variant="bodySmall" color={palette.subtle}>
+              Light and dark are both available in every theme.
+            </AppText>
+          </View>
+          <SegmentedControl options={themeModeOptions} value={settings.themeMode} onChange={setThemeMode} />
+        </View>
+      </SettingsGroup>
+
+      <SettingsGroup>
         <SettingsRow
           icon="notifications"
           title="Notifications"
@@ -635,6 +724,48 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     fontFamily: fontFamilies.lexendSemiBold,
     fontSize: 15
+  },
+  // The card's vertical inset normally comes from its rows; this block has no
+  // rows, so it brings its own to land on the same spacing.md edge.
+  appearanceBlock: {
+    paddingVertical: spacing.md,
+    gap: spacing.sm
+  },
+  appearanceLabel: {
+    gap: 2
+  },
+  appearanceTitle: {
+    fontFamily: fontFamilies.lexendSemiBold,
+    fontSize: 15
+  },
+  themeRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    // Trailing space before the next label, on top of the block's own gap —
+    // the swatches are the loudest thing on the card and need room to breathe.
+    marginBottom: spacing.xs
+  },
+  themeSwatch: {
+    flex: 1,
+    alignItems: "center",
+    gap: spacing.xs
+  },
+  themeTile: {
+    width: "100%",
+    height: 48,
+    borderRadius: radius.lg,
+    // The bands are square-cornered rectangles clipped by the tile's radius,
+    // which is what gives the stack one continuous rounded edge.
+    overflow: "hidden",
+    flexDirection: "column"
+  },
+  themeBand: {
+    flex: 1
+  },
+  // The lightest band takes the most room, so a tile reads as "a light surface
+  // with two accents" — which is what the theme actually looks like in use.
+  themeBandFirst: {
+    flex: 2
   },
   group: {
     // Vertical inset comes from the rows themselves, so the first and last row

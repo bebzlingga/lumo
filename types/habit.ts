@@ -161,6 +161,13 @@ export type TextSize = "default" | "large" | "larger";
 
 export type AppSettings = {
   themeMode: ThemeMode;
+  /**
+   * Which colour family the app wears. Orthogonal to `themeMode`: the theme
+   * picks the hue, the mode picks light or dark within it. Typed as the string
+   * union from constants/theme.ts rather than imported, so the type layer stays
+   * free of a dependency on the token file.
+   */
+  themeId: "cream" | "forest" | "ocean" | "sunset";
   /** Points added to every type and icon size. See TEXT_SIZE_BUMP. */
   textSize: TextSize;
   notificationStatus: "unknown" | "granted" | "denied" | "undetermined";

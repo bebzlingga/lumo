@@ -7,7 +7,7 @@ import { Icon } from "@/components/Icon";
 import { AppText, LoadingState, Screen } from "@/components/ui";
 import { DailyReflectionCard } from "@/components/DailyReflectionCard";
 import { sceneAsset } from "@/constants/mascotAssets";
-import { brand, control, fontFamilies, layout, lightPalette, radius, spacing } from "@/constants/theme";
+import { control, fontFamilies, layout, radius, spacing, themePlateOpacity } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { useTabBarVisibility } from "@/context/TabBarVisibility";
 import { alpha } from "@/lib/color";
@@ -249,14 +249,27 @@ export default function JournalScreen() {
 }
 
 /**
- * Today's blank page, as a full-screen scene. The art carries its own cream
- * canvas, so the copy on top uses fixed brand ink rather than palette colours —
- * dark mode's near-white text would vanish against it.
+ * Today's blank page, as a full-screen scene.
+ *
+ * This used to pin itself to cream ink on a cream ground, because the art
+ * carries its own cream canvas and dark mode's near-white text vanished against
+ * it. That fixed the text at the cost of the screen: a dark-mode user got one
+ * blazing cream page in an otherwise dark app, and a themed user got a page in
+ * somebody else's colours.
+ *
+ * Now the ground and copy follow the palette, and the ART is what gives way —
+ * faded by the same per-theme factor the backdrops use, so it reads as texture
+ * under the copy rather than fighting it. Cream keeps it at full strength,
+ * which is the look this screen was drawn for.
  */
 function TodayEmptyState({ onWrite, onBrowse }: { onWrite: () => void; onBrowse: () => void }) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const scene = sceneAsset("journalToday");
+  const { isDark, palette, themeId } = useLumo();
+  // Dark mode dims harder than any theme does, for the same reason the plates
+  // do: the art is warm and light, and the canvas behind it is not.
+  const artOpacity = themePlateOpacity(themeId, isDark) * (isDark ? 0.22 : 1);
   // Natural proportions at a chosen width, rather than blown up to fill a
   // screen that is taller than the art is — that coupled size to position.
   const artWidth = window.width * SCENE_SCALE;
@@ -270,15 +283,21 @@ function TodayEmptyState({ onWrite, onBrowse }: { onWrite: () => void; onBrowse:
   const bottomClearance = insets.bottom + spacing.md;
 
   return (
-    <Screen scroll={false} contentStyle={styles.sceneContent} edges={[]} backgroundVariant={null} background={brand.cream}>
+    <Screen scroll={false} contentStyle={styles.sceneContent} edges={[]} backgroundVariant={null} background={palette.canvas}>
       {/* Sized explicitly — left to `absoluteFill` the art lays out at its
           intrinsic 941×1672 and spills off the right of the screen. */}
-      <Image source={scene.source} style={[styles.sceneArt, { top: SCENE_TOP, left: artLeft, width: artWidth, height: artHeight }]} resizeMode="cover" />
+      <Image
+        source={scene.source}
+        style={[styles.sceneArt, { top: SCENE_TOP, left: artLeft, width: artWidth, height: artHeight, opacity: artOpacity }]}
+        resizeMode="cover"
+      />
       <Svg width={window.width} height={SCENE_FADE} style={[styles.sceneArt, { top: artBottom - SCENE_FADE }]} pointerEvents="none">
         <Defs>
+          {/* Fades the art's bottom edge into whatever the canvas now is, so the
+              illustration ends without a seam in every theme. */}
           <LinearGradient id="journalSceneFade" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={brand.cream} stopOpacity="0" />
-            <Stop offset="1" stopColor={brand.cream} stopOpacity="1" />
+            <Stop offset="0" stopColor={palette.canvas} stopOpacity="0" />
+            <Stop offset="1" stopColor={palette.canvas} stopOpacity="1" />
           </LinearGradient>
         </Defs>
         <Rect x="0" y="0" width={window.width} height={SCENE_FADE} fill="url(#journalSceneFade)" />
@@ -286,29 +305,32 @@ function TodayEmptyState({ onWrite, onBrowse }: { onWrite: () => void; onBrowse:
 
       <View style={[styles.sceneCopy, { paddingBottom: bottomClearance }]}>
         {/* Broken by hand so the second half always lands on its own line. */}
-        <AppText color={brand.navy} style={styles.sceneTitle}>
+        <AppText color={palette.ink} style={styles.sceneTitle}>
           {"Let’s keep a little\npiece of today."}
         </AppText>
-        <AppText variant="bodySmall" color={brand.slate} style={styles.sceneBody}>
+        <AppText variant="bodySmall" color={palette.subtle} style={styles.sceneBody}>
           Even one small thought is worth remembering. A line about how today went is enough — and months from now it will be the
           only record of what this week actually felt like.
         </AppText>
 
         <View style={styles.sceneDivider}>
-          <View style={styles.sceneDividerRule} />
-          <Icon name="heart" size={18} color={brand.gold} weight="fill" />
-          <View style={styles.sceneDividerRule} />
+          {/* Tinted inline rather than in the stylesheet — these follow the
+              theme, and a StyleSheet entry can only hold a fixed colour. */}
+          <View style={[styles.sceneDividerRule, { backgroundColor: palette.glowSoft }]} />
+          <Icon name="heart" size={18} color={palette.glow} weight="fill" />
+          <View style={[styles.sceneDividerRule, { backgroundColor: palette.glowSoft }]} />
         </View>
 
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Write today's entry"
           onPress={onWrite}
-          style={({ pressed }) => [styles.sceneCta, styles.sceneCtaLead, { backgroundColor: brand.sageStrong, opacity: pressed ? 0.88 : 1 }]}
+          style={({ pressed }) => [styles.sceneCta, styles.sceneCtaLead, { backgroundColor: palette.greenActive, opacity: pressed ? 0.88 : 1 }]}
         >
-          {/* The light theme's primary button, spelled out in brand tokens: the
-              scene is always cream, so it can't follow the dark palette. */}
-          <AppText variant="button" color={lightPalette.white}>
+          {/* `white`, not `ink`: this is a filled primary button, and its label
+              has to clear the fill in every theme — which the palette's own
+              onAccent pairing does not cover, since that one is for the gold. */}
+          <AppText variant="button" color={palette.white}>
             Write Your Journal Today
           </AppText>
         </Pressable>
@@ -322,7 +344,7 @@ function TodayEmptyState({ onWrite, onBrowse }: { onWrite: () => void; onBrowse:
           onPress={onBrowse}
           style={({ pressed }) => [styles.sceneCta, { opacity: pressed ? 0.6 : 1 }]}
         >
-          <AppText variant="button" color={brand.slate}>
+          <AppText variant="button" color={palette.subtle}>
             View Entries
           </AppText>
         </Pressable>
@@ -418,8 +440,7 @@ const styles = StyleSheet.create({
   sceneDividerRule: {
     width: 24,
     height: 2,
-    borderRadius: 1,
-    backgroundColor: brand.goldSoft
+    borderRadius: 1
   },
   // The column is bottom-anchored, so the space before the buttons is what
   // lifts the headline and its line away from them.
