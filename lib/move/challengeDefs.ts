@@ -88,6 +88,18 @@ export type MoveMilestoneFamily = {
   subtitle: string;
   distanceM: number;
   unlock: MoveUnlockRule;
+  /**
+   * Whether this rung needs a subscription.
+   *
+   * The first three are free and always will be: somebody has to be able to
+   * earn a badge before being asked to pay for the next one, and a ladder whose
+   * bottom rung is behind a paywall is not a ladder.
+   *
+   * Enforced in three places, for the same reason the single-active rule is —
+   * the card says it, the milestone screen refuses, and the database has the
+   * final word (see `move_challenges.is_pro` in supabase/schema.sql).
+   */
+  pro: boolean;
   variants: MoveChallengeVariant[];
 };
 
@@ -101,6 +113,7 @@ function family(input: {
   /** Friends required by the team variant. */
   minFriends: number;
   unlock: MoveUnlockRule;
+  pro: boolean;
 }): MoveMilestoneFamily {
   const targetM = input.distanceKm * 1000;
   const distance = `${input.distanceKm} km`;
@@ -112,6 +125,7 @@ function family(input: {
     subtitle: `Walk or run ${distance}`,
     distanceM: targetM,
     unlock: input.unlock,
+    pro: input.pro,
     variants: [
       {
         id: `${input.id}-open`,
@@ -157,13 +171,13 @@ function family(input: {
  * whose id has no art falls back to a drawn hexagon rather than breaking.
  */
 export const MOVE_FAMILIES: MoveMilestoneFamily[] = [
-  family({ id: "1k", title: "1K Starter", distanceKm: 1, timedDays: 1, minFriends: 1, unlock: "any" }),
-  family({ id: "5k", title: "5K Explorer", distanceKm: 5, timedDays: 3, minFriends: 1, unlock: "any" }),
-  family({ id: "10k", title: "10K Explorer", distanceKm: 10, timedDays: 7, minFriends: 1, unlock: "any" }),
-  family({ id: "25k", title: "25K Adventurer", distanceKm: 25, timedDays: 7, minFriends: 2, unlock: "any" }),
-  family({ id: "50k", title: "50K Voyager", distanceKm: 50, timedDays: 14, minFriends: 2, unlock: "teamPlusSolo" }),
-  family({ id: "100k", title: "100K Champion", distanceKm: 100, timedDays: 30, minFriends: 3, unlock: "teamPlusSolo" }),
-  family({ id: "300k", title: "300K Legend", distanceKm: 300, timedDays: 60, minFriends: 3, unlock: "teamPlusSolo" })
+  family({ id: "1k", title: "1K Starter", distanceKm: 1, timedDays: 1, minFriends: 1, unlock: "any", pro: false }),
+  family({ id: "5k", title: "5K Explorer", distanceKm: 5, timedDays: 3, minFriends: 1, unlock: "any", pro: false }),
+  family({ id: "10k", title: "10K Explorer", distanceKm: 10, timedDays: 7, minFriends: 1, unlock: "any", pro: false }),
+  family({ id: "25k", title: "25K Adventurer", distanceKm: 25, timedDays: 7, minFriends: 2, unlock: "any", pro: true }),
+  family({ id: "50k", title: "50K Voyager", distanceKm: 50, timedDays: 14, minFriends: 2, unlock: "teamPlusSolo", pro: true }),
+  family({ id: "100k", title: "100K Champion", distanceKm: 100, timedDays: 30, minFriends: 3, unlock: "teamPlusSolo", pro: true }),
+  family({ id: "300k", title: "300K Legend", distanceKm: 300, timedDays: 60, minFriends: 3, unlock: "teamPlusSolo", pro: true })
 ];
 
 export const MOVE_VARIANTS: MoveChallengeVariant[] = MOVE_FAMILIES.flatMap((entry) => entry.variants);

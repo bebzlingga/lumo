@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import React from "react";
 import { Alert, Animated, RefreshControl, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
-import { Icon } from "@/components/Icon";
+import { Icon, type IconName } from "@/components/Icon";
 import { ChallengeFacts, ChallengeHeadline, TeamContributions, useMoveAccent } from "@/components/move/ChallengeUI";
 import { MoveBadge } from "@/components/move/MoveBadge";
 import { MoveScopeTabs, type MoveScope } from "@/components/move/MoveScopeTabs";
@@ -21,6 +21,23 @@ import { MovePermissionCard } from "@/components/move/MoveCards";
 
 /** How much higher the empty state starts than an active challenge does. */
 const EMPTY_SCENE_LIFT = 28;
+
+/**
+ * What a walk gives back, in five.
+ *
+ * The full list runs to a dozen; a dozen chips is a leaflet, and nobody reads a
+ * leaflet on the way out of the door. These five are the ones somebody might
+ * actually FEEL this week, which is what makes them an argument rather than a
+ * health claim — and why blood sugar and weight management, the two most
+ * clinical-sounding of the set, are not here.
+ */
+const BENEFITS: { icon: IconName; label: string }[] = [
+  { icon: "zap", label: "More energy" },
+  { icon: "smiley", label: "Better mood" },
+  { icon: "heart", label: "Healthier heart" },
+  { icon: "moon", label: "Deeper sleep" },
+  { icon: "brain", label: "Clearer head" }
+];
 
 /**
  * Lumo Move.
@@ -210,6 +227,17 @@ export default function MoveScreen() {
                 Every step supports your energy, mood, heart and sleep — and small walks turn into a routine that lasts.
               </AppText>
 
+              <View style={styles.benefits}>
+                {BENEFITS.map((benefit) => (
+                  <View key={benefit.label} style={[styles.benefit, { backgroundColor: accent.soft }]}>
+                    <Icon name={benefit.icon} size={14} color={accent.glyph} weight="bulk" />
+                    <AppText variant="caption" color={palette.body} numberOfLines={2} style={styles.benefitLabel}>
+                      {benefit.label}
+                    </AppText>
+                  </View>
+                ))}
+              </View>
+
               {/* One door. Challenges are a tap away in the page bar, and
                   offering them here as an equal made "go for a walk" — the thing
                   this screen is asking for — one of two decisions rather than
@@ -223,7 +251,7 @@ export default function MoveScreen() {
                 >
                   <Icon name="walk" size={16} color={palette.white} weight="bulk" />
                   <AppText variant="button" color={palette.white} numberOfLines={1}>
-                    Walk
+                    Walk Now
                   </AppText>
                 </Pressable>
               </View>
@@ -338,19 +366,53 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 300
   },
+  // Centred and sized to its label, not stretched: it is the one thing to do
+  // on this screen, and a full-width bar reads as a form's submit.
+  /**
+   * Three to a row, and five of them — so the last row holds two, centred.
+   *
+   * `center` with an explicit column gap rather than `space-between`: with a
+   * short final row, `space-between` would push those two to opposite edges of
+   * the screen with a hole between them.
+   */
+  benefits: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    alignSelf: "stretch",
+    columnGap: spacing.xs,
+    rowGap: spacing.xs,
+    paddingTop: spacing.xs
+  },
+  benefit: {
+    width: "31%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xxs,
+    minHeight: 34,
+    paddingHorizontal: spacing.xs,
+    borderRadius: radius.pill
+  },
+  benefitLabel: {
+    flexShrink: 1,
+    fontFamily: fontFamilies.lexend,
+    fontSize: 11,
+    lineHeight: 14
+  },
   inviteActions: {
     flexDirection: "row",
-    alignSelf: "stretch",
+    alignSelf: "center",
     gap: spacing.sm,
     marginTop: spacing.lg
   },
   inviteAction: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: spacing.xs,
     minHeight: 48,
+    paddingHorizontal: spacing.xl,
     borderRadius: radius.pill
   },
   totalHead: {

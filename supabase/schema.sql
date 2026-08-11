@@ -478,6 +478,52 @@ create policy "own route batches only"
   with check (exists (select 1 from walk_sessions w where w.id = walk_id and w.user_id = auth.uid()));
 
 -- ---------------------------------------------------------------------------
+-- Lumo Move: the Pro rungs.
+--
+-- 25K and above need a subscription. The rung list itself lives in the app
+-- (`lib/move/challengeDefs.ts`) and ships with it, so the server is told which
+-- kind of challenge this is rather than deriving it — a new rung must not
+-- require a migration to be sellable.
+--
+-- THE POINT OF DOING THIS SERVER-SIDE. The app already refuses on the card and
+-- again on the milestone screen, and both of those are a build a determined
+-- person can replace. This is the one that holds. It also covers the case the
+-- client CANNOT check: a friend being added to a team challenge, whose
+-- subscription the inviting device has no way to see.
+-- ---------------------------------------------------------------------------
+alter table move_challenges add column if not exists is_pro boolean not null default false;
+
+-- Creating a Pro challenge takes a subscription. The free rungs stay free, so
+-- the check is conditional rather than a blanket gate on the table.
+drop policy if exists "own move challenges" on move_challenges;
+
+create policy "own move challenges"
+  on move_challenges for all to authenticated
+  using (owner = auth.uid())
+  with check (owner = auth.uid() and (is_pro = false or has_active_subscription()));
+
+/**
+ * And joining one takes a subscription of your own.
+ *
+ * This is the rule the client cannot enforce: an inviting device cannot see
+ * whether a friend has paid. The invitee's own row is written by the invitee's
+ * session, so `has_active_subscription()` here is asking about the right
+ * person.
+ */
+drop policy if exists "own participation" on move_challenge_participants;
+
+create policy "own participation"
+  on move_challenge_participants for all to authenticated
+  using (member = auth.uid())
+  with check (
+    member = auth.uid()
+    and (
+      not exists (select 1 from move_challenges c where c.id = challenge_id and c.is_pro)
+      or has_active_subscription()
+    )
+  );
+
+-- ---------------------------------------------------------------------------
 -- Lumo Move: the tracked-activity columns.
 --
 -- Added to `walk_sessions` rather than a second table. An activity IS a walk —

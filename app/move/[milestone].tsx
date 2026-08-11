@@ -31,7 +31,7 @@ import { describeUnlockRule, findFamily } from "@/lib/move/challengeDefs";
 export default function MilestoneScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ milestone: string }>();
-  const { palette, isDark } = useLumo();
+  const { palette, isDark, isPro } = useLumo();
   const accent = useMoveAccent();
   const move = useMove();
 
@@ -115,6 +115,14 @@ export default function MilestoneScreen() {
   // Reachable from the badges screens even when the list has it shut, so the
   // rule is stated here too rather than only being enforced in the list.
   const locked = isFamilyLocked(move.achievements, family);
+  /**
+   * A Pro rung, and the reader has not paid.
+   *
+   * Checked here as well as on the list, because the badges screens push
+   * straight to a milestone — a rule enforced only where you usually enter from
+   * is not a rule.
+   */
+  const needsPro = family.pro && !isPro;
   // The amber is a wash, so the label is darkened until it clears the card it
   // sits on rather than taking the raw token.
   const pauseInk = readableOn(palette.chartPartial, palette.card, 4.5);
@@ -198,7 +206,27 @@ export default function MilestoneScreen() {
         </AppText>
       </View>
 
-      {locked ? (
+      {needsPro ? (
+        <View style={[styles.blocked, { backgroundColor: alpha(palette.accent, "1F") }]}>
+          <AppText variant="bodySmall" color={palette.ink} style={styles.blockedTitle}>
+            A Lumo Pro challenge
+          </AppText>
+          <AppText variant="caption" color={palette.body} style={styles.blockedBody}>
+            {family.title} and everything above it come with Lumo Pro. The first three rungs are free and stay free — including the
+            badges you have already earned.
+          </AppText>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="See Lumo Pro"
+            onPress={() => router.push("/friends")}
+            style={({ pressed }) => [styles.blockedButton, { borderColor: readableOn(palette.accent, palette.canvas, 3), opacity: pressed ? 0.7 : 1 }]}
+          >
+            <AppText variant="bodySmall" color={readableOn(palette.accent, palette.canvas, 4.5)}>
+              See Lumo Pro
+            </AppText>
+          </Pressable>
+        </View>
+      ) : locked ? (
         <View style={[styles.blocked, { backgroundColor: accent.soft }]}>
           <AppText variant="bodySmall" color={palette.ink} style={styles.blockedTitle}>
             Not yet
@@ -312,7 +340,7 @@ export default function MilestoneScreen() {
       )}
 
       {/* The rule, stated where it applies, with the way out beside it. */}
-      {running || locked ? null : blocked ? (
+      {running || locked || needsPro ? null : blocked ? (
         <View style={[styles.blocked, { backgroundColor: accent.soft }]}>
           <AppText variant="bodySmall" color={palette.ink} style={styles.blockedTitle}>
             Active challenge in progress
@@ -346,6 +374,15 @@ export default function MilestoneScreen() {
                   {ready ? `${picked.length} invited` : `${short} more to go`}
                 </AppText>
               </View>
+
+              {/* Said before anybody is picked, because it is about THEM: a
+                  friend without Pro cannot join a Pro challenge, and the
+                  refusal would otherwise arrive after the invite went out. */}
+              {family.pro ? (
+                <AppText variant="caption" color={palette.subtle} style={styles.proNote}>
+                  Friends need Lumo Pro to join a {family.title} challenge.
+                </AppText>
+              ) : null}
 
               {picked.length === 0 ? (
                 // Carded like the route list and the summary, so the section
@@ -567,6 +604,9 @@ const styles = StyleSheet.create({
   refusal: {
     fontFamily: fontFamilies.lexend,
     textAlign: "center"
+  },
+  proNote: {
+    fontFamily: fontFamilies.lexend
   },
   // Side by side and equal width: two ways out of the same challenge, so
   // neither should read as the bigger door.

@@ -123,12 +123,10 @@ export function MilestoneCard({
       onPress={onPress}
       style={({ pressed }) => [
         styles.card,
-        {
-          backgroundColor: palette.card,
-          borderColor: earned ? accent.glyph : palette.hairline,
-          shadowColor: isDark ? "transparent" : palette.shadow,
-          opacity: pressed ? 0.75 : 1
-        }
+        // Shadow alone, no edge. An earned rung used to carry an accent border;
+        // the badge art already says earned, and a ring around the card said it
+        // a second time in a place the eye reads as structure.
+        { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow, opacity: pressed ? 0.75 : 1 }
       ]}
     >
       {/* Dimmed rather than hidden: a locked rung is a real thing further up
@@ -163,6 +161,18 @@ export function MilestoneCard({
               <View style={[styles.activeChip, { backgroundColor: alpha(palette.danger, "1F") }]}>
                 <AppText variant="caption" color={readableOn(palette.danger, palette.card, 4.5)} style={styles.activeChipLabel}>
                   Active
+                </AppText>
+              </View>
+            ) : null}
+
+            {/* Gold, and never red: a rung that needs a subscription is an
+                offer, not a fault. Shown on every Pro rung whether or not the
+                reader has paid — hiding it from subscribers would leave them
+                unable to see what they are getting. */}
+            {family.pro ? (
+              <View style={[styles.activeChip, { backgroundColor: alpha(palette.accent, "26") }]}>
+                <AppText variant="caption" color={readableOn(palette.accent, palette.card, 4.5)} style={styles.activeChipLabel}>
+                  PRO
                 </AppText>
               </View>
             ) : null}
@@ -401,10 +411,9 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.lexendSemiBold
   },
   card: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     borderRadius: radius.card,
-    borderWidth: StyleSheet.hairlineWidth,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.07,
     shadowRadius: 10,
