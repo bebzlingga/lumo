@@ -260,7 +260,7 @@ describe('pace', () => {
 		expect(smoothedPace([], T0)).toBeNull()
 		// Rendered as a zero of the right shape, not a dash — the null is still
 		// what the maths returns, and only the label is a number.
-		expect(formatPace(null)).toBe('0:00 /km')
+		expect(formatPace(null)).toBe('0:00')
 	})
 
 	it('converts between speed and pace', () => {
@@ -427,7 +427,7 @@ describe('elevation', () => {
 
 	it('says nothing when the device reported no altitude', () => {
 		expect(elevationGain(climb([null, null, null]))).toBeNull()
-		expect(formatElevation(null)).toBe('0 m')
+		expect(formatElevation(null)).toBe('0')
 		expect(formatElevation(120)).toBe('120 m')
 	})
 })

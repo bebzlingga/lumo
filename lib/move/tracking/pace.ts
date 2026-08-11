@@ -36,16 +36,19 @@ export function paceToSpeed(paceMsPerKm: PaceMsPerKm): number | null {
 }
 
 /**
- * "6:24 /km", or a zero of the same shape when there is nothing to show yet.
+ * "6:24 /km", or a bare "0:00" when there is nothing to show yet.
  *
  * Zero rather than a dash: on a readout of four figures a row of dashes looked
- * like the tracker had failed, where "0:00 /km" reads as "not yet". The VALUE
- * stays null — only its rendering is a number, and nothing downstream of this
- * ever sees a zero it did not measure.
+ * like the tracker had failed, where a zero reads as "not yet". The VALUE stays
+ * null — only its rendering is a number, and nothing downstream of this ever
+ * sees a zero it did not measure.
+ *
+ * The unit goes with it. "0:00 /km" states a pace per kilometre for a walk that
+ * has covered none; the bare figure is a placeholder and looks like one.
  */
 export function formatPace(paceMsPerKm: PaceMsPerKm | null): string {
   if (paceMsPerKm === null || !Number.isFinite(paceMsPerKm) || paceMsPerKm <= 0) {
-    return "0:00 /km";
+    return "0:00";
   }
 
   const totalSeconds = Math.round(paceMsPerKm / 1000);
@@ -55,13 +58,15 @@ export function formatPace(paceMsPerKm: PaceMsPerKm | null): string {
   return `${minutes}:${String(seconds).padStart(2, "0")} /km`;
 }
 
-/** "5.4 km/h", or "0.0 km/h" before there is one — see `formatPace`. */
+/** "5.4 km/h", or a bare "0.0" before there is one — see `formatPace`. */
 export function formatSpeed(metresPerSecond: number | null): string {
   if (metresPerSecond === null || !Number.isFinite(metresPerSecond) || metresPerSecond < 0) {
-    return "0.0 km/h";
+    return "0.0";
   }
 
-  return `${((metresPerSecond * 3600) / 1000).toFixed(1)} km/h`;
+  const value = ((metresPerSecond * 3600) / 1000).toFixed(1);
+
+  return value === "0.0" ? value : `${value} km/h`;
 }
 
 /**
@@ -216,9 +221,9 @@ export function elevationGain(segments: ActivitySegment[]): number | null {
   return sawAltitude ? Math.round(gain) : null;
 }
 
-/** "120 m", or "0 m" when the device reported no altitude — see `formatPace`. */
+/** "120 m", or a bare "0" with no altitude to report — see `formatPace`. */
 export function formatElevation(metres: number | null): string {
-  return metres === null ? "0 m" : `${metres} m`;
+  return metres ? `${metres} m` : "0";
 }
 
 /** "14:22", or "1:14:22" once an activity passes the hour. */

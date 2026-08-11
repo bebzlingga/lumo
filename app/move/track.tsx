@@ -362,13 +362,31 @@ export default function MoveTrackScreen() {
         <ScreenHeader
           /* Only in the picture. On the screen the distance is the headline and
              a title over it says the same thing twice — but a shared image
-             leaves the app behind, so it has to carry its own name. */
-          title={capturing ? "RUN WITH LUMO" : undefined}
-          rightAction={
-            capturing
-              ? undefined
-              : { icon: "check", label: saving ? "Saving" : "Save this activity", onPress: () => void handleSave() }
+             leaves the app behind, so it has to carry its own name.
+
+             `centerContent` rather than `title`, because the header's own title
+             face is the serif every screen wears and this is a mark on a
+             picture: caps, tracked, in the app's sans.
+
+             Always rendered, hidden by opacity. Adding it for the shot made the
+             header re-lay out one frame before the capture, which read as the
+             page twitching under the finger that just pressed Share. */
+          centerContent={
+            <View accessibilityElementsHidden={!capturing} importantForAccessibility={capturing ? "auto" : "no-hide-descendants"}>
+              <AppText color={palette.ink} numberOfLines={1} style={[styles.shareTitle, { opacity: capturing ? 1 : 0 }]}>
+                RUN WITH LUMO
+              </AppText>
+            </View>
           }
+          rightAction={{
+            icon: "check",
+            label: saving ? "Saving" : "Save this activity",
+            onPress: () => void handleSave(),
+            /* An empty box of the button's own size for the shot: `render`
+               suppresses the outline too, so the slot holds its width without
+               drawing anything. */
+            render: capturing ? <View style={styles.headerSlot} /> : undefined
+          }}
         />
 
         <View style={styles.summaryCapture}>
@@ -414,17 +432,20 @@ export default function MoveTrackScreen() {
             Hidden without a route. A walk with no fixes has nothing worth
             sending — the shared image would be four numbers on cream — and an
             offer to share it is the app asking for something nobody wants. */}
-        {toWalkPoints(state).length > 0 && !capturing ? (
+        {toWalkPoints(state).length > 0 ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Share this activity"
+          // Hidden rather than removed while the shot is taken — pulling it out
+          // of the layout shifted everything above it mid-capture.
+          accessibilityElementsHidden={capturing}
           onPress={() => void handleShare()}
           // The app's chip wash, as on the habit form's categories: a green
           // tint with the glyph and label green to match, so it reads as one
           // control rather than dark text on a coloured patch.
           style={({ pressed }) => [
             styles.shareAction,
-            { backgroundColor: alpha(palette.greenDark, "1F"), opacity: pressed ? 0.6 : 1 }
+            { backgroundColor: alpha(palette.greenDark, "1F"), opacity: capturing ? 0 : pressed ? 0.6 : 1 }
           ]}
         >
           <Icon name="share" size={20} color={palette.greenDark} weight="fill" />
@@ -828,6 +849,20 @@ const styles = StyleSheet.create({
     minHeight: 38,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.pill
+  },
+  headerSlot: {
+    width: 38,
+    height: 38
+  },
+  shareTitle: {
+    fontFamily: fontFamilies.lexendBlack,
+    fontSize: 14,
+    lineHeight: 19,
+    letterSpacing: 1.2,
+    // Riding the top of the header band rather than sitting on the buttons'
+    // centre line: in the picture there are no buttons to line up with, and a
+    // mark belongs at the edge of the frame.
+    marginTop: -spacing.sm
   },
   shareLabel: {
     fontFamily: fontFamilies.lexendBold,

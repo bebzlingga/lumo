@@ -310,7 +310,9 @@ export default function TodayScreen() {
 				</View>
 			</View>
 
-			<StreakCard habits={activeHabits} dateKey={selectedDateKey} />
+			<View style={styles.streakSection}>
+				<StreakCard habits={activeHabits} dateKey={selectedDateKey} />
+			</View>
 
 			<QuickDoneWidgets
 				habits={selectedHabits}
@@ -405,6 +407,9 @@ const styles = StyleSheet.create({
 	content: {
 		gap: CONTENT_GAP,
 		paddingBottom: layout.tabScreenBottomPadding,
+	},
+	streakSection: {
+		marginTop: spacing.lg,
 	},
 	header: {
 		flexDirection: 'row',

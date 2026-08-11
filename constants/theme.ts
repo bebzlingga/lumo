@@ -32,6 +32,17 @@ export const brand = {
    * `canvas` that they read yellow.
    */
   card: "#FDFBF5",
+  /**
+   * The page ground: one step down from `card`, and the only thing separating
+   * the two.
+   *
+   * The app deliberately puts pages, cards and the tab shell on the same warm
+   * near-white — nothing is a plate on a darker ground. At `card` exactly, that
+   * near-white read as bare white on a phone at full brightness, so the PAGE
+   * takes a shade off while the cards hold their value. Still far short of
+   * `canvas`, which stays the deeper cream the art is cut against.
+   */
+  page: "#FBF7EE",
   /** Warm outline for fields and selected cards (never a cool gray hairline). */
   borderWarm: "#E6D0A6",
   /** Inactive tracks, dots, and switch rails. */
@@ -73,12 +84,12 @@ export const brand = {
 export type LumoPalette = typeof lightPalette;
 
 export const lightPalette = {
-  // Same value as `card`. The page, the cards and the tab shell all sit on one
-  // warm near-white, so nothing is a plate on a darker ground. Cards are told
-  // apart by their shadow and, where they have one, their hairline — see the
-  // note on `brand.canvas`, which is kept as the deeper cream some art and
-  // gradients are cut against.
-  canvas: brand.card,
+  // A shade under `card`. The page, the cards and the tab shell still share one
+  // warm near-white — cards are told apart by their shadow and, where they have
+  // one, their hairline — but the ground carries the shade so a full-brightness
+  // screen does not read as plain white. See the note on `brand.canvas`, which
+  // stays the deeper cream some art and gradients are cut against.
+  canvas: brand.page,
   // Deeper than brand.creamSoft (which onboarding still uses over its lighter
   // cream) so recessed areas stay readable against the deeper canvas, and held
   // at the canvas's lower saturation.

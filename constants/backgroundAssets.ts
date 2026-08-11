@@ -182,8 +182,19 @@ export type HomePlateFit = {
  * `sceneBottom` comes down as `scale` goes up: it is a fraction of the plate's
  * height, and the plate is now taller than the screen. The two always move
  * together, or the first card follows Lumo down the page.
+ *
+ * `scale` is the ONLY lever, and it moves the scene diagonally: the plate is
+ * anchored top-left, so enlarging it slides every element in the art both right
+ * and down in proportion. Right and down cannot be asked for separately here.
+ *
+ * 1.0 is the floor — the plate exactly the width of the screen. Below it the
+ * art stops covering the width and a strip of canvas opens at the side; the
+ * art's own left edge is a warmer cream than the canvas, so that strip shows as
+ * a seam rather than blending. Moving Lumo right without also moving him down
+ * would mean drawing the plate offset with that strip exposed, which is why
+ * there is no `shiftX`.
  */
-const HOME_FIT: HomePlateFit = { scale: 1.18, shiftY: 0, sceneBottom: 0.26 }
+const HOME_FIT: HomePlateFit = { scale: 1.1, shiftY: 0, sceneBottom: 0.26 }
 
 export const HOME_PLATE_FIT: Record<HomePeriod, HomePlateFit> = {
 	earlyMorning: HOME_FIT,
