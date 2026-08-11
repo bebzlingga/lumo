@@ -400,6 +400,278 @@ create policy "feature photos read"
 create policy "feature photos delete own"
   on storage.objects for delete to authenticated using (bucket_id = 'feature-photos' and owner = auth.uid());
 
+-- ---------------------------------------------------------------------------
+-- Walks. Owner-only in every direction: a route is precise location history,
+-- which is the most sensitive thing this app stores. There is deliberately no
+-- policy letting friends, group members or anyone else read these rows — walk
+-- SUMMARIES may be shared some day, routes never.
+--
+-- `id` is CLIENT-generated (expo-crypto randomUUID, see lib/walkTracking.ts).
+-- That is what makes an offline-recorded walk safe to sync later: the device
+-- already knows the walk's identity, so a retried upload is an upsert on a key
+-- the server has rather than a second copy of the same walk.
+--
+-- Ungated by `has_active_subscription()` on purpose — recording your own walks
+-- is free, and only the group features built on top of them are not.
+-- ---------------------------------------------------------------------------
+create table walk_sessions (
+  id uuid primary key,
+  user_id uuid not null references profiles(id) on delete cascade,
+  started_at timestamptz not null,
+  ended_at timestamptz not null,
+  -- Milliseconds actually walked, paused time excluded. Not derivable from the
+  -- two timestamps above, which is why it is stored.
+  active_ms bigint not null check (active_ms >= 0),
+  -- Covered ON FOOT. This is the only distance a challenge is ever credited
+  -- with; the client classifies legs by speed and never lets vehicle travel
+  -- into this column.
+  distance_m double precision not null default 0 check (distance_m >= 0),
+  -- What was thrown out as a car or a bike. Reported so the app can say why the
+  -- route drawn is longer than the distance counted, never added to anything.
+  vehicle_m double precision not null default 0 check (vehicle_m >= 0),
+  -- NULL means the device had no pedometer. Distinct from 0, which means it had
+  -- one and the outing registered no steps.
+  steps integer check (steps is null or steps >= 0),
+  -- No target column of any kind. An outing is not recorded against anything:
+  -- milestones are markers PASSED, derived from the sum of `distance_m` on
+  -- read, so there is nothing per-outing to store and nothing to migrate when
+  -- the ladder in `constants/milestones.ts` changes.
+  mood text check (mood is null or mood in ('easy', 'good', 'tough')),
+  note text,
+  habit_ids uuid[] not null default '{}',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table walk_sessions enable row level security;
+
+create policy "own walks only"
+  on walk_sessions for all to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create index walk_sessions_user_started_idx on walk_sessions (user_id, started_at desc);
+
+-- ---------------------------------------------------------------------------
+-- Route points, uploaded in batches rather than as one blob so a long walk on a
+-- poor connection makes progress instead of failing whole.
+--
+-- `(walk_id, seq)` is the primary key, which is what makes a retried batch a
+-- no-op upsert rather than a duplicate — the client numbers its batches and can
+-- resend any of them safely.
+-- ---------------------------------------------------------------------------
+create table walk_route_batches (
+  walk_id uuid not null references walk_sessions(id) on delete cascade,
+  seq integer not null check (seq >= 0),
+  -- [{ lat, lon, at, accuracy }] — the simplified route, not every raw fix.
+  points jsonb not null,
+  created_at timestamptz not null default now(),
+  primary key (walk_id, seq)
+);
+
+alter table walk_route_batches enable row level security;
+
+-- Ownership is inherited from the walk. A route batch has no user_id of its own
+-- so there is no way for the two to disagree.
+create policy "own route batches only"
+  on walk_route_batches for all to authenticated
+  using (exists (select 1 from walk_sessions w where w.id = walk_id and w.user_id = auth.uid()))
+  with check (exists (select 1 from walk_sessions w where w.id = walk_id and w.user_id = auth.uid()));
+
+-- ---------------------------------------------------------------------------
+-- Lumo Move: the tracked-activity columns.
+--
+-- Added to `walk_sessions` rather than a second table. An activity IS a walk —
+-- same client id, same ownership, same route batches — and splitting it would
+-- have meant two tables to join, two RLS policies to keep in step, and a
+-- migration for every walk already recorded.
+--
+-- Additive and re-runnable: `add column if not exists` throughout, so this file
+-- can be applied over a database that already has some of it.
+--
+-- WHY NO ROW-PER-POINT TABLE. The obvious model is one row per GPS fix, and it
+-- is the wrong one here. An hour's walk is ~3,600 fixes; a daily walker
+-- produces well over a million rows a year, for data that is only ever read
+-- back as a whole route. The points ride in `walk_route_batches.points` as
+-- jsonb instead — one row per hundred fixes, already keyed for idempotent
+-- retries — which is the same information at a hundredth of the row count.
+-- ---------------------------------------------------------------------------
+alter table walk_sessions add column if not exists activity_type text not null default 'walk'
+  check (activity_type in ('walk', 'run'));
+
+-- Wall clock from start to finish, INCLUDING pauses. `active_ms` above is the
+-- moving half; neither is derivable from the other once a walk has been paused,
+-- which is why both are stored.
+alter table walk_sessions add column if not exists elapsed_ms bigint not null default 0 check (elapsed_ms >= 0);
+alter table walk_sessions add column if not exists paused_ms bigint not null default 0 check (paused_ms >= 0);
+
+-- Derived on the client and stored anyway, so a summary list does not have to
+-- fetch a route to show a pace. Nullable: a walk too short to divide has none.
+alter table walk_sessions add column if not exists average_pace_ms_per_km double precision
+  check (average_pace_ms_per_km is null or average_pace_ms_per_km > 0);
+alter table walk_sessions add column if not exists average_speed_ms double precision
+  check (average_speed_ms is null or average_speed_ms >= 0);
+
+-- An ESTIMATE, and named so. Never presented as measured.
+alter table walk_sessions add column if not exists calories_estimate integer
+  check (calories_estimate is null or calories_estimate >= 0);
+
+-- How many tracking segments the activity was recorded in. More than one means
+-- it was paused or lost signal — which is why its route has gaps.
+alter table walk_sessions add column if not exists segment_count integer not null default 1
+  check (segment_count >= 0);
+
+/**
+ * Whether the activity was plausible enough to count toward a challenge.
+ *
+ * Written by the client today (`checkIntegrity` in lib/move/tracking/bridge.ts)
+ * and deliberately stored rather than only acted on: when server-side checking
+ * arrives it needs somewhere to disagree, and a column that already exists is
+ * far easier to start trusting than one that has to be backfilled.
+ */
+alter table walk_sessions add column if not exists integrity_ok boolean not null default true;
+alter table walk_sessions add column if not exists integrity_reason text;
+
+-- ---------------------------------------------------------------------------
+-- Route batches gain a KIND.
+--
+-- 'route' is the accepted line — what the map draws and what the distance was
+-- measured from. 'diagnostic' is the rejected fixes, kept so a bad recording
+-- can be explained after the fact, and safe to prune on any schedule without
+-- touching a single route.
+-- ---------------------------------------------------------------------------
+alter table walk_route_batches add column if not exists kind text not null default 'route'
+  check (kind in ('route', 'diagnostic'));
+
+-- Diagnostics are the first thing to delete when this table gets large.
+create index if not exists walk_route_batches_kind_idx on walk_route_batches (kind, created_at);
+
+-- ---------------------------------------------------------------------------
+-- Lumo Move: challenges.
+--
+-- A challenge is a MILESTONE plus a VARIANT — "10 km", "10 km in 7 days",
+-- "10 km with a friend". The definitions live in the app
+-- (`lib/move/challengeDefs.ts`) and ship with it, so only the id is stored
+-- here: a device on an older build must still be able to record what it did.
+--
+-- ## Team challenges are parallel, not pooled
+--
+-- Every participant covers the FULL distance and the challenge is done when
+-- everyone has. Pooling would mean four people walking a quarter each and all
+-- taking the same badge as someone who walked the lot — the badge would mean
+-- something different depending on how many friends you have.
+-- ---------------------------------------------------------------------------
+
+-- Accepted friendship in either direction. Move challenges run on the friend
+-- graph directly — no Group required.
+create or replace function is_friend_of(other uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from friendships f
+    where f.status = 'accepted'
+      and ((f.requester = auth.uid() and f.addressee = other)
+        or (f.addressee = auth.uid() and f.requester = other))
+  );
+$$;
+
+create table move_challenges (
+  id uuid primary key default gen_random_uuid(),
+  -- e.g. "10k-timed". Not a foreign key: the ladder is client-side config.
+  variant_id text not null,
+  milestone_id text not null,
+  owner uuid not null references profiles(id) on delete cascade,
+  status text not null default 'active' check (status in ('active', 'completed', 'cancelled', 'expired')),
+  started_at timestamptz not null default now(),
+  -- Null for an open-ended challenge. Team challenges always have one.
+  ends_at timestamptz,
+  completed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+alter table move_challenges enable row level security;
+
+create index move_challenges_owner_idx on move_challenges (owner, status);
+
+create table move_challenge_participants (
+  challenge_id uuid not null references move_challenges(id) on delete cascade,
+  member uuid not null references profiles(id) on delete cascade,
+  joined_at timestamptz not null default now(),
+  -- Set when someone walks away. Their contribution stays: the rest of the
+  -- group carries on from where it got to, and nobody's kilometres vanish.
+  left_at timestamptz,
+  -- Metres covered on foot since the challenge started, recomputed on each sync
+  -- and UPSERT-ed. One row per member, so a device syncing ten times writes the
+  -- same row ten times rather than adding ten contributions.
+  contribution_m double precision not null default 0 check (contribution_m >= 0),
+  updated_at timestamptz not null default now(),
+  primary key (challenge_id, member)
+);
+
+alter table move_challenge_participants enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- THE single-active rule, enforced by the database.
+--
+-- `user_id` is the PRIMARY KEY, so one row per person is a structural fact
+-- rather than a check two devices could race past. The app checks first so it
+-- can explain (MOVE_CHALLENGE_ALREADY_ACTIVE); this is what makes the check
+-- true.
+--
+-- Its existence also IS the "already busy" flag the invite list reads, which is
+-- why there is no separate status table: a friend either has a row here or does
+-- not, and that is all an inviter is allowed to learn.
+-- ---------------------------------------------------------------------------
+create table move_active_challenge (
+  user_id uuid primary key references profiles(id) on delete cascade,
+  challenge_id uuid not null references move_challenges(id) on delete cascade,
+  started_at timestamptz not null default now()
+);
+
+alter table move_active_challenge enable row level security;
+
+-- Readable by friends, so an invite list can grey out whoever is already busy.
+-- Not by the world, and not by a group member who is not a friend.
+create policy "read own and friends active challenge"
+  on move_active_challenge for select to authenticated
+  using (user_id = auth.uid() or is_friend_of(user_id));
+
+create policy "write own active challenge"
+  on move_active_challenge for all to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- A challenge is visible to everyone taking part in it.
+create policy "participants read challenge"
+  on move_challenges for select to authenticated
+  using (
+    owner = auth.uid()
+    or exists (select 1 from move_challenge_participants p where p.challenge_id = id and p.member = auth.uid())
+  );
+
+-- Creating one is a social action and sits behind the same gate as creating a
+-- group. Taking part is NOT gated: someone invited must never be unable to pull
+-- their weight.
+create policy "owner creates challenge"
+  on move_challenges for insert to authenticated
+  with check (owner = auth.uid() and has_active_subscription());
+create policy "owner updates challenge"
+  on move_challenges for update to authenticated using (owner = auth.uid());
+create policy "owner deletes challenge"
+  on move_challenges for delete to authenticated using (owner = auth.uid());
+
+create policy "participants read each other"
+  on move_challenge_participants for select to authenticated
+  using (exists (select 1 from move_challenge_participants mine where mine.challenge_id = challenge_id and mine.member = auth.uid()));
+
+-- Writable only for yourself. This is what stops a patched client inflating
+-- someone else's contribution, or adding a member who never agreed.
+create policy "write own participation"
+  on move_challenge_participants for all to authenticated
+  using (member = auth.uid()) with check (member = auth.uid());
+
 -- Fast Lumo ID lookups when adding friends.
 create index profiles_lumo_id_idx on profiles (lumo_id);
 create index friendships_addressee_idx on friendships (addressee, status);

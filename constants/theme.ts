@@ -73,7 +73,12 @@ export const brand = {
 export type LumoPalette = typeof lightPalette;
 
 export const lightPalette = {
-  canvas: brand.canvas,
+  // Same value as `card`. The page, the cards and the tab shell all sit on one
+  // warm near-white, so nothing is a plate on a darker ground. Cards are told
+  // apart by their shadow and, where they have one, their hairline — see the
+  // note on `brand.canvas`, which is kept as the deeper cream some art and
+  // gradients are cut against.
+  canvas: brand.card,
   // Deeper than brand.creamSoft (which onboarding still uses over its lighter
   // cream) so recessed areas stay readable against the deeper canvas, and held
   // at the canvas's lower saturation.
@@ -114,7 +119,7 @@ export const lightPalette = {
 
 /** Deep navy/charcoal — never pure black — with muted pastel accents. */
 export const darkPalette: LumoPalette = {
-  canvas: "#121722",
+  canvas: "#1A2130",
   surface: "#202838",
   surfaceStrong: "#263049",
   card: "#1A2130",
@@ -199,7 +204,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
   forest: {
     label: "Forest",
     light: {
-      canvas: "#F2F5EE",
+      canvas: "#FAFCF7",
       surface: "#E8EDE1",
       surfaceStrong: "#DCE3D2",
       card: "#FAFCF7",
@@ -226,7 +231,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       shadow: "#23301C"
     },
     dark: {
-      canvas: "#101A12",
+      canvas: "#16231A",
       surface: "#1B2A1E",
       surfaceStrong: "#223526",
       card: "#16231A",
@@ -263,7 +268,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
   ocean: {
     label: "Ocean",
     light: {
-      canvas: "#F0F4F7",
+      canvas: "#F9FCFD",
       surface: "#E5ECF1",
       surfaceStrong: "#D6E1E9",
       card: "#F9FCFD",
@@ -290,7 +295,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       shadow: "#16303D"
     },
     dark: {
-      canvas: "#0D1620",
+      canvas: "#121D28",
       surface: "#17242F",
       surfaceStrong: "#1F2E3C",
       card: "#121D28",
@@ -325,7 +330,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
   sunset: {
     label: "Sunset",
     light: {
-      canvas: "#FBF2EE",
+      canvas: "#FEF9F7",
       surface: "#F5E8E2",
       surfaceStrong: "#EBD9D1",
       card: "#FEF9F7",
@@ -352,7 +357,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       shadow: "#3F2029"
     },
     dark: {
-      canvas: "#1A1016",
+      canvas: "#20141B",
       surface: "#291A22",
       surfaceStrong: "#33212B",
       card: "#20141B",
@@ -382,6 +387,28 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
     plateOpacity: { light: 0.85, dark: 0.9 }
   }
 };
+
+/**
+ * Whether the Appearance settings exist at all.
+ *
+ * Held back for now: the extra palettes and the dark mode are built and tested,
+ * but the app ships on cream + light while they get more time on real screens.
+ * With this false the whole Appearance card is hidden and `LumoContext` pins
+ * BOTH the theme and the mode.
+ *
+ * Both are pinned, not just the theme, because hiding the control without
+ * pinning the value strands anyone who had already switched: the card that
+ * would let them switch back is the card being hidden.
+ *
+ * A flag rather than commented-out JSX on purpose — the picker keeps compiling,
+ * keeps being typechecked, and `setThemeId`/`setThemeMode` stay referenced
+ * bindings instead of dead code. Flip this to true to ship appearance; nothing
+ * else needs changing.
+ *
+ * Note it pins at RESOLUTION, not by rewriting stored settings, so an install
+ * that already chose a theme or dark mode still has that choice waiting.
+ */
+export const APPEARANCE_ENABLED = false;
 
 /** Picker order. Cream leads because it is the default and the brand. */
 export const THEME_IDS = Object.keys(THEMES) as ThemeId[];
@@ -443,6 +470,20 @@ export const spacing = {
   xxl: 48
 };
 
+/**
+ * The fill behind every filled primary button, app-wide.
+ *
+ * FIXED rather than themed, and that is the point. `palette.greenDark` flips to
+ * a LIGHT green in dark mode (and to teal or coral under other themes), none of
+ * which can carry a white label at 4.5:1 — which is why call sites had started
+ * growing `isDark ? onAccent : white` workarounds. One constant means one
+ * answer, and the label is plain white everywhere.
+ *
+ * The alpha sits on the FILL only, so an illustrated backdrop shows through the
+ * button while the label stays fully opaque. Matches onboarding's CtaButton.
+ */
+export const CTA_FILL = `${brand.sageStrong}CC`;
+
 const floatingTabBarHeight = 72;
 
 export const layout = {
@@ -477,6 +518,15 @@ export const radius = {
   button: 16,
   nav: 22,
   sheet: 28,
+  /**
+   * Every modal card in the app — pickers, celebrations, invite sheets.
+   *
+   * The date and time pickers set the shape long before the rest arrived, and
+   * a dialog that opens at a different corner than the last one reads as a
+   * different app. Well above `card`: a sheet floating on a scrim carries a
+   * softer corner than a card lying on a page.
+   */
+  dialog: 40,
   pill: 9999
 };
 

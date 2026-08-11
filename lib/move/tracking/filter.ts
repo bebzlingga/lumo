@@ -1,0 +1,153 @@
+import { TRACKING_CONFIG, maxSpeedFor, type ActivityType } from "@/lib/move/tracking/config";
+import type { RawLocationPoint, RejectionReason } from "@/lib/move/tracking/types";
+import { calculateDistance } from "@/lib/walk";
+
+/**
+ * Whether a fix may join the route, and if not, why.
+ *
+ * Pure, and the reason is part of the answer rather than a boolean: "standing
+ * still" and "the receiver jumped a block" are different facts, the UI says
+ * different things about them, and the stored reason is what makes a bad
+ * recording explicable afterwards.
+ *
+ * Order matters. Cheap structural checks first, then the ones that need the
+ * previous point, then the ones that need two. A fix rejected for accuracy is
+ * never also examined for teleporting, because its distance is meaningless.
+ */
+
+export type FilterInput = {
+  point: { latitude: number; longitude: number; timestamp: number; horizontalAccuracy?: number | null };
+  /** The last fix that was ACCEPTED, in the current segment. Null starts one. */
+  previous: RawLocationPoint | null;
+  /** The one before that. Only used to spot a teleport-and-return. */
+  beforePrevious?: RawLocationPoint | null;
+  /** The newest timestamp processed so far, for staleness. */
+  newestAt: number;
+  type: ActivityType;
+  /**
+   * Whether the pedometer saw steps recently.
+   *
+   * Undefined on a device with no pedometer, and treated as "no opinion" —
+   * never as "no steps". A phone without a step counter must track exactly as
+   * well as one with, only with less corroboration.
+   */
+  steppingRecently?: boolean;
+};
+
+export type FilterVerdict = { accepted: true; distanceM: number } | { accepted: false; reason: RejectionReason; distanceM: 0 };
+
+export function filterLocationPoint(input: FilterInput): FilterVerdict {
+  const { point, previous, type } = input;
+  const config = TRACKING_CONFIG.location;
+
+  if (!Number.isFinite(point.latitude) || !Number.isFinite(point.longitude) || !Number.isFinite(point.timestamp)) {
+    return { accepted: false, reason: "impossible", distanceM: 0 };
+  }
+
+  // Accuracy first: a fix we do not believe cannot be measured against.
+  if (typeof point.horizontalAccuracy === "number" && point.horizontalAccuracy > config.rejectAccuracyAboveM) {
+    return { accepted: false, reason: "accuracy", distanceM: 0 };
+  }
+
+  // Out of order, or from a previous life of this activity.
+  if (point.timestamp < input.newestAt - config.maxAgeMs) {
+    return { accepted: false, reason: "stale", distanceM: 0 };
+  }
+
+  // The first fix of a segment has nothing to be measured against, so it is
+  // accepted on its own merits and contributes no distance.
+  if (!previous) {
+    return { accepted: true, distanceM: 0 };
+  }
+
+  const elapsedMs = point.timestamp - previous.timestamp;
+
+  // Non-monotonic within the segment: a duplicate delivery, or a clock that
+  // went backwards. Either way there is no leg here.
+  if (elapsedMs <= 0) {
+    return { accepted: false, reason: "duplicate", distanceM: 0 };
+  }
+
+  const legM = calculateDistance(
+    { lat: previous.latitude, lon: previous.longitude },
+    { lat: point.latitude, lon: point.longitude }
+  );
+
+  if (legM < config.duplicateM) {
+    return { accepted: false, reason: "duplicate", distanceM: 0 };
+  }
+
+  // Faster than the activity can go. Not a fast walker — a receiver jumping.
+  const speedMs = legM / (elapsedMs / 1000);
+
+  if (speedMs > maxSpeedFor(type)) {
+    return { accepted: false, reason: "impossible", distanceM: 0 };
+  }
+
+  /**
+   * Teleport-and-return: A → B → BAD → C, where BAD sits far off a route that
+   * A, B and C otherwise make sense of.
+   *
+   * Caught by comparing the leg against the distance from the point BEFORE the
+   * previous one. If stepping back two fixes is dramatically shorter than
+   * stepping forward one, the previous fix was the excursion — and this one is
+   * the route resuming. The fix itself is fine; what it must not do is carry
+   * the round trip's distance.
+   */
+  const before = input.beforePrevious;
+
+  if (before) {
+    const throughM = calculateDistance(
+      { lat: before.latitude, lon: before.longitude },
+      { lat: point.latitude, lon: point.longitude }
+    );
+    const excursionM = calculateDistance(
+      { lat: before.latitude, lon: before.longitude },
+      { lat: previous.latitude, lon: previous.longitude }
+    );
+
+    // The detour has to be both large in absolute terms and disproportionate,
+    // so an ordinary corner — where going round is genuinely longer than the
+    // straight line — is not mistaken for a jump.
+    if (excursionM > TRACKING_CONFIG.distance.minLegM * 4 && throughM * 3 < excursionM + legM) {
+      return { accepted: false, reason: "teleport", distanceM: 0 };
+    }
+  }
+
+  /**
+   * Under the minimum leg: real, but too small to tell from drift.
+   *
+   * The one thing that overrides it is the pedometer. Steps in the window mean
+   * the person is walking, so a short leg is a slow walker rather than a phone
+   * on a table — which is the case a distance floor alone gets wrong.
+   */
+  if (legM < TRACKING_CONFIG.distance.minLegM && input.steppingRecently !== true) {
+    return { accepted: false, reason: "jitter", distanceM: 0 };
+  }
+
+  /**
+   * A leg long enough to be a break in tracking rather than a stretch of
+   * walking: a tunnel, a lost fix, a suspended app. The point is accepted —
+   * it is where you are — but the gap is not distance, and the caller starts a
+   * new segment so nothing draws a line across it.
+   */
+  if (legM > TRACKING_CONFIG.distance.segmentBreakM || elapsedMs > TRACKING_CONFIG.distance.segmentBreakMs) {
+    return { accepted: true, distanceM: 0 };
+  }
+
+  return { accepted: true, distanceM: legM };
+}
+
+/** Whether this leg should end the segment it belongs to. */
+export function breaksSegment(previous: RawLocationPoint | null, point: { latitude: number; longitude: number; timestamp: number }): boolean {
+  if (!previous) {
+    return false;
+  }
+
+  const legM = calculateDistance(
+    { lat: previous.latitude, lon: previous.longitude },
+    { lat: point.latitude, lon: point.longitude }
+  );
+
+  return legM > TRACKING_CONFIG.distance.segmentBreakM || point.timestamp - previous.timestamp > TRACKING_CONFIG.distance.segmentBreakMs;
+}

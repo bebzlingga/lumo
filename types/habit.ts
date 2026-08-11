@@ -16,6 +16,26 @@ export type GoalType =
   | { type: "weekly"; target: number }
   | { type: "monthly"; target: number };
 
+/**
+ * An amount a habit is measured in, on top of its tap-count goal.
+ *
+ * Deliberately NOT folded into `GoalType`. `CompletionEntry.count` is a tally
+ * of taps — `withCompletionOnDate` adds exactly 1 — and `HabitForm` spawns one
+ * reminder time field per count, so encoding "30 minutes" as
+ * `goal = { type: "multiple", count: 30 }` would render "Daily · 30x a day" and
+ * ask for thirty reminder times. This is a separate, optional field, and the
+ * amount itself is never stored on the habit: the walk store is the source of
+ * truth and the day's total is summed from it, which is what makes two short
+ * walks add up to one long target for free.
+ *
+ * Units match `WalkGoal` exactly — milliseconds, metres, steps — so nothing has
+ * to convert between the two.
+ */
+export type HabitMeasurement = {
+  kind: "duration" | "distance" | "steps";
+  target: number;
+};
+
 export type ReminderMode = "time" | "interval";
 
 export type ReminderIntervalUnit = "minutes" | "hours";
@@ -59,6 +79,8 @@ export type Habit = {
   reminderIntervalUnit: ReminderIntervalUnit;
   repeatSchedule: RepeatSchedule;
   goal: GoalType;
+  /** Set when the habit is satisfied by a measured amount (a walk, so far). */
+  measurement?: HabitMeasurement;
   createdAt: string;
   completions: CompletionEntry[];
   /**
@@ -88,6 +110,7 @@ export type HabitDraft = {
   reminderIntervalUnit: ReminderIntervalUnit;
   repeatSchedule: RepeatSchedule;
   goal: GoalType;
+  measurement?: HabitMeasurement;
 };
 
 /**

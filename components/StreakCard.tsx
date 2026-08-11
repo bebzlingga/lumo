@@ -37,7 +37,10 @@ function streakLine(streak: number) {
   if (streak >= 7) {
     return "You're on fire! 🔥";
   }
-  return streak >= 3 ? "Building momentum!" : "";
+  // Nothing at three. The number has just become worth remarking on, and
+  // "Building momentum!" was the app saying so on its own behalf — the first
+  // line worth reading is the one at a week.
+  return "";
 }
 
 /** One day in the week strip: its initial above a state dot. */

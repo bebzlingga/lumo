@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
   card: {
     alignItems: "center",
     gap: spacing.xs,
-    borderRadius: radius.nav,
+    borderRadius: radius.dialog,
     // Clips the plate and veil to the rounded corners. Safe here — the card
     // carries no shadow for iOS to drop.
     overflow: "hidden",

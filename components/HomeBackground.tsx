@@ -31,18 +31,6 @@ const PLATE_OPACITY = {
 } as const
 
 /**
- * How far the page scrolls before the plate reaches its faded weight, and what
- * that weight is — the same treatment the group page's backdrop uses.
- *
- * Roughly the height of the greeting the plate sits behind: by the time Lumo
- * has scrolled away, the art has finished getting out of the cards' way. It
- * does not fade to nothing, because a backdrop that vanishes reads as a
- * loading glitch and leaves the lower page as flat canvas.
- */
-const FADE_DISTANCE = 300
-const FADED_OPACITY = 0.3
-
-/**
  * Preview override — pins the home screen to one time of day so a plate can be
  * looked at without waiting for the clock to reach it.
  *
@@ -51,6 +39,18 @@ const FADED_OPACITY = 0.3
  * null: pinned, the home screen would show one scene forever.
  */
 const FORCED_PERIOD: HomePeriod | null = null
+
+/**
+ * How far the page scrolls before the plate reaches its faded weight, and what
+ * that weight is.
+ *
+ * Roughly the height of the greeting the plate sits behind: by the time Lumo
+ * has scrolled away, the art has finished getting out of the cards' way. It
+ * does not fade to nothing, because a backdrop that vanishes reads as a loading
+ * glitch and leaves the lower page as flat canvas.
+ */
+const FADE_DISTANCE = 300
+const FADED_OPACITY = 0.3
 
 export function HomeBackground({ period, scrollY }: { period: HomePeriod; scrollY?: Animated.Value }) {
 	const { isDark, themeId } = useLumo()
@@ -63,6 +63,10 @@ export function HomeBackground({ period, scrollY }: { period: HomePeriod; scroll
 	// back further than any other screen does. Same source of truth as
 	// LumoBackground, so the two never drift.
 	const restOpacity = (isDark ? PLATE_OPACITY.dark : PLATE_OPACITY.light) * themePlateOpacity(themeId, isDark)
+	// Fades as the page scrolls DOWN over it, and comes back on the way up —
+	// interpolating the offset gives both directions from one expression, since
+	// the offset falls again as the user returns to the top.
+	//
 	// Scaled FROM the resting weight rather than toward a fixed number, so dark
 	// mode — already at 0.16 — recedes by the same proportion instead of getting
 	// brighter on the way down.

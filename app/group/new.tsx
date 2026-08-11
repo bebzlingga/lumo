@@ -8,7 +8,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { FormSection } from "@/components/HabitForm";
 import { AppText, Field, FieldLabel, LumoInput, Screen } from "@/components/ui";
 import { challengeByName } from "@/constants/groupChallenges";
-import { fontFamilies, habitColorOption, layout, radius, spacing } from "@/constants/theme";
+import { CTA_FILL, fontFamilies, habitColorOption, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { buildGroupAvatarSvg, defaultAvatar } from "@/lib/avatar";
 import { alpha } from "@/lib/color";
@@ -75,7 +75,6 @@ export default function NewGroupScreen() {
   const [createPressed, setCreatePressed] = React.useState(false);
   const [addActivityPressed, setAddActivityPressed] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
-  const buttonFill = isDark ? palette.green : palette.greenDark;
   const canCreate = Boolean(name.trim()) && activities.length > 0 && !saving;
 
   React.useEffect(() => {
@@ -386,7 +385,7 @@ export default function NewGroupScreen() {
         onPressOut={() => setCreatePressed(false)}
         style={[
           styles.createButton,
-          { backgroundColor: buttonFill, opacity: saving ? 1 : !canCreate ? 0.45 : createPressed ? 0.85 : 1 }
+          { backgroundColor: CTA_FILL, opacity: saving ? 1 : !canCreate ? 0.45 : createPressed ? 0.85 : 1 }
         ]}
       >
         {saving ? (

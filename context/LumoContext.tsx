@@ -5,7 +5,7 @@ import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AppState, useColorScheme } from "react-native";
-import { DEFAULT_THEME_ID, getPalette, LumoPalette, normalizeThemeId, type ThemeId } from "@/constants/theme";
+import { APPEARANCE_ENABLED, DEFAULT_THEME_ID, getPalette, LumoPalette, normalizeThemeId, type ThemeId } from "@/constants/theme";
 import { toDateKey } from "@/lib/date";
 import { bestActivityStreak, completionCount } from "@/lib/habitMath";
 import {
@@ -39,7 +39,7 @@ import { getExpoPushToken } from "@/lib/notifications";
 import { subscribeToUserNotifications } from "@/lib/realtime";
 import { ensureSignedIn } from "@/lib/supabase";
 import { readPendingWidgetToggles, updateTodayWidget } from "@/lib/widget";
-import { AppSettings, BackupFrequency, CompletionEntry, FeatureRequest, Habit, HabitCategory, habitCategories, HabitDraft, JournalEntry, JournalMood, MAX_JOURNALS_PER_DAY, TextSize } from "@/types/habit";
+import { AppSettings, BackupFrequency, CompletionEntry, FeatureRequest, Habit, HabitCategory, habitCategories, HabitDraft, HabitMeasurement, JournalEntry, JournalMood, MAX_JOURNALS_PER_DAY, TextSize } from "@/types/habit";
 
 // Persisted local state key. Do not change — it would orphan existing
 // installs' local data.
@@ -236,9 +236,25 @@ function normalizeCategory(category?: string): HabitCategory {
   return (habitCategories as readonly string[]).includes(mapped) ? (mapped as HabitCategory) : "General";
 }
 
+/**
+ * `measurement` arrived after habits did, so most stored habits will not have
+ * it. Anything malformed becomes `undefined` rather than a zero target — a
+ * habit that silently requires 0 metres would auto-complete itself every day.
+ */
+function normalizeMeasurement(value: unknown): HabitMeasurement | undefined {
+  const raw = value as Partial<HabitMeasurement> | undefined;
+
+  if (!raw || (raw.kind !== "duration" && raw.kind !== "distance" && raw.kind !== "steps")) {
+    return undefined;
+  }
+
+  return Number.isFinite(raw.target) && (raw.target as number) > 0 ? { kind: raw.kind, target: raw.target as number } : undefined;
+}
+
 function normalizeHabit(habit: Habit): Habit {
   return {
     ...habit,
+    measurement: normalizeMeasurement(habit.measurement),
     category: normalizeCategory(habit.category),
     reminderMode: habit.reminderMode ?? "time",
     reminderTime: habit.reminderTime ?? "09:00",
@@ -480,8 +496,17 @@ export function LumoProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  const isDark = state.settings.themeMode === "dark" || (state.settings.themeMode === "system" && systemScheme === "dark");
-  const themeId = state.settings.themeId ?? DEFAULT_THEME_ID;
+  // Same pin for the mode. Hiding the Light/Dark control without pinning would
+  // strand anyone already on dark — the card that would let them switch back is
+  // the one being hidden — and would leave a "system" install following the
+  // device into a dark palette nobody can leave.
+  const isDark =
+    APPEARANCE_ENABLED &&
+    (state.settings.themeMode === "dark" || (state.settings.themeMode === "system" && systemScheme === "dark"));
+  // Pinned to cream while `APPEARANCE_ENABLED` is false — see the note on that
+  // flag. Deliberately overrides the stored value rather than rewriting it, so
+  // an install that already chose a theme gets it back when the picker returns.
+  const themeId = APPEARANCE_ENABLED ? (state.settings.themeId ?? DEFAULT_THEME_ID) : DEFAULT_THEME_ID;
   const palette = useMemo(() => getPalette(themeId, isDark), [themeId, isDark]);
 
   /**

@@ -42,6 +42,11 @@ const TAGLINES: Record<HomePeriod, string[]> = {
     "The afternoon dip is normal. One easy habit is usually enough to lift it.",
     "Finish what the morning started. You're closer than it feels."
   ],
+  lateAfternoon: [
+    "The light is going amber. A good hour for the one you keep putting off.",
+    "Last stretch of daylight. One habit now beats three tonight.",
+    "Not evening yet. Whatever is left is still very much doable."
+  ],
   evening: [
     "Wind down gently. One last small win and the day is yours.",
     "Almost there. End the day proud of something, however small.",

@@ -1,0 +1,39 @@
+# Walk art
+
+| File | Size | Used as |
+|---|---|---|
+| `LumoWalking.webp` | 853 × 1844 | Backdrop plate — the Walk home and active screens |
+| `LumoDoneWalking.webp` | 853 × 1844 | Backdrop plate — the walk-complete screen |
+| `LumoWalked.webp` | 941 × 1672 | Full-bleed scene, the same shape as the journal's today scene |
+
+The two plates share `BACKGROUND_ASPECT` (853/1844) with everything in
+`assets/bg/`, so they slot into the background registry unchanged.
+
+## Encoding
+
+Same recipe as the rest of the app's art. The sources were 1.0–1.5 MB PNGs; at
+this setting they land at 30–60 KB, in line with the existing plates.
+
+```sh
+for f in *.png; do
+  cwebp -q 82 -m 6 -mt "$f" -o "${f%.png}.webp"
+done
+```
+
+`-q 82` is the quality floor where the soft gradients in Lumo's art stay clean —
+lower starts banding the skies. `-m 6` is the slowest, smallest compression pass,
+which is free here because encoding happens once.
+
+**Do not** apply this to `assets/Splash.png` or the app icon; those must stay PNG.
+
+## Which plates are in use
+
+`LumoWalking.webp` backs the Move screens and `LumoDoneWalking.webp` the
+completion ones, both through `components/WalkBackground.tsx` — which draws them
+at full strength with no bottom fade, unlike the eight landscape washes.
+
+`LumoWalked.webp` is **currently unused as a background**. It is framed the
+other way round from the two above — sky at the top, Lumo at the foot — so it
+cannot be dropped into their fit without its own anchoring. Kept rather than
+deleted: Metro only bundles what is `require`d, so an unreferenced plate costs
+nothing in the app.

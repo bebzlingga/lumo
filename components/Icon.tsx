@@ -34,12 +34,15 @@ import {
   EyeIcon,
   EyeSlashIcon,
   FacebookLogoIcon,
+  FootprintsIcon,
   FireIcon as PhosphorFireIcon,
   GearIcon,
   HeadphonesIcon,
   HeartIcon,
   HeartbeatIcon,
   HouseIcon,
+  InfoIcon,
+  QuestionMarkIcon,
   ImageIcon,
   JarIcon,
   LightningIcon,
@@ -58,6 +61,7 @@ import {
   PaperclipIcon,
   PauseIcon,
   PencilSimpleIcon,
+  PersonSimpleWalkIcon,
   PlayIcon,
   PlusCircleIcon,
   QrCodeIcon,
@@ -142,6 +146,7 @@ export type IconName =
   | "eyeSlash"
   | "facebook"
   | "fire"
+  | "footprints"
   | "forward"
   | "gallery"
   | "glass"
@@ -150,6 +155,8 @@ export type IconName =
   | "health"
   | "heart"
   | "home"
+  | "info"
+  | "question"
   | "messageEdit"
   | "messages"
   | "milk"
@@ -188,6 +195,7 @@ export type IconName =
   | "trophy"
   | "upload"
   | "user"
+  | "walk"
   | "userCircle"
   | "userCircleAdd"
   | "weight"
@@ -232,6 +240,7 @@ const iconMap: Record<IconName, PhosphorIcon> = {
   eye: EyeIcon,
   eyeSlash: EyeSlashIcon,
   facebook: FacebookLogoIcon,
+  footprints: FootprintsIcon,
   fire: PhosphorFireIcon,
   forward: ArrowRightIcon,
   gallery: ImageIcon,
@@ -241,6 +250,8 @@ const iconMap: Record<IconName, PhosphorIcon> = {
   health: HeartbeatIcon,
   heart: HeartIcon,
   home: HouseIcon,
+  info: InfoIcon,
+  question: QuestionMarkIcon,
   // Phosphor has no milk glyph; a jar is the closest honest stand-in.
   milk: JarIcon,
   minusCircle: MinusCircleIcon,
@@ -282,6 +293,7 @@ const iconMap: Record<IconName, PhosphorIcon> = {
   trophy: TrophyIcon,
   upload: UploadSimpleIcon,
   user: UserIcon,
+  walk: PersonSimpleWalkIcon,
   userCircle: UserCircleIcon,
   userCircleAdd: UserCirclePlusIcon,
   weight: BarbellIcon,

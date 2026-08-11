@@ -1,9 +1,14 @@
-import { useFocusEffect, useRouter } from 'expo-router'
+import { useFocusEffect, useRouter, type Href } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, AppState, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
+import { Animated, AppState, ScrollView, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import ConfettiCannon from 'react-native-confetti-cannon'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { fontFamilies, layout, radius, spacing } from '@/constants/theme'
+import { TOOLS } from '@/constants/tools'
+import { MoveHomeCard } from '@/components/move/MoveCards'
+import { useMove } from '@/context/MoveContext'
+import { addDays, startOfWeekMonday } from '@/lib/date'
+import { sumMetric } from '@/lib/move/movement'
 import { useLumo } from '@/context/LumoContext'
 import { alpha, readableOn } from '@/lib/color'
 import { toDateKey } from '@/lib/date'
@@ -41,22 +46,14 @@ const HERO_TOP_GAP = CONTENT_GAP + spacing.xl
 const HEADER_FILL_ALPHA = 'A6'
 
 /**
- * One Explore row.
- *
- * `accent` is the dominant hue of the plate belonging to the screen the row
- * leads to, sampled off that art rather than guessed, so each row carries a
- * trace of where it goes. It survives from when these were picture tiles; the
- * list treatment keeps the colour and drops the pictures.
- */
-/**
- * One hue per Explore destination, sampled from that screen's own art.
+ * One hue per destination, sampled from that screen's own art.
  *
  * Deliberately NOT palette tokens and NOT theme-dependent — the same call
  * `badgeAccent` makes. These are wayfinding: the gold tile means Badges the way
- * a sign's colour means a line on a map, and a row that changed hue with the
- * theme would stop being the thing you learned to reach for. `ResourceRow`
- * walks each one to 3:1 against the current card, so they stay legible in every
- * theme without giving up the identity.
+ * a sign's colour means a line on a map, and a tile that changed hue with the
+ * theme would stop being the thing you learned to reach for. Each is walked to
+ * 3:1 against the current card before it is drawn, so they stay legible in
+ * every theme without giving up the identity.
  */
 const EXPLORE_ACCENT = {
 	tips: '#74BC97',
@@ -65,20 +62,28 @@ const EXPLORE_ACCENT = {
 	featureBoard: '#AE8FFB',
 } as const
 
+/**
+ * One row in a Goodies or Explore card.
+ *
+ * Both sections use this, so they read as the same kind of list and cannot
+ * drift apart. `divided` draws the hairline above — every row but the first.
+ */
 function ResourceRow({
 	icon,
 	label,
 	description,
 	accent,
 	divided,
+	disabled = false,
 	onPress,
 }: {
 	icon: IconName
 	label: string
 	description: string
 	accent: string
-	/** Draws the hairline above this row — every row but the first. */
 	divided: boolean
+	/** Dims the row and drops the chevron — for a tool that has not shipped. */
+	disabled?: boolean
 	onPress: () => void
 }) {
 	const { palette, isDark } = useLumo()
@@ -91,14 +96,16 @@ function ResourceRow({
 	return (
 		<Pressable
 			accessibilityRole='button'
-			accessibilityLabel={`${label}. ${description}`}
+			accessibilityLabel={disabled ? `${label}. ${description}. Coming soon.` : `${label}. ${description}`}
+			accessibilityState={{ disabled }}
+			disabled={disabled}
 			onPress={onPress}
 			onPressIn={() => setPressed(true)}
 			onPressOut={() => setPressed(false)}
 			style={[
 				styles.resourceRow,
 				divided ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: alpha(palette.hairline, '80') } : null,
-				{ opacity: pressed ? 0.7 : 1 },
+				{ opacity: disabled ? 0.55 : pressed ? 0.7 : 1 },
 			]}
 		>
 			{/* The same rounded-square tile the habit rows wear, so the two lists
@@ -114,7 +121,15 @@ function ResourceRow({
 					{description}
 				</AppText>
 			</View>
-			<Icon name='forward' size={15} color={alpha(palette.muted, 'CC')} weight='bold' />
+			{disabled ? (
+				<View style={[styles.resourceSoon, { backgroundColor: alpha(palette.muted, '1F') }]}>
+					<AppText variant='caption' color={palette.subtle} numberOfLines={1}>
+						Soon
+					</AppText>
+				</View>
+			) : (
+				<Icon name='forward' size={15} color={alpha(palette.muted, 'CC')} weight='bold' />
+			)}
 		</Pressable>
 	)
 }
@@ -123,7 +138,20 @@ export default function TodayScreen() {
 	const router = useRouter()
 	const { width } = useWindowDimensions()
 	const insets = useSafeAreaInsets()
-	const { habits, isReady, nickname, palette, avatar } = useLumo()
+	const { habits, isReady, nickname, palette, isDark, avatar } = useLumo()
+	/**
+	 * Move's own state, read straight from its provider.
+	 *
+	 * Deliberately not threaded through `useLumo` — Move is standalone, and the
+	 * Home card is the one place the two features meet.
+	 */
+	const move = useMove()
+	const moveToday = move.today
+	const moveWeekMeters = React.useMemo(() => {
+		const start = startOfWeekMonday(move.todayKey)
+
+		return sumMetric(move.state.summaries, 'distance', start, addDays(start, 6))
+	}, [move.state.summaries, move.todayKey])
 	const todayKey = toDateKey()
 	const [selectedDateKey, setSelectedDateKey] = useState(todayKey)
 	const activeHabits = habits.filter((habit) => habit.status === 'active')
@@ -296,19 +324,51 @@ export default function TodayScreen() {
 				onPress={() => router.push(`/journal/${selectedDateKey}`)}
 			/>
 
+			{/* Lumo Move gets its own section — NOT a habit card and not a Goodies
+			    row. It is a major feature with its own tab, and burying it in a
+			    list of tools would say otherwise. Hidden entirely until there is
+			    something to report, so a brand-new account is not handed an empty
+			    dashboard. */}
+			{moveWeekMeters > 0 || moveToday ? (
+				<View style={styles.moveSection}>
+					<AppText variant='titleSmall' color={palette.ink} style={styles.sectionTitle}>
+						Lumo Move
+					</AppText>
+					<MoveHomeCard
+						today={moveToday}
+						weekMeters={moveWeekMeters}
+						progress={move.progress}
+						totalDistanceM={move.totalDistanceM}
+					/>
+				</View>
+			) : null}
+
+			{/* Two cards, same shape as the habits card above them. Things you DO
+			    on top, things you read below. */}
+			<View style={styles.toolsSection}>
+				<AppText variant='titleSmall' color={palette.ink} style={styles.sectionTitle}>
+					Goodies
+				</AppText>
+				<Card style={styles.resourceCard}>
+					{TOOLS.map((tool, index) => (
+						<ResourceRow
+							key={tool.slug}
+							accent={tool.accent}
+							icon={tool.icon}
+							label={tool.name}
+							description={tool.tagline}
+							divided={index > 0}
+							disabled={!tool.available}
+							onPress={() => router.push(tool.route as Href)}
+						/>
+					))}
+				</Card>
+			</View>
+
 			<View style={styles.exploreSection}>
-				<AppText
-					variant='titleSmall'
-					color={palette.ink}
-					style={styles.sectionTitle}
-				>
+				<AppText variant='titleSmall' color={palette.ink} style={styles.sectionTitle}>
 					Explore
 				</AppText>
-				{/* One card, four divided rows — the same shape as the habits
-				    card above it. These were picture tiles in a grid, which made
-				    four small destinations look like the loudest thing on the
-				    screen; as a list they sit where they belong, under the day's
-				    actual work. */}
 				<Card style={styles.resourceCard}>
 					<ResourceRow accent={EXPLORE_ACCENT.tips} icon='sparkle' label='Habit Journey' description='Habit science, made simple' divided={false} onPress={() => router.push('/tips')} />
 					<ResourceRow accent={EXPLORE_ACCENT.faqs} icon='note' label='FAQs' description='Quick answers about Lumo' divided onPress={() => router.push('/faqs')} />
@@ -412,7 +472,10 @@ const styles = StyleSheet.create({
 		fontFamily: fontFamilies.serifBold,
 		fontSize: 30,
 		lineHeight: 38,
-		maxWidth: '68%',
+		// Sits level with Lumo's HEAD, the narrowest part of him, so it gets more
+		// of the screen than the lines under it can have — and more again since
+		// the plates were re-cut with him further right.
+		maxWidth: '74%',
 	},
 	// The screen's one display-size line. Wraps to a second line for a long
 	// nickname rather than shrinking — the column is only about half the screen
@@ -434,29 +497,34 @@ const styles = StyleSheet.create({
 	 * there is the pale edge of his cushion or his lunchbox — cream on cream,
 	 * which ink text reads over perfectly well, especially with the halo the
 	 * hero text carries. The line worth respecting is his black hoodie, which
-	 * starts around 0.60 and would swallow anything written on it. 40% puts the
-	 * copy's edge between the two.
+	 * would swallow anything written on it.
+	 *
+	 * 36% since the plates were re-cut and scaled: the new art puts Lumo further
+	 * right, so the copy can take back a little of the column without reaching
+	 * the hoodie.
 	 */
 	heroArtReserve: {
-		width: '40%',
+		width: '36%',
 	},
-	// Air above and below, so the list reads as its own block rather than as
-	// one more card on the end of the stack. The gap is what separates the
-	// heading from the card it names.
-	exploreSection: {
+	// The same rhythm as Explore and Goodies, so the three read as one column.
+	moveSection: {
+		gap: spacing.sm,
+	},
+	toolsSection: {
+		// Matches Explore's heading gap, so the two sections sit on one rhythm.
 		gap: spacing.ml,
-		marginTop: spacing.md,
+		// Top is larger than Explore's: this is the first section heading after
+		// the day's cards, so it carries the break between "today's work" and
+		// everything else. The BOTTOM matches Explore exactly.
+		marginTop: spacing.xl,
 		marginBottom: spacing.md,
 	},
-	// The app's list-section heading, matching Habits and the journal's month
-	// headings.
-	sectionTitle: {
-		fontFamily: fontFamilies.lexendBold,
-		fontSize: 16,
-		lineHeight: 22,
+	exploreSection: {
+		gap: spacing.ml,
+		marginBottom: spacing.md,
 	},
-	// Rows run edge to edge inside the card, so it only insets horizontally —
-	// the rows carry their own vertical padding.
+	// The rows carry their own vertical padding, so the card only insets
+	// horizontally and adds a hair top and bottom.
 	resourceCard: {
 		paddingHorizontal: spacing.ml,
 		paddingVertical: spacing.xs,
@@ -492,5 +560,20 @@ const styles = StyleSheet.create({
 		fontFamily: fontFamilies.lexend,
 		fontSize: 12,
 		lineHeight: 16,
+	},
+	// Sits where the chevron would, since a row that cannot be opened should not
+	// promise somewhere to go.
+	resourceSoon: {
+		minHeight: 24,
+		justifyContent: 'center',
+		paddingHorizontal: spacing.xs,
+		borderRadius: radius.pill,
+	},
+	// The app's list-section heading, matching Habits and the journal's month
+	// headings.
+	sectionTitle: {
+		fontFamily: fontFamilies.lexendBold,
+		fontSize: 16,
+		lineHeight: 22,
 	},
 })

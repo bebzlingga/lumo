@@ -22,14 +22,17 @@ import { Pressable } from "@/components/Pressable"
  * consumes `href` itself, so it never reaches `descriptors[...].options` and a
  * filter on it silently matches nothing.
  */
-const HIDDEN_TABS = new Set(["settings"]);
+const HIDDEN_TABS = new Set(["settings", "profile"]);
 
 const tabIcons: Record<string, IconName> = {
   today: "home",
   habits: "colorFilter",
+  // Lumo Move sits between the personal side of the app and the social side,
+  // which is where it belongs: it is a major feature of its own rather than a
+  // tool tucked inside Today.
+  move: "walk",
   journal: "book",
-  friends: "friends",
-  profile: "user"
+  friends: "friends"
 };
 
 function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
@@ -243,6 +246,12 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="move"
+          options={{
+            title: "Move"
+          }}
+        />
+        <Tabs.Screen
           name="friends"
           options={{
             title: "Friends"
@@ -254,9 +263,15 @@ export default function TabLayout() {
             title: "Journal"
           }}
         />
+        {/* Held back from the bar, but kept in the tabs navigator so the bottom
+            navigation stays visible while Profile is open — the same treatment
+            Settings gets. Still reached from the avatar on Today and from the
+            friend-request and group-invite notifications, so nothing is
+            stranded by taking the slot away. */}
         <Tabs.Screen
           name="profile"
           options={{
+            href: null,
             title: "Profile"
           }}
         />

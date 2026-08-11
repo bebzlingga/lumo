@@ -2,6 +2,23 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
   <dict>
+    <!-- Required for HealthKit. Read-only: Lumo Move reads step count, walking
+         and running distance, and Apple exercise time, and never writes a
+         sample.
+
+         There is deliberately NO `com.apple.developer.healthkit.access` key.
+         That one declares Verifiable Health Records — clinical records from a
+         health provider — and Apple gates it behind a written request. Move
+         does not read clinical records, so claiming it only produced a build
+         that could not be signed.
+
+         The HealthKit capability must also be enabled on the App ID in the
+         Apple Developer portal (Certificates, Identifiers & Profiles →
+         Identifiers → com.lumo.habits → HealthKit), or the profile will not
+         carry this entitlement and the build fails to sign. Requires a paid
+         Apple Developer account; free personal teams cannot use HealthKit. -->
+    <key>com.apple.developer.healthkit</key>
+    <true/>
     <key>aps-environment</key>
     <string>production</string>
     <key>com.apple.security.application-groups</key>

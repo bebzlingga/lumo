@@ -48,6 +48,8 @@ export function Screen({
   backgroundVariant = DEFAULT_BACKGROUND,
   backgroundIntensity = "subtle",
   refreshControl,
+  scrollEnabled,
+  scrollRef: scrollRefProp,
   onScroll,
   scrollEventThrottle,
   resetScrollOnFocus = true,
@@ -72,6 +74,10 @@ export function Screen({
   backgroundNode?: ReactNode;
   // Pull-to-refresh for scrolling screens (ignored when scroll is false).
   refreshControl?: React.ComponentProps<typeof ScrollView>["refreshControl"];
+  /** Set false to lock the page while a child owns the gesture (e.g. a dial). */
+  scrollEnabled?: boolean;
+  /** Hands the page's scroller back, for screens that need to scroll to a field. */
+  scrollRef?: React.RefObject<ScrollView | null>;
   // Optional scroll passthrough (e.g. for infinite-scroll pagination).
   onScroll?: React.ComponentProps<typeof ScrollView>["onScroll"];
   scrollEventThrottle?: number;
@@ -95,7 +101,16 @@ export function Screen({
   const { palette, isDark } = useLumo();
   // Overscroll/bounce past the content should match the gradient's tail (or the flat override).
   const canvas = backgroundGradient?.[backgroundGradient.length - 1]?.color ?? background ?? palette.canvas;
-  const scrollRef = React.useRef<ScrollView>(null);
+  /**
+   * The page's scroller.
+   *
+   * Exposed through `scrollRef` when a caller passes one, so a screen that ends
+   * on a text field can bring it above the keyboard itself. `automaticallyAdjust
+   * KeyboardInsets` makes the room but does not move the view, so a field near
+   * the bottom is still behind the keyboard until something scrolls to it.
+   */
+  const innerScrollRef = React.useRef<ScrollView>(null);
+  const scrollRef = scrollRefProp ?? innerScrollRef;
 
   /**
    * A tab screen stays mounted once visited, so its ScrollView keeps whatever
@@ -166,6 +181,7 @@ export function Screen({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.screenContent, contentStyle]}
           refreshControl={refreshControl}
+          scrollEnabled={scrollEnabled}
           onScroll={handleScroll}
           scrollEventThrottle={scrollEventThrottle ?? 16}
         >
@@ -261,6 +277,7 @@ export function Button({
   delayLongPress,
   icon,
   iconWeight = "bold",
+  iconSize = 17,
   accessibilityLabel,
   className,
   variant = "primary",
@@ -277,6 +294,8 @@ export function Button({
   delayLongPress?: number;
   icon?: IconName;
   iconWeight?: IconWeight;
+  /** Matches the label's own size — a smaller button needs a smaller glyph. */
+  iconSize?: number;
   accessibilityLabel?: string;
   className?: string;
   variant?: "primary" | "secondary" | "ghost" | "danger" | "glow" | "accent";
@@ -355,7 +374,7 @@ export function Button({
           }
         ]}
       />
-      {icon ? <Icon name={icon} size={17} color={color} weight={iconWeight} /> : null}
+      {icon ? <Icon name={icon} size={iconSize} color={color} weight={iconWeight} /> : null}
       {label ? (
         <AppText variant="button" color={color} style={[styles.buttonText, labelStyle]}>
           {label}

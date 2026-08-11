@@ -132,6 +132,11 @@ const sceneArt = {
 		source: require('../assets/mascot/Lumo_JournalToday.webp') as ImageSourcePropType,
 		aspect: 941 / 1672,
 	},
+	/** Lumo having finished a walk — the celebration on the complete screen. */
+	walkDone: {
+		source: require('../assets/walk/LumoWalked.webp') as ImageSourcePropType,
+		aspect: 941 / 1672,
+	},
 	/** Wide banner: Lumo writing on the right, open cream on the left for copy. */
 	journalAdd: {
 		source: require('../assets/mascot/Lumo_JournalAdd 1.webp') as ImageSourcePropType,

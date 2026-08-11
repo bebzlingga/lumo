@@ -103,6 +103,18 @@ export function formatFullDate(dateKey: string) {
   return date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", year: "numeric" });
 }
 
+/**
+ * "Jul 12, 3:24 PM" — an ISO INSTANT, not a date key.
+ *
+ * For records that happen at a moment rather than on a day: a badge is earned
+ * on the step that crosses the line, and the time is part of what happened.
+ * Locale-aware like the rest of this file, so it reads 15:24 where that is the
+ * convention.
+ */
+export function formatInstant(iso: string) {
+  return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 export function formatMonthYear(dateKey: string) {
   const date = parseDateKey(dateKey);
   return date.toLocaleDateString(undefined, { month: "short", year: "numeric" });

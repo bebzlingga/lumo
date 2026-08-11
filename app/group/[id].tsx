@@ -1241,7 +1241,7 @@ export default function GroupDetailScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.xxl * 2,
     // Cards carry their own padding, so the stack between them stays tight —
     // the same 8pt home runs, rather than a rhythm of this page's own.
     gap: spacing.xs

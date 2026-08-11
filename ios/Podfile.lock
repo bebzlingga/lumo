@@ -277,6 +277,10 @@ PODS:
     - Yoga
   - ExpoAsset (11.1.7):
     - ExpoModulesCore
+  - ExpoAudio (0.4.9):
+    - ExpoModulesCore
+  - ExpoCrypto (14.1.5):
+    - ExpoModulesCore
   - ExpoDocumentPicker (13.1.6):
     - ExpoModulesCore
   - ExpoFileSystem (18.1.11):
@@ -290,6 +294,8 @@ PODS:
   - ExpoImagePicker (16.1.4):
     - ExpoModulesCore
   - ExpoLinking (7.1.7):
+    - ExpoModulesCore
+  - ExpoLocation (18.1.6):
     - ExpoModulesCore
   - ExpoMediaLibrary (17.1.7):
     - ExpoModulesCore
@@ -319,14 +325,42 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
+  - ExpoScreenOrientation (8.1.7):
+    - DoubleConversion
+    - ExpoModulesCore
+    - glog
+    - hermes-engine
+    - RCT-Folly (= 2024.11.18.00)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-hermes
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - Yoga
+  - ExpoSensors (14.1.4):
+    - ExpoModulesCore
   - ExpoSharing (13.1.5):
     - ExpoModulesCore
   - ExpoSpeechRecognition (2.1.5):
     - ExpoModulesCore
   - ExpoSplashScreen (0.30.10):
     - ExpoModulesCore
-  - ExpoVideo (2.2.3):
+  - EXTaskManager (13.1.6):
     - ExpoModulesCore
+    - UMAppLoader
   - ExtensionStorage (1.0.0):
     - ExpoModulesCore
   - EXUpdatesInterface (1.1.0):
@@ -365,7 +399,7 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
-  - NitroModules (0.35.10):
+  - NitroModules (0.36.5):
     - DoubleConversion
     - glog
     - hermes-engine
@@ -1715,6 +1749,10 @@ PODS:
     - React-jsiexecutor
     - React-RCTFBReactNativeSpec
     - ReactCommon/turbomodule/core
+  - react-native-maps (1.20.1):
+    - React-Core
+  - react-native-netinfo (11.4.1):
+    - React-Core
   - react-native-safe-area-context (5.4.0):
     - DoubleConversion
     - glog
@@ -2138,6 +2176,32 @@ PODS:
     - React-logger (= 0.79.6)
     - React-perflogger (= 0.79.6)
     - React-utils (= 0.79.6)
+  - ReactNativeHealthkit (14.0.2):
+    - DoubleConversion
+    - glog
+    - hermes-engine
+    - NitroModules
+    - RCT-Folly (= 2024.11.18.00)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-callinvoker
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-hermes
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - Yoga
   - RNCAsyncStorage (2.1.2):
     - DoubleConversion
     - glog
@@ -2437,6 +2501,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - Yoga
   - SocketRocket (0.7.1)
+  - UMAppLoader (5.1.3)
   - Yoga (0.0.0)
 
 DEPENDENCIES:
@@ -2454,6 +2519,8 @@ DEPENDENCIES:
   - expo-dev-menu (from `../node_modules/expo-dev-menu`)
   - expo-dev-menu-interface (from `../node_modules/expo-dev-menu-interface/ios`)
   - ExpoAsset (from `../node_modules/expo-asset/ios`)
+  - ExpoAudio (from `../node_modules/expo-audio/ios`)
+  - ExpoCrypto (from `../node_modules/expo-crypto/ios`)
   - ExpoDocumentPicker (from `../node_modules/expo-document-picker/ios`)
   - ExpoFileSystem (from `../node_modules/expo-file-system/ios`)
   - ExpoFont (from `../node_modules/expo-font/ios`)
@@ -2461,12 +2528,15 @@ DEPENDENCIES:
   - ExpoHead (from `../node_modules/expo-router/ios`)
   - ExpoImagePicker (from `../node_modules/expo-image-picker/ios`)
   - ExpoLinking (from `../node_modules/expo-linking/ios`)
+  - ExpoLocation (from `../node_modules/expo-location/ios`)
   - ExpoMediaLibrary (from `../node_modules/expo-media-library/ios`)
   - ExpoModulesCore (from `../node_modules/expo-modules-core`)
+  - ExpoScreenOrientation (from `../node_modules/expo-screen-orientation/ios`)
+  - ExpoSensors (from `../node_modules/expo-sensors/ios`)
   - ExpoSharing (from `../node_modules/expo-sharing/ios`)
   - ExpoSpeechRecognition (from `../node_modules/expo-speech-recognition/ios`)
   - ExpoSplashScreen (from `../node_modules/expo-splash-screen/ios`)
-  - ExpoVideo (from `../node_modules/expo-video/ios`)
+  - EXTaskManager (from `../node_modules/expo-task-manager/ios`)
   - "ExtensionStorage (from `../node_modules/@bacons/apple-targets/ios`)"
   - EXUpdatesInterface (from `../node_modules/expo-updates-interface/ios`)
   - fast_float (from `../node_modules/react-native/third-party-podspecs/fast_float.podspec`)
@@ -2509,6 +2579,8 @@ DEPENDENCIES:
   - React-logger (from `../node_modules/react-native/ReactCommon/logger`)
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
+  - react-native-maps (from `../node_modules/react-native-maps`)
+  - "react-native-netinfo (from `../node_modules/@react-native-community/netinfo`)"
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
   - react-native-view-shot (from `../node_modules/react-native-view-shot`)
   - react-native-widgetkit (from `../node_modules/react-native-widgetkit`)
@@ -2543,6 +2615,7 @@ DEPENDENCIES:
   - ReactAppDependencyProvider (from `build/generated/ios`)
   - ReactCodegen (from `build/generated/ios`)
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
+  - "ReactNativeHealthkit (from `../node_modules/@kingstinct/react-native-healthkit`)"
   - "RNCAsyncStorage (from `../node_modules/@react-native-async-storage/async-storage`)"
   - "RNDateTimePicker (from `../node_modules/@react-native-community/datetimepicker`)"
   - RNGestureHandler (from `../node_modules/react-native-gesture-handler`)
@@ -2550,6 +2623,7 @@ DEPENDENCIES:
   - RNReanimated (from `../node_modules/react-native-reanimated`)
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNSVG (from `../node_modules/react-native-svg`)
+  - UMAppLoader (from `../node_modules/unimodules-app-loader/ios`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
 SPEC REPOS:
@@ -2586,6 +2660,10 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-dev-menu-interface/ios"
   ExpoAsset:
     :path: "../node_modules/expo-asset/ios"
+  ExpoAudio:
+    :path: "../node_modules/expo-audio/ios"
+  ExpoCrypto:
+    :path: "../node_modules/expo-crypto/ios"
   ExpoDocumentPicker:
     :path: "../node_modules/expo-document-picker/ios"
   ExpoFileSystem:
@@ -2600,18 +2678,24 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-image-picker/ios"
   ExpoLinking:
     :path: "../node_modules/expo-linking/ios"
+  ExpoLocation:
+    :path: "../node_modules/expo-location/ios"
   ExpoMediaLibrary:
     :path: "../node_modules/expo-media-library/ios"
   ExpoModulesCore:
     :path: "../node_modules/expo-modules-core"
+  ExpoScreenOrientation:
+    :path: "../node_modules/expo-screen-orientation/ios"
+  ExpoSensors:
+    :path: "../node_modules/expo-sensors/ios"
   ExpoSharing:
     :path: "../node_modules/expo-sharing/ios"
   ExpoSpeechRecognition:
     :path: "../node_modules/expo-speech-recognition/ios"
   ExpoSplashScreen:
     :path: "../node_modules/expo-splash-screen/ios"
-  ExpoVideo:
-    :path: "../node_modules/expo-video/ios"
+  EXTaskManager:
+    :path: "../node_modules/expo-task-manager/ios"
   ExtensionStorage:
     :path: "../node_modules/@bacons/apple-targets/ios"
   EXUpdatesInterface:
@@ -2693,6 +2777,10 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   React-microtasksnativemodule:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
+  react-native-maps:
+    :path: "../node_modules/react-native-maps"
+  react-native-netinfo:
+    :path: "../node_modules/@react-native-community/netinfo"
   react-native-safe-area-context:
     :path: "../node_modules/react-native-safe-area-context"
   react-native-view-shot:
@@ -2761,6 +2849,8 @@ EXTERNAL SOURCES:
     :path: build/generated/ios
   ReactCommon:
     :path: "../node_modules/react-native/ReactCommon"
+  ReactNativeHealthkit:
+    :path: "../node_modules/@kingstinct/react-native-healthkit"
   RNCAsyncStorage:
     :path: "../node_modules/@react-native-async-storage/async-storage"
   RNDateTimePicker:
@@ -2775,6 +2865,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-screens"
   RNSVG:
     :path: "../node_modules/react-native-svg"
+  UMAppLoader:
+    :path: "../node_modules/unimodules-app-loader/ios"
   Yoga:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
@@ -2793,6 +2885,8 @@ SPEC CHECKSUMS:
   expo-dev-menu: 0771fa9c5c405e07aa15e55a699b8a4a984ea77a
   expo-dev-menu-interface: 609c35ae8b97479cdd4c9e23c8cf6adc44beea0e
   ExpoAsset: ef06e880126c375f580d4923fdd1cdf4ee6ee7d6
+  ExpoAudio: d98f922b17a945cd33f8462d086278dbd810c537
+  ExpoCrypto: a9f1d75baeea6ef8b03c1660621585196c382e85
   ExpoDocumentPicker: b263a279685b6640b8c8bc70d71c83067aeaae55
   ExpoFileSystem: 7f92f7be2f5c5ed40a7c9efc8fa30821181d9d63
   ExpoFont: cf508bc2e6b70871e05386d71cab927c8524cc8e
@@ -2800,12 +2894,15 @@ SPEC CHECKSUMS:
   ExpoHead: cfc12096c9a68cbe25de93a8bfc4781c7689467e
   ExpoImagePicker: 0963da31800c906e01c03e25d7c849f16ebf02a2
   ExpoLinking: d5c183998ca6ada66ff45e407e0f965b398a8902
+  ExpoLocation: a43df2ff15f2fae9504b23a77060e7cd16b3e326
   ExpoMediaLibrary: 0daf5e811e00daa47690f5da2989e71ff7de56e0
   ExpoModulesCore: 00a1b5c73248465bd0b93f59f8538c4573dac579
+  ExpoScreenOrientation: c883a8f448232c4f185cea4f08ce54ebdf9d010d
+  ExpoSensors: 38ae3a55b484410a7976fa3ff78ea80339252e75
   ExpoSharing: b0377be82430d07398c6a4cd60b5a15696accbd3
   ExpoSpeechRecognition: c927769c7bec19204fc0bfe28355487fbc87f871
   ExpoSplashScreen: 0ad5acac1b5d2953c6e00d4319f16d616f70d4dd
-  ExpoVideo: ecded6b0b802be921fcf85c8d831cc086c362fb4
+  EXTaskManager: 280143f6d8e596f28739d74bf34910300dcbd4ea
   ExtensionStorage: 5796de20bf181317c376d693fedb64c6781a33ba
   EXUpdatesInterface: 7ff005b7af94ee63fa452ea7bb95d7a8ff40277a
   fast_float: 06eeec4fe712a76acc9376682e4808b05ce978b6
@@ -2814,7 +2911,7 @@ SPEC CHECKSUMS:
   glog: 5683914934d5b6e4240e497e0f4a3b42d1854183
   hermes-engine: 44bb6fe76a6eb400d3a992e2d0b21946ae999fa9
   NitroIap: b0c5137345efae508c99bbae04bfcf3e9590c6b7
-  NitroModules: fe7084d26cd7aa83c91ada87bfbbf25e0d82f3eb
+  NitroModules: 85f4337a47a151b55292d8a16eaf3fd65c9b68c4
   openiap: 9dffe727dc566ff7577a45a2429834c4dddecdb0
   RCT-Folly: e78785aa9ba2ed998ea4151e314036f6c49e6d82
   RCTDeprecation: 9bc64754b40b86fa5e32f293ab3ea8eea2248339
@@ -2847,6 +2944,8 @@ SPEC CHECKSUMS:
   React-logger: 1426d04b594a2e68b0ac2add21d45422d06397a3
   React-Mapbuffer: 70a29536f84ddffca4a91097651d2b8f194f7c67
   React-microtasksnativemodule: ff05e894231c44c21135d1d23a82b87656d98eeb
+  react-native-maps: 9febd31278b35cd21e4fad2cf6fa708993be5dab
+  react-native-netinfo: cec9c4e86083cb5b6aba0e0711f563e2fbbff187
   react-native-safe-area-context: 562163222d999b79a51577eda2ea8ad2c32b4d06
   react-native-view-shot: 57c7b8158751f19f32cb885109574712955ea016
   react-native-widgetkit: 9138fc58146c4f39771516ea9ef0e2d6fb20a9cd
@@ -2881,6 +2980,7 @@ SPEC CHECKSUMS:
   ReactAppDependencyProvider: ae0be24eb18014a031b4b220cb3973d07c3cbaf8
   ReactCodegen: 06cf663b23a161f42a2e14087269753f422885c0
   ReactCommon: 44c86ec3ace664c0f33b7a2ac89aced8304ef25e
+  ReactNativeHealthkit: 7d32192f72df84515e74d55fa5fe394853de2f3c
   RNCAsyncStorage: 39c42c1e478e1f5166d1db52b5055e090e85ad66
   RNDateTimePicker: a4ad049fdd568755003c479beac3bdea742ac4d0
   RNGestureHandler: 7d0931a61d7ba0259f32db0ba7d0963c3ed15d2b
@@ -2889,6 +2989,7 @@ SPEC CHECKSUMS:
   RNScreens: 482e9707f9826230810c92e765751af53826d509
   RNSVG: 794f269526df9ddc1f79b3d1a202b619df0368e3
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
+  UMAppLoader: 55159b69750129faa7a51c493cb8ea55a7b64eb9
   Yoga: dc7c21200195acacb62fa920c588e7c2106de45e
 
 PODFILE CHECKSUM: 94b038039eb68a2407c17bd9450db1e3e805f38a

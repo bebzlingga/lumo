@@ -4,7 +4,7 @@
     "slug": "lumo",
     "scheme": "lumo",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/production/expo-ready/icon.png",
     "newArchEnabled": true,
@@ -13,6 +13,11 @@
       "bundleIdentifier": "com.lumo.habits",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["audio", "location"],
+        "NSLocationWhenInUseUsageDescription": "Lumo uses your location to trace the route of a walk and measure how far you went.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Lumo keeps recording your walk while the screen is off, so your route and distance stay accurate when the phone is in your pocket.",
+        "NSHealthShareUsageDescription": "Lumo reads your steps, walking and running distance, and active minutes so your movement counts toward your Move goals, badges and challenges automatically.",
+          "NSMotionUsageDescription": "Lumo reads your step count so a walk can show how many steps it took.",
         "NSSpeechRecognitionUsageDescription": "Lumo uses speech recognition to turn your voice into text.",
         "NSMicrophoneUsageDescription": "Lumo needs the microphone to dictate your journal."
       },
@@ -71,7 +76,8 @@
             "backgroundColor": "#FCF4E4"
           }
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true

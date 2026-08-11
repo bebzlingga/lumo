@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     gap: spacing.sm,
-    borderRadius: radius.nav,
+    borderRadius: radius.dialog,
     padding: spacing.xl
   },
   title: {

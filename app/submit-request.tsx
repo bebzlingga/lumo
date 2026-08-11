@@ -5,7 +5,7 @@ import { Alert, Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensi
 import { Icon, type IconName } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Button, FieldLabel, LoadingState, LumoInput, Screen } from "@/components/ui";
-import { fontFamilies, layout, radius, spacing } from "@/constants/theme";
+import { CTA_FILL, fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { featureBoardService } from "@/lib/featureBoard";
@@ -54,7 +54,6 @@ export default function SubmitRequestScreen() {
   const { isReady, isDark, palette, canUseFeatureBoard } = useLumo();
   // Type cards ride a horizontal scroll at 60% of the content width each.
   const typeCardWidth = Math.round((width - spacing.lg * 2) * 0.6);
-  const buttonFill = isDark ? palette.green : palette.greenDark;
   const [type, setType] = useState<FeatureRequestType>(params.type === "bug" ? "bug" : "feature");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -288,14 +287,14 @@ export default function SubmitRequestScreen() {
         )}
       </View>
 
-      <View style={[styles.ctaShell, { backgroundColor: buttonFill, shadowColor: isDark ? "transparent" : palette.greenDark }]}>
+      <View style={[styles.ctaShell, { backgroundColor: CTA_FILL, shadowColor: isDark ? "transparent" : palette.greenDark }]}>
         <Button
           label={submitting ? (editId ? "Saving…" : "Sending…") : editId ? "Save changes" : copy.cta}
           variant="primary"
           disabled={!title.trim() || submitting}
           onPress={submit}
           className="min-h-[52px] w-full flex-row items-center justify-center rounded-full px-4 py-2"
-          style={{ backgroundColor: buttonFill, borderRadius: radius.pill, borderWidth: 0 }}
+          style={{ backgroundColor: CTA_FILL, borderRadius: radius.pill, borderWidth: 0 }}
           labelStyle={{ fontSize: 16 }}
         />
       </View>

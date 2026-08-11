@@ -6,7 +6,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Screen } from "@/components/ui";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BACKGROUND_ASPECT } from "@/constants/backgroundAssets";
-import { fontFamilies, radius, spacing } from "@/constants/theme";
+import { CTA_FILL, fontFamilies, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { useTabBarVisibility } from "@/context/TabBarVisibility";
@@ -163,7 +163,7 @@ export function SubscriptionGate({ product = "friends" }: { product?: PaywallPro
   const router = useRouter();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { palette, isDark, purchasePro, purchaseUnlimited, restorePurchases } = useLumo();
+  const { palette, purchasePro, purchaseUnlimited, restorePurchases } = useLumo();
   const copy = PRODUCTS[product];
   const tabBar = useTabBarVisibility();
 
@@ -210,7 +210,6 @@ export function SubscriptionGate({ product = "friends" }: { product?: PaywallPro
     outputRange: [1, FADED_OPACITY],
     extrapolate: "clamp"
   });
-  const buttonFill = isDark ? palette.green : palette.greenDark;
   const [busy, setBusy] = React.useState(false);
   const [restoring, setRestoring] = React.useState(false);
   const [ctaPressed, setCtaPressed] = React.useState(false);
@@ -339,7 +338,7 @@ export function SubscriptionGate({ product = "friends" }: { product?: PaywallPro
         onPress={handleSubscribe}
         onPressIn={() => setCtaPressed(true)}
         onPressOut={() => setCtaPressed(false)}
-        style={[styles.subscribeCta, { backgroundColor: buttonFill, opacity: ctaPressed ? 0.88 : 1 }]}
+        style={[styles.subscribeCta, { backgroundColor: CTA_FILL, opacity: ctaPressed ? 0.88 : 1 }]}
       >
         {busy ? (
           <ActivityIndicator color={palette.white} />
@@ -466,7 +465,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
-    borderRadius: radius.nav,
+    borderRadius: radius.pill,
     paddingVertical: spacing.md,
     marginTop: spacing.xs
   },

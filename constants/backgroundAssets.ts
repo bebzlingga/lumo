@@ -24,6 +24,8 @@ export type BackgroundVariant =
 	| 'profile'
 	| 'avatarCreator'
 	| 'themes'
+	| 'walkDone'
+	| 'walking'
 	| 'settings'
 	| 'notifications'
 	| 'reminders'
@@ -58,6 +60,11 @@ const art = {
 	journal: require('../assets/bg/06_journal.webp') as ImageSourcePropType,
 	challenge: require('../assets/bg/07_challenge.webp') as ImageSourcePropType,
 	trophies: require('../assets/bg/08_trophies.webp') as ImageSourcePropType,
+	// Move brings its own plates rather than borrowing — see assets/walk. Both
+	// are SCENES with Lumo drawn in, so they are fitted by `WalkBackground`
+	// rather than washed by `LumoBackground`.
+	walking: require('../assets/walk/LumoWalking.webp') as ImageSourcePropType,
+	walkDone: require('../assets/walk/LumoWalked.webp') as ImageSourcePropType,
 }
 
 /**
@@ -81,6 +88,8 @@ const registry: Record<BackgroundVariant, ImageSourcePropType> = {
 	profile: art.habits,
 	avatarCreator: art.journal,
 	themes: art.onboarding,
+	walking: art.walking,
+	walkDone: art.walkDone,
 	settings: art.habitDetail,
 	notifications: art.journal,
 	reminders: art.trophies,
@@ -108,10 +117,10 @@ const registry: Record<BackgroundVariant, ImageSourcePropType> = {
  * closes the bottom. Because Lumo is baked into the art, the home screen must
  * not draw a mascot of its own over them.
  */
-export type HomePeriod = 'earlyMorning' | 'morning' | 'lunch' | 'afternoon' | 'evening'
+export type HomePeriod = 'earlyMorning' | 'morning' | 'lunch' | 'afternoon' | 'lateAfternoon' | 'evening'
 
-/** Every home plate is exported at 724 × 2172 — a much taller 1:3 frame. */
-export const HOME_BACKGROUND_ASPECT = 724 / 2172
+/** Every home plate is exported at 863 × 1822. */
+export const HOME_BACKGROUND_ASPECT = 863 / 1822
 
 /**
  * How each plate is fitted to the screen.
@@ -149,65 +158,49 @@ export type HomePlateFit = {
 	sceneBottom: number
 }
 
+/**
+ * ONE fit for all six, unlike the set before them.
+ *
+ * The old plates were drawn at different framings and each needed its own three
+ * numbers tuned against the others. This set is exported to a single template —
+ * same 863 × 1822 frame, Lumo top right at the same size, the scene ending at
+ * the same height — so a per-period row would be six copies of one row and six
+ * places to forget when the art is re-cut.
+ *
+ * `scale` does all the work here, and it is the only lever that moves the scene
+ * WITHOUT opening a gap.
+ *
+ * The plate is anchored top-left, so drawing it larger slides every element in
+ * it both right and down in proportion — Lumo sits about a sixth of the way
+ * down the art, so a 30% larger plate puts him 30% further from the top. The
+ * art still starts at y=0 and still reaches past the foot of the screen, so
+ * there is nothing above it and nothing below it to see.
+ *
+ * `shiftY` would move him down too, but by pushing the plate off the top of the
+ * screen — which leaves a strip of bare canvas above it. That is why it is 0.
+ *
+ * `sceneBottom` comes down as `scale` goes up: it is a fraction of the plate's
+ * height, and the plate is now taller than the screen. The two always move
+ * together, or the first card follows Lumo down the page.
+ */
+const HOME_FIT: HomePlateFit = { scale: 1.3, shiftY: 0, sceneBottom: 0.235 }
+
 export const HOME_PLATE_FIT: Record<HomePeriod, HomePlateFit> = {
-	// The reference. Lumo's head lands ~116pt down the screen, his cushion
-	// ~331pt, and the first card ~290pt — crossing the cushion by about 40pt.
-	earlyMorning: { scale: 1.1, shiftY: 0.075, sceneBottom: 0.3 },
-	// Fitted to the above: `shiftY` holds this pose's head at the same y as the
-	// reference's and `sceneBottom` holds the first card at the same y, so only
-	// `scale` is really being chosen here.
-	//
-	// It is a compromise, and worth knowing which way. This Lumo carries a
-	// lunchbox out to his side, so he reaches further in from the left than the
-	// sitting pose — 0.495 of the plate against 0.562. Scaling until the two
-	// leading edges line up takes 1.25, which renders him 12% larger than the
-	// reference and buries his feet behind the first card. 1.16 splits the
-	// difference: he lands ~17pt short of the reference's edge and only ~4%
-	// oversized.
-	morning: { scale: 1.16, shiftY: 0.047, sceneBottom: 0.26 },
-	// Sitting cross-legged with a book, so the framing is close to the
-	// reference's and the fit comes out clean: matching his rendered height
-	// lands his head, his base and the first card all within a point or two of
-	// the early-morning plate's. He reaches to 0.525 of the plate against the
-	// reference's 0.562, so his leading edge still sits ~10pt further left.
-	lunch: { scale: 1.13, shiftY: 0.072, sceneBottom: 0.291 },
-	// Sitting with a laptop. The pull here is between two scales: 1.07 matches
-	// his rendered height, 1.20 matches the leading edge, and 1.13 splits them
-	// — ~6% oversized with his edge ~14pt short of the reference's.
-	//
-	// Note WHAT the leading edge is on this one. It is the laptop, not Lumo:
-	// a flat grey lid, the only thing across the five plates that the greeting
-	// could overlap onto that is neither cream nor open sky. If a tagline line
-	// ever reaches it, that is the plate it will show on first.
-	afternoon: { scale: 1.13, shiftY: 0.062, sceneBottom: 0.281 },
-	// Sitting with a book. The odd one out: the art is 887x1774 against the
-	// other four's 724x2172, so `cover` scales it to the box's height and crops
-	// ~17% off each side. Do NOT "fix" the aspect — rendering it at its true 1:2
-	// would shrink Lumo by a third, and all three numbers here would need
-	// refitting.
-	//
-	// `sceneBottom` is the one that matters, and it is fitted to the SAME rule
-	// as the other four rather than to this plate's own art: every plate lands
-	// the first card at 290pt on a 390pt screen (319pt at 430). Left at a round
-	// 0.3 this one put the card at 361pt, which is the gap under the greeting.
-	//
-	// `shiftY` drops from 0.02 to 0.01 so Lumo's head lands at 124pt, matching
-	// morning's exactly.
-	//
-	// `scale` stays at 1, and that is a compromise worth knowing. This Lumo is
-	// framed smaller in a wider plate, so he renders 218pt tall against
-	// morning's 254pt. Matching that height takes scale 1.165 — which puts his
-	// right edge 83pt past the screen and cuts the plant and table off
-	// entirely. Being 14% short is the better of the two.
-	evening: { scale: 1, shiftY: 0.01, sceneBottom: 0.257 },
+	earlyMorning: HOME_FIT,
+	morning: HOME_FIT,
+	lunch: HOME_FIT,
+	afternoon: HOME_FIT,
+	lateAfternoon: HOME_FIT,
+	evening: HOME_FIT,
 }
 
 const homeArt: Record<HomePeriod, ImageSourcePropType> = {
-	earlyMorning: require('../assets/bg/HomeEarlyMorning.webp') as ImageSourcePropType,
-	morning: require('../assets/bg/HomeMorning.webp') as ImageSourcePropType,
-	lunch: require('../assets/bg/HomeLunch.webp') as ImageSourcePropType,
-	afternoon: require('../assets/bg/HomeAfternoon.webp') as ImageSourcePropType,
-	evening: require('../assets/bg/HomeEvening.webp') as ImageSourcePropType,
+	earlyMorning: require('../assets/bg-home/LumoEarlyMorning.webp') as ImageSourcePropType,
+	morning: require('../assets/bg-home/LumoMorning.webp') as ImageSourcePropType,
+	lunch: require('../assets/bg-home/LumoLunch.webp') as ImageSourcePropType,
+	afternoon: require('../assets/bg-home/LumoAfternoon.webp') as ImageSourcePropType,
+	lateAfternoon: require('../assets/bg-home/LumoLateAfternoon.webp') as ImageSourcePropType,
+	evening: require('../assets/bg-home/LumoEvening.webp') as ImageSourcePropType,
 }
 
 /**
@@ -220,10 +213,14 @@ export function homePeriodForHour(hour: number): HomePeriod {
 	if (hour >= 18) {
 		return 'evening'
 	}
-	if (hour >= 15) {
+	if (hour >= 16) {
+		return 'lateAfternoon'
+	}
+	if (hour >= 13) {
 		return 'afternoon'
 	}
-	if (hour >= 12) {
+	// Lunch is the one short period: the hour of noon and nothing either side.
+	if (hour === 12) {
 		return 'lunch'
 	}
 	if (hour >= 6) {

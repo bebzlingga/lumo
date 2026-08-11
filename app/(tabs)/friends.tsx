@@ -66,6 +66,12 @@ const FORCE_EMPTY_STATE = false;
 // Backend is wired (Supabase) — flip back to true to re-hide the tab for launch.
 const FRIENDS_COMING_SOON = false;
 
+/**
+ * TEMPORARY — opens Friends without a subscription, so the Move team routes can
+ * be walked end to end while testing. Set to false to put the paywall back.
+ */
+const BYPASS_FRIENDS_PAYWALL = true;
+
 const features: { icon: IconName; title: string; body: string }[] = [
   { icon: "friends", title: "Track together", body: "Follow your friends' progress and stay motivated." },
   { icon: "elementPlus", title: "Groups", body: "Every member's completions add up to one shared goal." },
@@ -821,7 +827,7 @@ export default function FriendsScreen() {
     );
   }
 
-  if (!isPro) {
+  if (!isPro && !BYPASS_FRIENDS_PAYWALL) {
     return <SubscriptionGate />;
   }
 
@@ -1232,7 +1238,7 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 380,
     gap: spacing.sm,
-    borderRadius: radius.nav,
+    borderRadius: radius.dialog,
     padding: spacing.xl
   },
   inviteTitle: {
@@ -1265,7 +1271,7 @@ const styles = StyleSheet.create({
     width: "100%",
     maxHeight: "70%",
     gap: spacing.md,
-    borderRadius: radius.nav,
+    borderRadius: radius.dialog,
     // No horizontal padding: the rows carry their own, so their separators can
     // reach both edges instead of floating in a gutter.
     paddingVertical: spacing.lg

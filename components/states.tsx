@@ -2,7 +2,6 @@ import React, { ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { fontFamilies, radius, spacing } from '@/constants/theme'
 import { useLumo } from '@/context/LumoContext'
-import { alpha } from '@/lib/color'
 import type { MascotMood } from '@/constants/mascotAssets'
 import { AppText } from './ui'
 import { Icon, type IconName } from './Icon'
@@ -116,8 +115,8 @@ export function EmptyState({
 	return (
 		<StateShell title={title} body={body} quiet={quiet}>
 			{icon ? (
-				<View style={[styles.iconCircle, { backgroundColor: alpha(iconTone, '14') }]}>
-					<Icon name={icon} size={26} color={iconTone} weight='bulk' />
+				<View style={styles.iconCircle}>
+					<Icon name={icon} size={30} color={iconTone} weight='bulk' />
 				</View>
 			) : (
 				<LumoMascot mood={mood} width={128} />
@@ -140,8 +139,8 @@ export function ErrorState({
 
 	return (
 		<StateShell title={title} body={body} action={action}>
-			<View style={[styles.iconCircle, { backgroundColor: `${palette.danger}1F` }]}>
-				<Icon name='close' size={26} color={palette.danger} weight='bulk' />
+			<View style={styles.iconCircle}>
+				<Icon name='close' size={30} color={palette.danger} weight='bulk' />
 			</View>
 		</StateShell>
 	)
@@ -157,8 +156,8 @@ export function OfflineState({ action }: { action?: Action }) {
 			body='Your habits still work offline — anything social will sync once you reconnect.'
 			action={action}
 		>
-			<View style={[styles.iconCircle, { backgroundColor: palette.chartTrack }]}>
-				<Icon name='cloudPlus' size={26} color={palette.subtle} weight='bulk' />
+			<View style={styles.iconCircle}>
+				<Icon name='cloudPlus' size={30} color={palette.subtle} weight='bulk' />
 			</View>
 		</StateShell>
 	)

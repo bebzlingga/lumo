@@ -1,0 +1,269 @@
+import React from "react";
+import { StyleSheet, View } from "react-native";
+import { Icon } from "@/components/Icon";
+import { AppText } from "@/components/ui";
+import { fontFamilies, radius, spacing } from "@/constants/theme";
+import { useLumo } from "@/context/LumoContext";
+import { alpha, readableOn } from "@/lib/color";
+import { formatDistance, formatPace } from "@/lib/move/tracking/pace";
+import type { ActivityTrackingState, GpsQuality } from "@/lib/move/tracking/types";
+
+/**
+ * The pieces the tracking screen is built from.
+ *
+ * Kept out of the screen so the screen stays a layout, and kept in Lumo's own
+ * visual language rather than a fitness app's: one accent, no gauges, no
+ * gradients, nothing pulsing.
+ */
+
+/** What each signal state is called and coloured, in one place. */
+function qualityMeta(quality: GpsQuality, palette: ReturnType<typeof useLumo>["palette"]) {
+  switch (quality) {
+    case "excellent":
+      return { label: "Excellent", tone: palette.greenDark };
+    case "good":
+      return { label: "Good", tone: palette.greenDark };
+    case "weak":
+      return { label: "Weak", tone: palette.chartPartial };
+    case "poor":
+      return { label: "Poor", tone: palette.danger };
+    default:
+      return { label: "Searching", tone: palette.muted };
+  }
+}
+
+/**
+ * The signal indicator.
+ *
+ * A dot and a word. It exists so a bad recording is explicable WHILE it is
+ * happening — "weak" on screen is the difference between "the app is broken"
+ * and "I was under a railway bridge".
+ */
+export function GpsIndicator({ quality, accuracyM }: { quality: GpsQuality; accuracyM?: number | null }) {
+  const { palette } = useLumo();
+  const meta = qualityMeta(quality, palette);
+
+  return (
+    <View style={[styles.gps, { backgroundColor: alpha(meta.tone, "1F") }]}>
+      <View style={[styles.gpsDot, { backgroundColor: meta.tone }]} />
+      <AppText variant="caption" color={readableOn(meta.tone, palette.card, 4.5)} style={styles.gpsLabel}>
+        GPS {meta.label}
+        {typeof accuracyM === "number" ? ` · ±${Math.round(accuracyM)}m` : ""}
+      </AppText>
+    </View>
+  );
+}
+
+/** The advice that goes with a bad signal, or nothing when it is fine. */
+export function GpsHint({ quality }: { quality: GpsQuality }) {
+  const { palette } = useLumo();
+
+  if (quality === "excellent" || quality === "good") {
+    return null;
+  }
+
+  return (
+    <AppText variant="caption" color={palette.subtle} style={styles.hint}>
+      {quality === "unavailable"
+        ? "Looking for a signal. Open sky helps — under cover it can take a minute."
+        : "Signal is weak here. Lumo keeps recording, but the route may be rough until it improves."}
+    </AppText>
+  );
+}
+
+/** One number and its label. The screen's whole readout is a few of these. */
+export function Metric({ label, value, large = false }: { label: string; value: string; large?: boolean }) {
+  const { palette } = useLumo();
+
+  return (
+    <View style={styles.metric}>
+      <AppText color={palette.ink} style={large ? styles.metricValueLarge : styles.metricValue} numberOfLines={1}>
+        {value}
+      </AppText>
+      <AppText variant="caption" color={palette.muted} numberOfLines={1}>
+        {label}
+      </AppText>
+    </View>
+  );
+}
+
+/**
+ * The field-testing overlay.
+ *
+ * Never rendered unless a caller explicitly asks for it, and the only caller
+ * gates on `__DEV__`. Everything a bad recording raises is here: what the
+ * receiver claimed, what the filter decided, and what the tracker thinks the
+ * person is doing — because the alternative is walking two kilometres and
+ * guessing.
+ */
+export function TrackingDebugPanel({
+  state,
+  lastDeltaM
+}: {
+  state: ActivityTrackingState;
+  /** Metres the most recent fix contributed. */
+  lastDeltaM: number;
+}) {
+  const { palette } = useLumo();
+  const last = state.rawPoints[state.rawPoints.length - 1];
+  const accepted = state.rawPoints.filter((point) => point.isAccepted).length;
+
+  const rows: [string, string][] = [
+    ["GPS", `${state.gpsQuality}${state.lastAccuracyM === null ? "" : ` ±${Math.round(state.lastAccuracyM)}m`}`],
+    ["Raw speed", last?.speed === null || last?.speed === undefined ? "—" : `${last.speed.toFixed(1)} m/s`],
+    ["Delta", `${lastDeltaM.toFixed(1)} m`],
+    ["Accepted", last ? (last.isAccepted ? "YES" : `NO · ${last.rejectionReason}`) : "—"],
+    ["Points", `${accepted} of ${state.rawPoints.length}`],
+    ["Movement", state.movement],
+    ["Status", state.status],
+    ["Segments", String(state.segments.length)],
+    ["Moving", `${Math.round(state.movingDuration / 1000)}s`],
+    ["Elapsed", `${Math.round(state.elapsedDuration / 1000)}s`]
+  ];
+
+  return (
+    <View style={[styles.debug, { backgroundColor: alpha(palette.ink, "E6") }]}>
+      {rows.map(([label, value]) => (
+        <View key={label} style={styles.debugRow}>
+          <AppText variant="caption" color={palette.white} style={styles.debugLabel}>
+            {label}
+          </AppText>
+          <AppText variant="caption" color={palette.white} numberOfLines={1}>
+            {value}
+          </AppText>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/**
+ * Challenge progress, as it stands after this activity.
+ *
+ * Takes the figures rather than reading a context, so the same block draws on
+ * the live screen and on the summary without either owning where they came
+ * from.
+ */
+export function ChallengeProgressBar({
+  title,
+  currentM,
+  targetM,
+  addedM,
+  accent
+}: {
+  title: string;
+  currentM: number;
+  targetM: number;
+  /** This activity's contribution, drawn ahead of the banked figure. */
+  addedM?: number;
+  accent: string;
+}) {
+  const { palette } = useLumo();
+  const ratio = targetM > 0 ? Math.min(1, currentM / targetM) : 0;
+  const forecast = targetM > 0 ? Math.min(1, (currentM + (addedM ?? 0)) / targetM) : 0;
+
+  return (
+    <View style={styles.challenge}>
+      <View style={styles.challengeHead}>
+        <AppText variant="bodySmall" color={palette.ink} numberOfLines={1} style={styles.challengeTitle}>
+          {title}
+        </AppText>
+        <AppText variant="bodySmall" color={palette.body} numberOfLines={1}>
+          {formatDistance(currentM)} / {formatDistance(targetM)}
+        </AppText>
+      </View>
+
+      <View style={[styles.track, { backgroundColor: alpha(palette.hairline, "80") }]}>
+        <View style={[styles.fill, { backgroundColor: alpha(accent, "59"), width: `${Math.round(forecast * 100)}%` }]} />
+        <View style={[styles.fill, styles.fillBanked, { backgroundColor: accent, width: `${Math.round(ratio * 100)}%` }]} />
+      </View>
+
+      <AppText variant="caption" color={palette.muted}>
+        {Math.round(ratio * 100)}%
+      </AppText>
+    </View>
+  );
+}
+
+/** "6:24 /km", for callers that only have a pace. */
+export { formatPace };
+
+const styles = StyleSheet.create({
+  gps: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+    borderRadius: radius.pill
+  },
+  gpsDot: {
+    width: 8,
+    height: 8,
+    borderRadius: radius.pill
+  },
+  gpsLabel: {
+    fontFamily: fontFamilies.lexendSemiBold
+  },
+  hint: {
+    textAlign: "center",
+    maxWidth: 300,
+    alignSelf: "center"
+  },
+  metric: {
+    flex: 1,
+    alignItems: "center",
+    gap: 2
+  },
+  metricValue: {
+    fontFamily: fontFamilies.lexendSemiBold,
+    fontSize: 20,
+    lineHeight: 26
+  },
+  metricValueLarge: {
+    fontFamily: fontFamilies.lexendBold,
+    fontSize: 40,
+    lineHeight: 48
+  },
+  debug: {
+    gap: 2,
+    padding: spacing.sm,
+    borderRadius: radius.card
+  },
+  debugRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.sm
+  },
+  debugLabel: {
+    fontFamily: fontFamilies.lexendSemiBold
+  },
+  challenge: {
+    gap: spacing.xs
+  },
+  challengeHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm
+  },
+  challengeTitle: {
+    flex: 1,
+    fontFamily: fontFamilies.lexendSemiBold
+  },
+  track: {
+    height: 8,
+    borderRadius: radius.pill,
+    overflow: "hidden"
+  },
+  fill: {
+    height: "100%",
+    borderRadius: radius.pill
+  },
+  fillBanked: {
+    position: "absolute",
+    left: 0,
+    top: 0
+  }
+});

@@ -7,7 +7,7 @@ import { Icon } from "@/components/Icon";
 import { AppText, LoadingState, Screen } from "@/components/ui";
 import { DailyReflectionCard } from "@/components/DailyReflectionCard";
 import { sceneAsset } from "@/constants/mascotAssets";
-import { control, fontFamilies, layout, radius, spacing, themePlateOpacity } from "@/constants/theme";
+import { control, CTA_FILL, fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { useTabBarVisibility } from "@/context/TabBarVisibility";
 import { alpha } from "@/lib/color";
@@ -257,19 +257,17 @@ export default function JournalScreen() {
  * blazing cream page in an otherwise dark app, and a themed user got a page in
  * somebody else's colours.
  *
- * Now the ground and copy follow the palette, and the ART is what gives way —
- * faded by the same per-theme factor the backdrops use, so it reads as texture
- * under the copy rather than fighting it. Cream keeps it at full strength,
- * which is the look this screen was drawn for.
+ * Now the ground and copy follow the palette while the art stays at full
+ * strength. It was briefly faded per theme so it would recede behind the copy;
+ * that just made the screen look washed out, and the illustration is the whole
+ * point of it. The gradient at its lower edge still blends it into whatever the
+ * canvas is, so a full-strength plate leaves no seam.
  */
 function TodayEmptyState({ onWrite, onBrowse }: { onWrite: () => void; onBrowse: () => void }) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const scene = sceneAsset("journalToday");
-  const { isDark, palette, themeId } = useLumo();
-  // Dark mode dims harder than any theme does, for the same reason the plates
-  // do: the art is warm and light, and the canvas behind it is not.
-  const artOpacity = themePlateOpacity(themeId, isDark) * (isDark ? 0.22 : 1);
+  const { palette } = useLumo();
   // Natural proportions at a chosen width, rather than blown up to fill a
   // screen that is taller than the art is — that coupled size to position.
   const artWidth = window.width * SCENE_SCALE;
@@ -288,7 +286,7 @@ function TodayEmptyState({ onWrite, onBrowse }: { onWrite: () => void; onBrowse:
           intrinsic 941×1672 and spills off the right of the screen. */}
       <Image
         source={scene.source}
-        style={[styles.sceneArt, { top: SCENE_TOP, left: artLeft, width: artWidth, height: artHeight, opacity: artOpacity }]}
+        style={[styles.sceneArt, { top: SCENE_TOP, left: artLeft, width: artWidth, height: artHeight }]}
         resizeMode="cover"
       />
       <Svg width={window.width} height={SCENE_FADE} style={[styles.sceneArt, { top: artBottom - SCENE_FADE }]} pointerEvents="none">
@@ -325,7 +323,7 @@ function TodayEmptyState({ onWrite, onBrowse }: { onWrite: () => void; onBrowse:
           accessibilityRole="button"
           accessibilityLabel="Write today's entry"
           onPress={onWrite}
-          style={({ pressed }) => [styles.sceneCta, styles.sceneCtaLead, { backgroundColor: palette.greenActive, opacity: pressed ? 0.88 : 1 }]}
+          style={({ pressed }) => [styles.sceneCta, styles.sceneCtaLead, { backgroundColor: CTA_FILL, opacity: pressed ? 0.88 : 1 }]}
         >
           {/* `white`, not `ink`: this is a filled primary button, and its label
               has to clear the fill in every theme — which the palette's own

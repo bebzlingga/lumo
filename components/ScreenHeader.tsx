@@ -30,6 +30,15 @@ type ScreenHeaderAction = {
   iconStyle?: StyleProp<ViewStyle>;
   /** Count pip on the button's shoulder. Hidden at 0, capped at "9+". */
   badge?: number;
+  /**
+   * Content drawn INSTEAD of the glyph — art, an avatar, a badge.
+   *
+   * Suppresses the button's outline too, because anything passed here brings
+   * its own shape and a circle drawn around a hexagon reads as two shapes
+   * fighting. `icon` stays required so a caller cannot end up with an action
+   * that has no fallback glyph at all.
+   */
+  render?: ReactNode;
 };
 
 function HeaderButton({ action }: { action: ScreenHeaderAction }) {
@@ -44,15 +53,20 @@ function HeaderButton({ action }: { action: ScreenHeaderAction }) {
       accessibilityLabel={badge ? `${action.label}, ${badge} pending` : action.label}
       onPress={action.onPress}
       hitSlop={10}
-      style={({ pressed }) => [styles.button, { borderColor: palette.hairline, opacity: pressed ? 0.6 : 1 }]}
+      style={({ pressed }) => [
+        styles.button,
+        { borderColor: action.render ? "transparent" : palette.hairline, opacity: pressed ? 0.6 : 1 }
+      ]}
     >
       <View pointerEvents="none" style={action.iconStyle}>
-        <Icon
-          name={action.icon}
-          size={action.iconSize ?? ICON_SIZE}
-          color={action.iconColor ?? palette.ink}
-          weight={action.iconWeight ?? "bold"}
-        />
+        {action.render ?? (
+          <Icon
+            name={action.icon}
+            size={action.iconSize ?? ICON_SIZE}
+            color={action.iconColor ?? palette.ink}
+            weight={action.iconWeight ?? "bold"}
+          />
+        )}
       </View>
       {badge > 0 ? (
         // The ring in the canvas colour is what keeps the pip legible where it
@@ -119,7 +133,16 @@ export function ScreenHeader({
           {center}
         </Pressable>
       ) : (
-        <View pointerEvents="none" style={styles.centerContent}>
+        /**
+         * `none` for a plain TITLE — a word in the middle of the bar should
+         * never swallow a touch meant for something behind it.
+         *
+         * But `centerContent` may be a control (the Move screen puts its
+         * Today/Overall tabs here), and blocking pointers on that makes it
+         * render perfectly and do nothing. So the block applies only when there
+         * is nothing interactive to block.
+         */
+        <View pointerEvents={centerContent ? "box-none" : "none"} style={styles.centerContent}>
           {center}
         </View>
       )}

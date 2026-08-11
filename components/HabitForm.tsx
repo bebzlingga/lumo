@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Modal, ScrollView, StyleProp, StyleSheet, View, ViewStyle } from "react-native"
 import { WheelTimePicker } from "./WheelTimePicker";
-import { brand, defaultHabitColor, fontFamilies, habitAccent, habitColorPickerOptions, layout, radius, spacing } from "@/constants/theme";
+import { CTA_FILL, defaultHabitColor, fontFamilies, habitAccent, habitColorPickerOptions, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha, readableOn } from "@/lib/color";
 import { dayLabels, dayNames, parseDateKey, toDateKey } from "@/lib/date";
@@ -238,7 +238,10 @@ function draftFromHabit(habit?: Habit): HabitDraft {
     reminderIntervalValue: habit.reminderIntervalValue ?? 1,
     reminderIntervalUnit: habit.reminderIntervalUnit ?? "hours",
     repeatSchedule: habit.repeatSchedule,
-    goal: habit.goal
+    goal: habit.goal,
+    // Always present, even when unset — `updateHabit` merges the draft over the
+    // stored habit, so an absent key would leave a cleared measurement in place.
+    measurement: habit.measurement
   };
 }
 
@@ -300,13 +303,11 @@ export function HabitForm({
   // stay legible — the ambers and corals sit under 3:1 on the card surface at
   // full strength.
   const draftAccent = readableOn(draftColorAccent, palette.card);
-  // The CTA deliberately stays on the theme green: 12 of the 17 picker accents
-  // cannot carry a white label at 4.5:1, so tinting it per habit colour would
-  // leave the primary button unreadable for most choices.
-  // Matches onboarding's CtaButton exactly: the alpha sits on the FILL only,
-  // so the landscape backdrop shows through the button while the label stays
-  // fully opaque.
-  const ctaFill = alpha(brand.sageStrong, "CC");
+  // The CTA deliberately does NOT follow the habit's colour: 12 of the 17
+  // picker accents cannot carry a white label at 4.5:1, so tinting it per habit
+  // would leave the primary button unreadable for most choices. `CTA_FILL` is
+  // the app-wide answer.
+  const ctaFill = CTA_FILL;
   const saveLabel = habit ? "Save changes" : "Create habit";
 
   const multipleCount = draft.goal.type === "multiple" ? Math.max(2, Number(goalAmount) || 2) : 1;
@@ -696,6 +697,7 @@ export function HabitForm({
             style={[styles.flatInput, { backgroundColor: palette.card }]}
           />
         </Field>
+
       </FormSection>
 
       <FormSection
@@ -1012,7 +1014,7 @@ const styles = StyleSheet.create({
   pickerSheet: {
     width: "100%",
     maxWidth: 420,
-    borderRadius: 40,
+    borderRadius: radius.dialog,
     paddingHorizontal: layout.screenPaddingX,
     paddingVertical: spacing.xl
   },

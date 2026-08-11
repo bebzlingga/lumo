@@ -21,6 +21,8 @@ import {
   lastCompletedKey,
   progressSeries
 } from "@/lib/habitInsights";
+import { formatMeasurement, measurementProgress, type WalkRecord } from "@/lib/walk";
+import { loadWalkState } from "@/lib/walkStorage";
 import type { Habit } from "@/types/habit";
 
 /**
@@ -154,6 +156,51 @@ function HabitDetail({ habit }: { habit: Habit }) {
   }, [navigation]);
 
   const todayKey = toDateKey();
+
+  /**
+   * The walks behind a measured habit.
+   *
+   * Loaded here rather than taken from context: walks live under their own
+   * AsyncStorage key so a GPS route does not travel with every habit, and
+   * putting them in the main state would undo that. Only measured habits ever
+   * read it, so most opens of this screen do no work with it at all.
+   */
+  const [walks, setWalks] = React.useState<WalkRecord[]>([]);
+
+  React.useEffect(() => {
+    if (!habit.measurement) {
+      return;
+    }
+
+    let active = true;
+
+    loadWalkState().then((state) => {
+      if (active) {
+        setWalks(state.history);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [habit.measurement]);
+
+  const measured = React.useMemo(() => {
+    if (!habit.measurement) {
+      return null;
+    }
+
+    // Local midnight to local midnight, derived from the date key so a day
+    // across a DST change is still the right length.
+    const start = parseDateKey(todayKey);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+
+    return measurementProgress(walks, habit.id, habit.measurement, start.getTime(), end.getTime());
+  }, [habit.id, habit.measurement, todayKey, walks]);
+
   // Every derivation reads the habit as active, so pausing or archiving takes it
   // off today's list without erasing the record behind these charts.
   const displayHabit = React.useMemo<Habit>(() => ({ ...habit, status: "active" }), [habit]);
@@ -415,6 +462,12 @@ function HabitDetail({ habit }: { habit: Habit }) {
           </AppText>
         </View>
         <DetailRow label="Goal" value={goalLabel(habit)} />
+        {habit.measurement && measured ? (
+          <DetailRow
+            label="Covered today"
+            value={formatMeasurement(habit.measurement.kind, measured.total, measured.target)}
+          />
+        ) : null}
         <DetailRow label="Repeats" value={scheduleLabel(habit)} />
         <DetailRow label="Reminder" value={reminderLabelFor(habit)} />
         <DetailRow label="Category" value={habit.category} />

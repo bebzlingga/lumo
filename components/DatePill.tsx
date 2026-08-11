@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   sheet: {
     width: "100%",
     maxWidth: 420,
-    borderRadius: 40,
+    borderRadius: radius.dialog,
     paddingHorizontal: layout.screenPaddingX,
     paddingVertical: spacing.xl
   },

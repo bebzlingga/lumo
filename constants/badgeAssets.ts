@@ -37,8 +37,8 @@ const badgeArt: Record<number, { earned: BadgeArt; locked: BadgeArt }> = {
     locked: { source: require("../assets/badges/locked/3.webp"), scale: 0.992, offsetY: 0.029 }
   },
   7: {
-    earned: { source: require("../assets/badges/unlocked/7.webp"), scale: 1.115, offsetY: 0.058 },
-    locked: { source: require("../assets/badges/locked/7.webp"), scale: 1.251, offsetY: 0.035 }
+    earned: { source: require("../assets/badges/unlocked/7.webp"), scale: 0.97, offsetY: 0.058 },
+    locked: { source: require("../assets/badges/locked/7.webp"), scale: 1.089, offsetY: 0.035 }
   },
   14: {
     earned: { source: require("../assets/badges/unlocked/14.webp"), scale: 1.126, offsetY: 0.05 },
@@ -53,8 +53,8 @@ const badgeArt: Record<number, { earned: BadgeArt; locked: BadgeArt }> = {
     locked: { source: require("../assets/badges/locked/60.webp"), scale: 1.314, offsetY: 0.039 }
   },
   120: {
-    earned: { source: require("../assets/badges/unlocked/120.webp"), scale: 1.087, offsetY: 0.048 },
-    locked: { source: require("../assets/badges/locked/120.webp"), scale: 1.162, offsetY: 0.017 }
+    earned: { source: require("../assets/badges/unlocked/120.webp"), scale: 1.035, offsetY: 0.048 },
+    locked: { source: require("../assets/badges/locked/120.webp"), scale: 1.106, offsetY: 0.017 }
   },
   360: {
     earned: { source: require("../assets/badges/unlocked/360.webp"), scale: 1.069, offsetY: 0.037 },

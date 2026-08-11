@@ -53,6 +53,12 @@
       <key>NSAllowsLocalNetworking</key>
       <true/>
     </dict>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Lumo uses your location to trace the route of a walk and measure how far you went.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Lumo keeps recording your walk while the screen is off, so your route and distance stay accurate when the phone is in your pocket.</string>
+    <key>NSMotionUsageDescription</key>
+    <string>Lumo reads your step count so a walk can show how many steps it took.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Lumo needs the microphone to dictate your journal.</string>
     <key>NSPhotoLibraryUsageDescription</key>
@@ -62,6 +68,39 @@
     <key>NSUserActivityTypes</key>
     <array>
       <string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>
+    </array>
+    <!-- Both modes are reviewed by Apple, so both must stay true.
+
+         `audio` is Focus: it plays an ambient loop while you work, and working
+         means the screen is off and the phone is face down. Without this the
+         sound stops the moment the app backgrounds, which is precisely when it
+         is meant to be doing its job.
+
+         `location` is Walk: a walk is recorded with the phone in a pocket and
+         the screen off, so without it the route stops when the screen locks —
+         which is most of the session.
+
+         If either feature ever stops doing that in the background, its mode
+         comes out with it.
+
+         Mirrored in app.json for parity. The plist is what actually ships —
+         app.json's infoPlist block is only read during prebuild, which this
+         repo never runs. -->
+    <!-- Lumo Move reads steps, distance and Apple exercise time so walks and
+         runs count toward Move goals and badges automatically. It reads ONLY
+         those three types and never writes to Health, which is why there is no
+         NSHealthUpdateUsageDescription below — the share key is required by the
+         OS whenever HealthKit is linked, the update key only when writing.
+
+         Mirrored in app.json for parity. The plist is what actually ships —
+         app.json's infoPlist block is only read during prebuild, which this
+         repo never runs. -->
+    <key>NSHealthShareUsageDescription</key>
+    <string>Lumo reads your steps, walking and running distance, and active minutes so your movement counts toward your Move goals, badges and challenges automatically.</string>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+        <string>location</string>
     </array>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
@@ -73,10 +112,17 @@
     <false/>
     <key>UIStatusBarStyle</key>
     <string>UIStatusBarStyleDefault</string>
+    <!-- Landscape is allowed at the OS level ONLY so Focus mode can rotate into
+         it. Every other screen pins itself back to portrait at runtime via
+         expo-screen-orientation, so the app is still portrait everywhere the
+         user has not explicitly asked otherwise. Removing landscape here would
+         make the rotate a no-op on iPhone. -->
     <key>UISupportedInterfaceOrientations</key>
     <array>
       <string>UIInterfaceOrientationPortrait</string>
       <string>UIInterfaceOrientationPortraitUpsideDown</string>
+      <string>UIInterfaceOrientationLandscapeLeft</string>
+      <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
     <key>UISupportedInterfaceOrientations~ipad</key>
     <array>

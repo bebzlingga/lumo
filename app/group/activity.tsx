@@ -8,7 +8,7 @@ import { Icon, type IconName } from "@/components/Icon";
 import { categoryIconOptions } from "@/components/IconPicker";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Field, FieldLabel, LumoInput, Screen } from "@/components/ui";
-import { defaultHabitColor, fontFamilies, habitAccent, habitColorPickerOptions, layout, radius, spacing } from "@/constants/theme";
+import { CTA_FILL, defaultHabitColor, fontFamilies, habitAccent, habitColorPickerOptions, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha, readableOn } from "@/lib/color";
 import { dayLabels, dayNames } from "@/lib/date";
@@ -83,7 +83,6 @@ export default function GroupActivityScreen() {
 
   // Period (weekly/monthly) targets replace the day schedule ("any day").
   const periodGoal = cadence === "weekly" || cadence === "monthly";
-  const buttonFill = isDark ? palette.green : palette.greenDark;
   const canSave = Boolean(name.trim());
   /**
    * Every icon in the picker is drawn in the ACTIVITY'S OWN colour, so choosing
@@ -304,7 +303,7 @@ export default function GroupActivityScreen() {
         onPress={save}
         onPressIn={() => setSavePressed(true)}
         onPressOut={() => setSavePressed(false)}
-        style={[styles.cta, { backgroundColor: buttonFill, opacity: !canSave ? 0.45 : savePressed ? 0.85 : 1 }]}
+        style={[styles.cta, { backgroundColor: CTA_FILL, opacity: !canSave ? 0.45 : savePressed ? 0.85 : 1 }]}
       >
         <AppText variant="button" color={palette.white} style={styles.ctaLabel}>
           {editing ? "Save Activity" : "Add Activity"}

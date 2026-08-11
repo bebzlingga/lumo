@@ -8,14 +8,29 @@ import { Pressable } from "@/components/Pressable";
 import { BadgeDialog } from "@/components/BadgeDialog";
 import { BadgeImage } from "@/components/BadgeImage";
 import { Icon } from "@/components/Icon";
+import { MoveBadge } from "@/components/move/MoveBadge";
+import { TrophyDialog } from "@/components/TrophyDialog";
+import { TrophyImage } from "@/components/TrophyImage";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Screen } from "@/components/ui";
 import { fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
+import { useMove } from "@/context/MoveContext";
+import {
+  countWonChallenges,
+  groupChallengeTierMeta,
+  groupTrophies,
+  trophyEarned,
+  type GroupTrophy,
+  type GroupTrophyMetrics
+} from "@/constants/groupChallenges";
 import { badgeTierMeta, earnedBadgeCount, habitBadges, type BadgeProgress } from "@/lib/badges";
+import { friendsService, type Group } from "@/lib/friends";
 import { alpha } from "@/lib/color";
+import { hasMilestone, routesRequired, routesToBadge } from "@/lib/move/achievements";
+import { MOVE_FAMILIES, type MoveMilestoneFamily } from "@/lib/move/challengeDefs";
 
-const GRID_COLUMNS = 3;
+const GRID_COLUMNS = 4;
 /** The air the grid leaves between columns. Everything else is the badge. */
 const GRID_GUTTER = spacing.sm;
 
@@ -38,6 +53,47 @@ export default function BadgesScreen() {
   const allBadges = React.useMemo(() => habitBadges(bestStreak), [bestStreak]);
   const earned = earnedBadgeCount(bestStreak);
   const [selectedBadge, setSelectedBadge] = React.useState<BadgeProgress | null>(null);
+
+  const move = useMove();
+  const movesEarned = MOVE_FAMILIES.filter((family) => hasMilestone(move.achievements, family.id)).length;
+
+  /**
+   * Group trophies are earned by a GROUP, and this page belongs to a person —
+   * so a trophy counts here if any one of your groups has earned it. Taking the
+   * best figure per metric across every group says exactly that, because each
+   * trophy tests a single metric.
+   */
+  const [groups, setGroups] = React.useState<Group[]>([]);
+  const [selectedTrophy, setSelectedTrophy] = React.useState<GroupTrophy | null>(null);
+
+  React.useEffect(() => {
+    let active = true;
+
+    friendsService
+      .listGroups()
+      .then((list) => {
+        if (active) {
+          setGroups(list);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const groupMetrics: GroupTrophyMetrics = groups.reduce<GroupTrophyMetrics>(
+    (best, group) => ({
+      members: Math.max(best.members, group.members.length),
+      completions: Math.max(best.completions, group.progress),
+      streak: Math.max(best.streak, group.streak),
+      rollCallStreak: Math.max(best.rollCallStreak, group.rollCallStreak),
+      challengesWon: Math.max(best.challengesWon, countWonChallenges(group.habits, group.completedDaysByHabit))
+    }),
+    { members: 0, completions: 0, streak: 0, rollCallStreak: 0, challengesWon: 0 }
+  );
+  const trophiesEarned = groupTrophies.filter((trophy) => trophyEarned(trophy, groupMetrics)).length;
 
 
 
@@ -89,11 +145,190 @@ export default function BadgesScreen() {
         </AppText>
       ) : null}
 
+      {/* Move's badges live here as well as on their own screen. Somebody
+          looking for "my badges" comes to this page, and a collection that is
+          missing half of itself reads as a bug rather than a second home.
+
+          The extra air above is what separates the two collections now the rule
+          between them is gone — without it they read as one long grid. */}
+      <View style={[styles.hero, styles.secondHero]}>
+        <AppText color={palette.ink} style={styles.title}>
+          Journey Badges
+        </AppText>
+        <AppText variant="bodySmall" color={palette.subtle} style={styles.subtitle}>
+          Walk or run it your own way, against the clock, and alongside friends. Do all three and the badge is yours.
+        </AppText>
+        <View style={[styles.progressPill, { backgroundColor: palette.greenSoft }]}>
+          <Icon name="walk" size={14} color={palette.greenDark} weight="bulk" />
+          <AppText variant="caption" color={palette.greenDark} style={styles.progressText}>
+            {movesEarned} of {MOVE_FAMILIES.length} unlocked
+          </AppText>
+        </View>
+      </View>
+
+      <View style={styles.grid}>
+        {MOVE_FAMILIES.map((family) => (
+          <MoveCell
+            key={family.id}
+            family={family}
+            unlocked={hasMilestone(move.achievements, family.id)}
+            routes={{ done: routesRequired(family) - routesToBadge(move.achievements, family), total: routesRequired(family) }}
+            size={cellWidth}
+            onPress={() => router.push({ pathname: "/move/[milestone]", params: { milestone: family.id } })}
+          />
+        ))}
+        {Array.from({ length: (GRID_COLUMNS - (MOVE_FAMILIES.length % GRID_COLUMNS)) % GRID_COLUMNS }, (_, index) => (
+          <View key={`move-filler-${index}`} style={[styles.cell, { width: cellWidth }]} />
+        ))}
+      </View>
+
+      {/* Group awards, last: they are the only ones somebody else has a hand
+          in, and the two collections above are yours alone. */}
+      <View style={[styles.hero, styles.secondHero]}>
+        <AppText color={palette.ink} style={styles.title}>
+          Together
+        </AppText>
+        <AppText variant="bodySmall" color={palette.subtle} style={styles.subtitle}>
+          Earned by a whole group, not by any one member. A trophy counts here once any group you are in has it.
+        </AppText>
+        <View style={[styles.progressPill, { backgroundColor: palette.greenSoft }]}>
+          <Icon name="friends" size={14} color={palette.greenDark} weight="bulk" />
+          <AppText variant="caption" color={palette.greenDark} style={styles.progressText}>
+            {trophiesEarned} of {groupTrophies.length} unlocked
+          </AppText>
+        </View>
+      </View>
+
+      <View style={styles.grid}>
+        {groupTrophies.map((trophy) => (
+          <TrophyCell
+            key={trophy.id}
+            trophy={trophy}
+            earned={trophyEarned(trophy, groupMetrics)}
+            size={cellWidth}
+            onPress={() => setSelectedTrophy(trophy)}
+          />
+        ))}
+        {Array.from({ length: (GRID_COLUMNS - (groupTrophies.length % GRID_COLUMNS)) % GRID_COLUMNS }, (_, index) => (
+          <View key={`trophy-filler-${index}`} style={[styles.cell, { width: cellWidth }]} />
+        ))}
+      </View>
+
       <BadgeDialog badge={selectedBadge} onClose={() => setSelectedBadge(null)} />
+
+      {/* Locked trophies open too, unlike the streak grid's: what it takes is
+          exactly what you tapped a locked one to find out. */}
+      <TrophyDialog
+        trophy={selectedTrophy}
+        earned={selectedTrophy ? trophyEarned(selectedTrophy, groupMetrics) : false}
+        current={selectedTrophy ? groupMetrics[selectedTrophy.metric] : 0}
+        onClose={() => setSelectedTrophy(null)}
+      />
     </Screen>
   );
 }
 
+
+/**
+ * One Move milestone in the grid.
+ *
+ * Tappable whether or not it is earned, unlike a streak badge: a locked one
+ * leads to the three routes that would unlock it, which is the whole point of
+ * showing it. A streak badge has nowhere to send anybody.
+ */
+function MoveCell({
+  family,
+  unlocked,
+  routes,
+  size,
+  onPress
+}: {
+  family: MoveMilestoneFamily;
+  unlocked: boolean;
+  /** How many of the milestone's routes are done, of how many there are. */
+  routes: { done: number; total: number };
+  size: number;
+  onPress: () => void;
+}) {
+  const { palette } = useLumo();
+  const [pressed, setPressed] = React.useState(false);
+  // "3/3" at a quarter of the screen — the spelled-out version needs two lines
+  // there, and the tally is the part that carries the meaning.
+  const detail = unlocked ? "Earned" : `${routes.done}/${routes.total}`;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${family.title}. ${routes.done} of ${routes.total} routes done. ${unlocked ? "Earned" : "Not yet earned"}`}
+      onPress={onPress}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      style={[styles.cell, { width: size, opacity: pressed ? 0.7 : 1 }]}
+    >
+      <MoveBadge
+        progress={{
+          milestone: { id: family.id, title: family.title, description: "", target: family.distanceM, metric: "distance", tier: "bronze" },
+          progress: unlocked ? family.distanceM : 0,
+          target: family.distanceM,
+          ratio: unlocked ? 1 : 0,
+          unlocked,
+          unlockedAt: null
+        }}
+        // Short of the full column, unlike a streak badge: Move art fills ~90%
+        // of its canvas where the streak badges leave a wide margin, so at the
+        // same column width it reads as the bigger of the two collections.
+        size={Math.round(size * 0.78)}
+      />
+      <AppText variant="bodySmall" color={unlocked ? palette.ink : palette.subtle} numberOfLines={1} style={styles.cellTitle}>
+        {family.title}
+      </AppText>
+      <AppText variant="caption" color={unlocked ? palette.greenDark : palette.muted} numberOfLines={1} style={styles.cellDetail}>
+        {detail}
+      </AppText>
+    </Pressable>
+  );
+}
+
+/** One group trophy in the grid. Locked ones are tappable — see the note above. */
+function TrophyCell({
+  trophy,
+  earned,
+  size,
+  onPress
+}: {
+  trophy: GroupTrophy;
+  earned: boolean;
+  size: number;
+  onPress: () => void;
+}) {
+  const { palette } = useLumo();
+  const [pressed, setPressed] = React.useState(false);
+  const accent = groupChallengeTierMeta[trophy.tier].accent;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${trophy.name}. ${trophy.requirement}. ${earned ? "Earned" : "Locked"}`}
+      onPress={onPress}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      style={[styles.cell, { width: size, opacity: pressed ? 0.7 : 1 }]}
+    >
+      {/* Nothing here tints or dims the art: the illustrations carry both
+          states themselves, coloured when earned and greyed with a padlock when
+          not — the same rule the streak badges follow. */}
+      <TrophyImage id={trophy.id} earned={earned} size={Math.round(size * 0.86)} />
+      <AppText variant="bodySmall" color={palette.ink} numberOfLines={1} style={styles.cellTitle}>
+        {trophy.name}
+      </AppText>
+      <View style={[styles.tierChip, { backgroundColor: alpha(accent, "26") }]}>
+        <AppText variant="caption" color={accent} style={styles.tierChipText}>
+          {groupChallengeTierMeta[trophy.tier].label.toUpperCase()}
+        </AppText>
+      </View>
+    </Pressable>
+  );
+}
 
 function BadgeCell({
   badge,
@@ -135,12 +370,17 @@ function BadgeCell({
 
 const styles = StyleSheet.create({
   content: {
-    paddingBottom: spacing.xxl,
+    // Three collections deep now, and the last row of trophies sat right on the
+    // floating tab bar.
+    paddingBottom: spacing.xxl * 2,
     gap: spacing.lg
   },
   hero: {
     alignItems: "center",
     gap: spacing.sm
+  },
+  secondHero: {
+    paddingTop: spacing.xl
   },
   title: {
     fontFamily: fontFamilies.serifBlack,
@@ -179,8 +419,13 @@ const styles = StyleSheet.create({
   },
   cellTitle: {
     fontFamily: fontFamilies.lexendSemiBold,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: "center"
+  },
+  cellDetail: {
+    fontSize: 11,
+    lineHeight: 15,
     textAlign: "center"
   },
   tierChip: {

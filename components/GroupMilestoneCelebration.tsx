@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
   card: {
     alignItems: "center",
     gap: spacing.xs,
-    borderRadius: radius.nav,
+    borderRadius: radius.dialog,
     paddingVertical: spacing.xl,
     paddingHorizontal: spacing.lg
   },
