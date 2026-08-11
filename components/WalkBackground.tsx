@@ -63,7 +63,20 @@ export type WalkPlate = "walking" | "walkDone";
  * the foot — would need pinning to the bottom instead; there is none in use, so
  * there is no switch for it.
  */
-type PlateFit = { aspect: number; scale: number; sceneBottom: number };
+type PlateFit = {
+  aspect: number;
+  scale: number;
+  sceneBottom: number;
+  /**
+   * How far DOWN the screen the plate starts, as a share of its own height.
+   *
+   * Opens a strip above the art — which is only safe because `PLATE_TINT` is
+   * painted across the whole background underneath, so the strip is the plate's
+   * own colour rather than bare canvas. Sample the tint from the art's TOP band
+   * when using this, or the seam shows.
+   */
+  shiftDown?: number;
+};
 
 const PLATE_FIT: Record<WalkPlate, PlateFit> = {
   /**
@@ -92,7 +105,7 @@ const PLATE_FIT: Record<WalkPlate, PlateFit> = {
    * higher in its own frame, and the summary opens on figures rather than on a
    * mascot: the sooner the numbers start, the better this screen reads.
    */
-  walkDone: { aspect: 941 / 1672, scale: 1.22, sceneBottom: 0.22 }
+  walkDone: { aspect: 941 / 1672, scale: 1.05, sceneBottom: 0.24, shiftDown: 0.16 }
 };
 
 /**
@@ -115,11 +128,16 @@ const HEADER_BAND = spacing.lg + 38 + spacing.md;
  */
 const PLATE_TINT: Record<WalkPlate, string> = {
   walking: "#FEE29A",
-  walkDone: "#EBDD9C"
+  // Sampled from the TOP band of the art rather than its average, because this
+  // plate is shifted down and the tint has to meet its top edge invisibly.
+  walkDone: "#FDEEC4"
 };
 
 /**
  * How far a screen's first element must be pushed down to clear the scene.
+ *
+ * Includes `shiftDown`, since a plate pushed down the screen takes everything
+ * drawn on it down too.
  *
  * Returned in points rather than applied here, because this component draws
  * behind the content and cannot reach it. Callers put it on the first thing
@@ -133,7 +151,7 @@ export function useWalkSceneInset(plate: WalkPlate): number {
   const fit = PLATE_FIT[plate];
   const plateHeight = (width * fit.scale) / fit.aspect;
 
-  return Math.max(0, Math.round(plateHeight * fit.sceneBottom) - (insets.top + HEADER_BAND));
+  return Math.max(0, Math.round(plateHeight * (fit.sceneBottom + (fit.shiftDown ?? 0))) - (insets.top + HEADER_BAND));
 }
 
 /**
@@ -190,7 +208,7 @@ export function WalkBackground({ plate, scrollY }: { plate: WalkPlate; scrollY?:
         style={{
           position: "absolute",
           left,
-          top: 0,
+          top: plateHeight * (fit.shiftDown ?? 0),
           width: plateWidth,
           height: plateHeight,
           opacity

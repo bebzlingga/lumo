@@ -183,7 +183,7 @@ export type HomePlateFit = {
  * height, and the plate is now taller than the screen. The two always move
  * together, or the first card follows Lumo down the page.
  */
-const HOME_FIT: HomePlateFit = { scale: 1.3, shiftY: 0, sceneBottom: 0.235 }
+const HOME_FIT: HomePlateFit = { scale: 1.18, shiftY: 0, sceneBottom: 0.26 }
 
 export const HOME_PLATE_FIT: Record<HomePeriod, HomePlateFit> = {
 	earlyMorning: HOME_FIT,

@@ -34,6 +34,15 @@ export type Tool = {
 export const WALK_ACCENT = "#6DA95F";
 
 /**
+ * What a recorded route is drawn in — a warm orange, not Walk's green.
+ *
+ * A map is mostly greens and creams already, and a green line laid over parks
+ * and verges disappears into them. The route has to be the loudest thing on the
+ * map, and orange is the one warm hue in Lumo's palette that no map tile uses.
+ */
+export const MOVE_ROUTE_ACCENT = "#F07A1E";
+
+/**
  * Lumo Move's accent, exported because Move is a whole section rather than a
  * tile — the tab, the cards and the Home card all wear it.
  *

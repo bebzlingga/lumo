@@ -31,6 +31,16 @@ type ScreenHeaderAction = {
   /** Count pip on the button's shoulder. Hidden at 0, capped at "9+". */
   badge?: number;
   /**
+   * A pip with no number, for "there is something here" rather than "there are
+   * three of them".
+   *
+   * Ignored when `badge` is counting: a dot and a number in the same corner
+   * would be two answers to one question.
+   */
+  dot?: boolean;
+  /** The pip's colour. Defaults to the app's badge accent. */
+  dotColor?: string;
+  /**
    * Content drawn INSTEAD of the glyph — art, an avatar, a badge.
    *
    * Suppresses the button's outline too, because anything passed here brings
@@ -79,6 +89,8 @@ function HeaderButton({ action }: { action: ScreenHeaderAction }) {
             {badge > 9 ? "9+" : badge}
           </AppText>
         </View>
+      ) : action.dot ? (
+        <View pointerEvents="none" style={[styles.dot, { backgroundColor: action.dotColor ?? badgeAccent }]} />
       ) : null}
     </Pressable>
   );
@@ -194,6 +206,17 @@ const styles = StyleSheet.create({
   },
   // Overhangs the circle deliberately — tucked inside, it reads as part of the
   // glyph rather than as a count attached to the button.
+  // Same corner as the counted pip, without the room for a number — so a screen
+  // that has both never shifts its buttons. No ring: the pip sits on the
+  // button's shoulder, clear of the outline, so it needs nothing to separate it.
+  dot: {
+    position: "absolute",
+    top: -1,
+    right: -1,
+    width: 10,
+    height: 10,
+    borderRadius: radius.pill
+  },
   badge: {
     position: "absolute",
     top: -4,

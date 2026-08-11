@@ -1,4 +1,3 @@
-import type { ActivityType } from "@/lib/move/tracking/config";
 import { TRACKING_CONFIG } from "@/lib/move/tracking/config";
 import {
   currentFix,
@@ -169,7 +168,7 @@ class ActivityTrackerController {
    * Called after the countdown, never before it: the seconds spent counting
    * down are not walking, and the engine's clock starts at `beginTracking`.
    */
-  async start(type: ActivityType, options: { autoPause?: boolean } = {}): Promise<void> {
+  async start(options: { autoPause?: boolean } = {}): Promise<void> {
     const now = Date.now();
 
     if (this.prepare.permission === null) {
@@ -179,7 +178,7 @@ class ActivityTrackerController {
     // Anything the acquisition phase queued belongs to nobody.
     await clearQueue();
 
-    const created = createActivity({ activityId: createWalkId(), type, now, autoPause: options.autoPause });
+    const created = createActivity({ activityId: createWalkId(), now, autoPause: options.autoPause });
 
     this.set(beginTracking(created, now));
     this.startSteps();

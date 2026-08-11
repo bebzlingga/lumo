@@ -1,4 +1,4 @@
-import { TRACKING_CONFIG, maxSpeedFor, type ActivityType } from "@/lib/move/tracking/config";
+import { TRACKING_CONFIG, maxSpeed } from "@/lib/move/tracking/config";
 import type { RawLocationPoint, RejectionReason } from "@/lib/move/tracking/types";
 import { calculateDistance } from "@/lib/walk";
 
@@ -23,7 +23,6 @@ export type FilterInput = {
   beforePrevious?: RawLocationPoint | null;
   /** The newest timestamp processed so far, for staleness. */
   newestAt: number;
-  type: ActivityType;
   /**
    * Whether the pedometer saw steps recently.
    *
@@ -37,7 +36,7 @@ export type FilterInput = {
 export type FilterVerdict = { accepted: true; distanceM: number } | { accepted: false; reason: RejectionReason; distanceM: 0 };
 
 export function filterLocationPoint(input: FilterInput): FilterVerdict {
-  const { point, previous, type } = input;
+  const { point, previous } = input;
   const config = TRACKING_CONFIG.location;
 
   if (!Number.isFinite(point.latitude) || !Number.isFinite(point.longitude) || !Number.isFinite(point.timestamp)) {
@@ -77,10 +76,10 @@ export function filterLocationPoint(input: FilterInput): FilterVerdict {
     return { accepted: false, reason: "duplicate", distanceM: 0 };
   }
 
-  // Faster than the activity can go. Not a fast walker — a receiver jumping.
+  // Faster than anybody moves on foot. Not a fast runner — a receiver jumping.
   const speedMs = legM / (elapsedMs / 1000);
 
-  if (speedMs > maxSpeedFor(type)) {
+  if (speedMs > maxSpeed()) {
     return { accepted: false, reason: "impossible", distanceM: 0 };
   }
 

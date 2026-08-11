@@ -43,15 +43,44 @@ export function canShowMap(): boolean {
 const EDGE_PADDING = 0.0012;
 
 /**
+ * The span held while following a position, in degrees — about 350 m across.
+ *
+ * Close enough to see which side of the street you took, wide enough that a
+ * brisk walk does not outrun the frame between fixes.
+ */
+const FOLLOW_SPAN = 0.0032;
+
+/**
+ * How far the followed position sits ABOVE the middle of the map, as a share of
+ * the span.
+ *
+ * The lower half of the tracking screen is cards. Centring the walker in the
+ * map's own middle puts them behind those, so the region is centred SOUTH of
+ * them — north is up, so a position north of centre draws higher up the screen
+ * — leaving what is ahead of you visible instead of what is under a card.
+ */
+const FOLLOW_BIAS = 0.2;
+
+/**
  * The region that contains a route.
  *
  * Falls back to a tight box around the last point when there is only one — a
  * zero-span region renders as a fully zoomed-out world map, which reads as
  * broken rather than as "one fix so far".
  */
-function regionFor(points: WalkPoint[]) {
+function regionFor(points: WalkPoint[], center?: { lat: number; lon: number } | null) {
   if (points.length === 0) {
-    return null;
+    /**
+     * No fixes yet, but we know roughly where the phone is.
+     *
+     * This is the case that produced a map of the whole country: with no region
+     * at all, the platform opens fully zoomed out. A tight box around the last
+     * known position is the honest starting frame — it is where the walk is
+     * about to happen.
+     */
+    return center
+      ? { latitude: center.lat, longitude: center.lon, latitudeDelta: EDGE_PADDING * 4, longitudeDelta: EDGE_PADDING * 4 }
+      : null;
   }
 
   const lats = points.map((point) => point.lat);
@@ -73,6 +102,17 @@ export function WalkMap({
   route,
   accent,
   showRecenter = true,
+  /** Where to look before the first fix joins the route. */
+  center,
+  /**
+   * What the camera frames.
+   *
+   * `route` fits the whole line — right for a finished walk, where the shape is
+   * the subject. `position` keeps you in the middle at a fixed zoom, which is
+   * what you want WHILE walking: a camera that pulls back to fit a growing
+   * route ends the hour showing a city and a thread.
+   */
+  frame = "route",
   /** Lifts the Re-center button clear of whatever floats over the map's foot. */
   recenterBottom,
   /**
@@ -90,6 +130,8 @@ export function WalkMap({
   accent: string;
   /** False for a static preview — history cards have nothing to re-centre. */
   showRecenter?: boolean;
+  center?: { lat: number; lon: number } | null;
+  frame?: "route" | "position";
   recenterBottom?: number;
   following?: boolean;
   onFollowChange?: (next: boolean) => void;
@@ -116,7 +158,18 @@ export function WalkMap({
     [onFollowChange]
   );
 
-  const region = regionFor(route);
+  /** The head of the route, or the last known position before there is one. */
+  const here = route.length > 0 ? { lat: route[route.length - 1].lat, lon: route[route.length - 1].lon } : (center ?? null);
+  const routeRegion = regionFor(route, center);
+  const region =
+    frame === "position" && here
+      ? {
+          latitude: here.lat - FOLLOW_SPAN * FOLLOW_BIAS,
+          longitude: here.lon,
+          latitudeDelta: FOLLOW_SPAN,
+          longitudeDelta: FOLLOW_SPAN
+        }
+      : routeRegion;
 
   React.useEffect(() => {
     if (!following || !region || !mapRef.current) {
@@ -168,8 +221,18 @@ export function WalkMap({
         showsTraffic={false}
         showsIndoors={false}
         showsScale={false}
-        // The blue dot is the OS's own and needs no polling from us.
-        showsUserLocation
+        /**
+         * The platform's blue dot is OFF, and we draw our own instead.
+         *
+         * It cannot be recoloured, and a system-blue dot on a route drawn in
+         * the walk's own colour reads as two different things happening on one
+         * map. Ours is the same colour as the line it is at the end of.
+         *
+         * The cost is that it only moves when a fix is ACCEPTED — the OS dot
+         * updates on every raw fix. That is the honest position anyway: it is
+         * where the route has reached.
+         */
+        showsUserLocation={false}
         showsMyLocationButton={false}
         showsCompass={false}
         toolbarEnabled={false}
@@ -186,7 +249,21 @@ export function WalkMap({
             anchor={{ x: 0.5, y: 0.5 }}
             accessibilityLabel="Where your walk started"
           >
-            <View style={[styles.pin, { backgroundColor: palette.greenActive, borderColor: palette.white }]} />
+            {/* The route's own colour, not the app's green. Two colours on one
+                map read as two different things being marked; the start and the
+                head of the line are the same walk. */}
+            <View style={[styles.pin, { backgroundColor: accent, borderColor: palette.white }]} />
+          </Marker>
+        ) : null}
+
+        {/* Where you are now: the head of the route, in the route's own colour,
+            with a soft halo so it reads as a position rather than a dot on the
+            line. Falls back to `center` before the route has a point. */}
+        {here ? (
+          <Marker coordinate={{ latitude: here.lat, longitude: here.lon }} anchor={{ x: 0.5, y: 0.5 }} accessibilityLabel="Where you are">
+            <View style={[styles.hereHalo, { backgroundColor: alpha(accent, "33") }]}>
+              <View style={[styles.here, { backgroundColor: accent, borderColor: palette.white }]} />
+            </View>
           </Marker>
         ) : null}
       </MapView>
@@ -209,7 +286,10 @@ export function WalkMap({
         </Pressable>
       ) : null}
 
-      {/* Softens the map's own colours into the card it sits in. */}
+      {/* Holds the map back so it reads as a surface the walk is drawn on
+          rather than a Maps app someone opened. The route keeps its full
+          strength; only what is underneath is quietened. */}
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: alpha(palette.canvas, isDark ? "59" : "4D") }]} />
       <View pointerEvents="none" style={[styles.edge, { borderColor: alpha(palette.hairline, "60") }]} />
     </View>
   );
@@ -229,6 +309,19 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     textAlign: "center"
+  },
+  hereHalo: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 30,
+    height: 30,
+    borderRadius: radius.pill
+  },
+  here: {
+    width: 14,
+    height: 14,
+    borderRadius: radius.pill,
+    borderWidth: 1.5
   },
   pin: {
     width: 14,

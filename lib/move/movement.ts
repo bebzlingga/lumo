@@ -271,6 +271,18 @@ export function formatDistance(meters: number): string {
   return safe < 1000 ? `${Math.round(safe)} m` : `${kmValue(safe)} km`;
 }
 
+/**
+ * "0 km" / "0.4 km" / "2.8 km" — always kilometres, whatever the figure.
+ *
+ * For readouts that sit beside a challenge target, which is always in
+ * kilometres. `formatDistance` switching to metres under a kilometre is right
+ * in a sentence about one walk, and wrong next to "/ 5 km" — the unit changing
+ * between the two numbers makes them look unrelated.
+ */
+export function formatKilometres(meters: number): string {
+  return `${kmValue(meters)} km`;
+}
+
 /** "4,321" — steps always read as a whole count. */
 export function formatSteps(steps: number): string {
   return Math.round(Math.max(0, steps)).toLocaleString();

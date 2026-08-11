@@ -3,7 +3,7 @@ import React from "react";
 import { Alert, Modal, ScrollView, StyleSheet, View } from "react-native";
 import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
-import { ChallengeHeadline, ChallengeSummary, TeamContributions, useMoveAccent } from "@/components/move/ChallengeUI";
+import { ChallengeHeadline, ChallengeSummary, TeamContributions, useMoveAccent, useTeamMembers } from "@/components/move/ChallengeUI";
 import { MoveBadge } from "@/components/move/MoveBadge";
 import { MoveOptionGroup, MoveOptionRow } from "@/components/move/MoveOptionRow";
 import { Pressable } from "@/components/Pressable";
@@ -112,6 +112,8 @@ export default function MilestoneScreen() {
   // block — it is what the screen is about.
   const blocked = move.active !== null && !running;
   const pause = running ? pauseState(running.challenge) : { can: false, left: 0 };
+  /** Names and faces for a team challenge's roster. Empty for every other kind. */
+  const teamMembers = useTeamMembers(running?.challenge.participants);
   // Reachable from the badges screens even when the list has it shut, so the
   // rule is stated here too rather than only being enforced in the list.
   const locked = isFamilyLocked(move.achievements, family);
@@ -258,7 +260,7 @@ export default function MilestoneScreen() {
             <TeamContributions
               challenge={running.challenge}
               progress={running}
-              members={running.challenge.participants.map((entry) => ({ userId: entry.userId, name: entry.name }))}
+              members={teamMembers}
               meId={ME}
             />
           ) : null}

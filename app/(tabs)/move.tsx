@@ -1,8 +1,8 @@
 import { useRouter } from "expo-router";
 import React from "react";
-import { Alert, Animated, RefreshControl, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { Animated, RefreshControl, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { Icon, type IconName } from "@/components/Icon";
-import { ChallengeFacts, ChallengeHeadline, TeamContributions, useMoveAccent } from "@/components/move/ChallengeUI";
+import { ChallengeFacts, ChallengeHeadline, TeamContributions, useMoveAccent, useTeamMembers } from "@/components/move/ChallengeUI";
 import { MoveBadge } from "@/components/move/MoveBadge";
 import { MoveScopeTabs, type MoveScope } from "@/components/move/MoveScopeTabs";
 import { Pressable } from "@/components/Pressable";
@@ -13,14 +13,23 @@ import { WalkBackground, useWalkSceneInset } from "@/components/WalkBackground";
 import { fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { ME, useMove } from "@/context/MoveContext";
+import { addDays, formatShortDate } from "@/lib/date";
 import { hasMilestone } from "@/lib/move/achievements";
 import { trackMove } from "@/lib/move/analytics";
 import { MOVE_FAMILIES } from "@/lib/move/challengeDefs";
-import { formatDistance, formatMinutes, formatSteps } from "@/lib/move/movement";
+import { formatKilometres, formatMinutes, formatSteps } from "@/lib/move/movement";
 import { MovePermissionCard } from "@/components/move/MoveCards";
 
 /** How much higher the empty state starts than an active challenge does. */
 const EMPTY_SCENE_LIFT = 28;
+
+/**
+ * How much closer to Lumo an active challenge's figure sits.
+ *
+ * The headline is a single number with nothing above it, so the full scene
+ * inset left it floating in the middle of the screen with air on both sides.
+ */
+const ACTIVE_SCENE_LIFT = 20;
 
 /**
  * What a walk gives back, in five.
@@ -74,6 +83,8 @@ export default function MoveScreen() {
   );
 
   const today = move.today;
+  /** Names and faces for a team challenge's roster. Empty for every other kind. */
+  const teamMembers = useTeamMembers(move.progress?.challenge.participants);
   const needsConnect = move.canRead && move.permission !== "granted";
   const earnedCount = MOVE_FAMILIES.filter((entry) => hasMilestone(move.achievements, entry.id)).length;
   /**
@@ -86,6 +97,26 @@ export default function MoveScreen() {
 
     return earned ?? MOVE_FAMILIES[0];
   }, [move.achievements]);
+
+  /**
+   * Today and the six days before it, newest first.
+   *
+   * Built from the dates rather than from the summaries, so a day with no
+   * movement still gets a row. Filtering to days that HAVE data would quietly
+   * hide exactly the days worth noticing.
+   */
+  const lastSevenDays = React.useMemo(() => {
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = addDays(move.todayKey, -index);
+      const summary = move.state.summaries.find((entry) => entry.date === date);
+
+      return {
+        date,
+        distanceMeters: summary?.distanceMeters ?? 0,
+        activeMinutes: summary?.activeMinutes ?? 0
+      };
+    });
+  }, [move.todayKey, move.state.summaries]);
 
   async function handleConnect() {
     setConnecting(true);
@@ -132,13 +163,21 @@ export default function MoveScreen() {
             />
           )
         }}
-        rightAction={{ icon: "target", label: "Challenges", onPress: () => router.push("/move/challenges") }}
+        rightAction={{
+          icon: "target",
+          label: move.progress ? "Challenges, one in progress" : "Challenges",
+          onPress: () => router.push("/move/challenges"),
+          // A dot, not a count: there is only ever one challenge running, so a
+          // "1" would be answering a question nobody asked.
+          dot: move.progress !== null,
+          dotColor: palette.danger
+        }}
       />
 
       {/* The scene inset drops content below Lumo. With no challenge there is
           more to fit, so the empty state starts higher and tucks a little
           closer to him. */}
-      <View style={{ height: move.progress ? sceneInset : Math.max(0, sceneInset - EMPTY_SCENE_LIFT) }} />
+      <View style={{ height: Math.max(0, sceneInset - (move.progress ? ACTIVE_SCENE_LIFT : EMPTY_SCENE_LIFT)) }} />
 
       {needsConnect && !dismissedConnect ? (
         <MovePermissionCard onConnect={() => void handleConnect()} onDismiss={() => setDismissedConnect(true)} busy={connecting} />
@@ -162,7 +201,7 @@ export default function MoveScreen() {
                 facts={[
                   { icon: "footprints", label: `${formatSteps(today?.steps ?? 0)} steps` },
                   { icon: "clock", label: formatMinutes(today?.activeMinutes ?? 0) },
-                  { icon: "walk", label: `${formatDistance(today?.distanceMeters ?? 0)} today` }
+                  { icon: "walk", label: `${formatKilometres(today?.distanceMeters ?? 0)} today` }
                 ]}
               />
 
@@ -170,7 +209,7 @@ export default function MoveScreen() {
                 <TeamContributions
                   challenge={move.progress.challenge}
                   progress={move.progress}
-                  members={move.progress.challenge.participants.map((entry) => ({ userId: entry.userId, name: entry.name }))}
+                  members={teamMembers}
                   meId={ME}
                 />
               ) : null}
@@ -183,35 +222,11 @@ export default function MoveScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Track a walk live"
                 onPress={() => router.push("/move/track")}
-                style={({ pressed }) => [styles.trackWalk, { borderColor: palette.hairline, opacity: pressed ? 0.7 : 1 }]}
+                style={({ pressed }) => [styles.trackWalk, { backgroundColor: accent.primary, opacity: pressed ? 0.85 : 1 }]}
               >
-                <Icon name="walk" size={16} color={accent.glyph} weight="bulk" />
-                <AppText variant="button" color={palette.ink}>
+                <Icon name="walk" size={16} color={palette.white} weight="bulk" />
+                <AppText variant="button" color={palette.white}>
                   Track a Walk
-                </AppText>
-              </Pressable>
-
-              {/* The only way out of a challenge, and it lives here now that the
-                  challenge has no screen of its own. Quiet and last: leaving is
-                  a real option — one slot, and a challenge you have gone off
-                  blocks every other — but it is never the thing to do next. */}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Leave this challenge"
-                onPress={() =>
-                  Alert.alert(
-                    "Leave this challenge?",
-                    "Your recorded movement stays in your Move history, but your challenge progress will end.",
-                    [
-                      { text: "Cancel", style: "cancel" },
-                      { text: "Leave Challenge", style: "destructive", onPress: () => move.leaveChallenge() }
-                    ]
-                  )
-                }
-                style={({ pressed }) => [styles.leave, { opacity: pressed ? 0.6 : 1 }]}
-              >
-                <AppText variant="caption" color={palette.subtle}>
-                  Leave Challenge
                 </AppText>
               </Pressable>
             </>
@@ -264,17 +279,49 @@ export default function MoveScreen() {
             <AppText variant="bodySmall" color={palette.body}>
               All time
             </AppText>
+            {/* Kilometres always, with the unit at half the number's size —
+                the same readout the tracking screens use. */}
             <AppText color={palette.ink} style={styles.total} numberOfLines={1}>
-              {formatDistance(move.totalDistanceM)}
-            </AppText>
-            {/* The Badges screen's own pill, verbatim — same shape, same wording
-                — so one collection's count is not a chip on one screen and a
-                sentence on another. */}
-            <View style={[styles.totalBadges, { backgroundColor: palette.greenSoft }]}>
-              <Icon name="trophy" size={14} color={palette.greenDark} weight="bulk" />
-              <AppText variant="caption" color={palette.greenDark} style={styles.totalBlurb}>
-                {earnedCount} of {MOVE_FAMILIES.length} unlocked
+              {(Math.max(0, move.totalDistanceM) / 1000).toFixed(1)}
+              <AppText color={palette.ink} style={styles.totalUnit}>
+                {" km"}
               </AppText>
+            </AppText>
+          </View>
+
+          {/* The last seven days, ending today — not the calendar week, which
+              says almost nothing on a Monday morning.
+
+              A list rather than the dot strip: dots compare days to each other,
+              which is a shape, and what somebody actually wants back from a
+              week is the figures. Every day appears, including empty ones — a
+              gap you can see is the point of keeping a record. */}
+          <View style={styles.section}>
+            <AppText variant="bodySmall" color={palette.ink} style={[styles.sectionTitle, styles.centred]}>
+              Last 7 days
+            </AppText>
+
+            <View style={styles.days}>
+              {lastSevenDays.map((day, index) => (
+                <View
+                  key={day.date}
+                  style={[styles.dayRow, index === 0 ? null : { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.hairline }]}
+                >
+                  <AppText variant="bodySmall" color={day.date === move.todayKey ? palette.ink : palette.body} style={styles.dayDate}>
+                    {day.date === move.todayKey ? "Today" : formatShortDate(day.date)}
+                  </AppText>
+                  <AppText variant="caption" color={palette.muted} style={styles.dayTime}>
+                    {day.activeMinutes > 0 ? formatMinutes(day.activeMinutes) : "—"}
+                  </AppText>
+                  <AppText
+                    variant="bodySmall"
+                    color={day.distanceMeters > 0 ? palette.ink : palette.muted}
+                    style={styles.dayDistance}
+                  >
+                    {day.distanceMeters > 0 ? `${(day.distanceMeters / 1000).toFixed(1)} km` : "—"}
+                  </AppText>
+                </View>
+              ))}
             </View>
           </View>
 
@@ -282,6 +329,15 @@ export default function MoveScreen() {
             <AppText variant="bodySmall" color={palette.ink} style={[styles.sectionTitle, styles.centred]}>
               Milestones
             </AppText>
+
+            {/* The Badges screen's own pill, verbatim — so one collection's
+                count is not a chip on one screen and a sentence on another. */}
+            <View style={[styles.totalBadges, { backgroundColor: palette.greenSoft }]}>
+              <Icon name="trophy" size={14} color={palette.greenDark} weight="bulk" />
+              <AppText variant="caption" color={palette.greenDark} style={styles.totalBlurb}>
+                {earnedCount} of {MOVE_FAMILIES.length} unlocked
+              </AppText>
+            </View>
             {/* The shelf, and only the shelf. Nothing here is tappable: the
                 Challenges screen is where a rung is chosen, and two ways in made
                 this one look like a duplicate of it. */}
@@ -313,6 +369,7 @@ export default function MoveScreen() {
                 );
               })}
             </View>
+
           </View>
         </>
       )}
@@ -336,18 +393,16 @@ const styles = StyleSheet.create({
   trackWalk: {
     flexDirection: "row",
     alignItems: "center",
+    // Sized to its label rather than to the column: the same filled green as
+    // "Walk Now" on the empty state, and a full-width version of it read as the
+    // screen's one instruction when it is only an offer.
+    alignSelf: "center",
     justifyContent: "center",
     gap: spacing.xs,
     minHeight: 46,
+    paddingHorizontal: spacing.xl,
     marginTop: spacing.md,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth
-  },
-  leave: {
-    alignSelf: "center",
-    justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: spacing.md
+    borderRadius: radius.pill
   },
   // Centred, because with no challenge running this IS the screen — a
   // left-aligned invitation reads as one item on a page that has none.
@@ -425,12 +480,17 @@ const styles = StyleSheet.create({
     lineHeight: 68,
     textAlign: "center"
   },
+  totalUnit: {
+    fontFamily: fontFamilies.lexendBold,
+    fontSize: 29
+  },
   totalBlurb: {
     fontFamily: fontFamilies.lexendBold,
     letterSpacing: 0.4
   },
   totalBadges: {
     flexDirection: "row",
+    alignSelf: "center",
     alignItems: "center",
     gap: spacing.xs,
     borderRadius: radius.pill,
@@ -440,6 +500,27 @@ const styles = StyleSheet.create({
   },
   centred: {
     textAlign: "center"
+  },
+  days: {
+    paddingTop: spacing.xxs
+  },
+  dayRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    minHeight: 40
+  },
+  dayDate: {
+    flex: 1
+  },
+  dayTime: {
+    width: 72,
+    textAlign: "right"
+  },
+  dayDistance: {
+    width: 76,
+    fontFamily: fontFamilies.lexendSemiBold,
+    textAlign: "right"
   },
   // Four to a row, centred, so a short last row sits in the middle rather than
   // stranded against one edge.

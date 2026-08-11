@@ -7,6 +7,7 @@ import { Icon, type IconName } from "@/components/Icon";
 import { AppText } from "@/components/ui";
 import { badgeAccent, badgeAccentText, fontFamilies, layout, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
+import { useMove } from "@/context/MoveContext";
 import { TabBarVisibilityProvider, useTabBarVisibility } from "@/context/TabBarVisibility";
 import { alpha } from "@/lib/color";
 import { friendsService, onGroupCompletionsChanged, scheduledGroupHabitsOn } from "@/lib/friends";
@@ -37,6 +38,10 @@ const tabIcons: Record<string, IconName> = {
 
 function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
   const { isDark, palette, lumoIdSuffix } = useLumo();
+  // A challenge in progress — shown as a plain dot on Move. A dot rather than a
+  // count because there is only ever one, and a "1" would invite the question of
+  // what the other ones are.
+  const { progress: challengeProgress } = useMove();
   // Group activities still to complete today — shown as a badge on Friends.
   const [pendingActivities, setPendingActivities] = React.useState(0);
 
@@ -141,6 +146,20 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBar
           <View style={{ opacity: isFocused ? 1 : 0.7 }}>
             <Icon name={tabIcons[route.name] ?? "grid"} size={25} color={color} weight={isFocused ? "fill" : "bulk"} />
           </View>
+          {route.name === "move" && challengeProgress !== null ? (
+            <View
+              style={{
+                position: "absolute",
+                top: -3,
+                right: -3,
+                zIndex: 1,
+                width: 9,
+                height: 9,
+                borderRadius: 5,
+                backgroundColor: palette.danger
+              }}
+            />
+          ) : null}
           {route.name === "friends" && pendingActivities > 0 ? (
             <View
               style={{

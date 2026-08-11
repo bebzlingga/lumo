@@ -32,7 +32,6 @@ import type {
 
 export type StartInput = {
   activityId: string;
-  type: ActivityType;
   now: number;
   autoPause?: boolean;
 };
@@ -49,7 +48,9 @@ export type StartInput = {
 export function createActivity(input: StartInput): ActivityTrackingState {
   return {
     activityId: input.activityId,
-    type: input.type,
+    // Provisional, and rewritten at the finish from what was actually recorded
+    // — see `classifyActivity`. Nobody is asked to choose.
+    type: "walk",
     status: "preparing",
     startedAt: input.now,
     lastTickAt: input.now,
@@ -57,6 +58,8 @@ export function createActivity(input: StartInput): ActivityTrackingState {
     movingDuration: 0,
     pausedDuration: 0,
     distanceMeters: 0,
+    walkingMeters: 0,
+    runningMeters: 0,
     steps: null,
     movement: "moving",
     movementSince: input.now,
@@ -169,7 +172,6 @@ export function processLocation(
     previous,
     beforePrevious,
     newestAt: newestTimestamp(ticked, sample.timestamp),
-    type: ticked.type,
     steppingRecently: options.steppingRecently
   });
 
@@ -227,10 +229,17 @@ export function processLocation(
   const counts = next.status === "active" && outcome.state !== "stopped";
   const distanceDeltaM = counts ? verdict.distanceM : 0;
 
+  // Which side of running speed this leg fell on. Judged per leg, which is the
+  // only place it can be judged: an outing that walked, ran and walked again is
+  // three answers, not one.
+  const running = elapsedMs > 0 && distanceDeltaM / (elapsedMs / 1000) >= TRACKING_CONFIG.speed.runningMs;
+
   next = {
     ...next,
     ...movementFields(outcome),
     distanceMeters: next.distanceMeters + distanceDeltaM,
+    walkingMeters: next.walkingMeters + (running ? 0 : distanceDeltaM),
+    runningMeters: next.runningMeters + (running ? distanceDeltaM : 0),
     segments: appendPoint(next.segments, point)
   };
 
@@ -302,7 +311,42 @@ export function finishActivity(state: ActivityTrackingState, now: number): Activ
     return state;
   }
 
-  return { ...tick(state, now), status: "finished", finishedAt: now, segments: closeSegment(state.segments, now) };
+  return {
+    ...tick(state, now),
+    status: "finished",
+    // The label is set HERE, from the recording, and nowhere else.
+    type: classifyActivity(state),
+    finishedAt: now,
+    segments: closeSegment(state.segments, now)
+  };
+}
+
+/**
+ * What the activity turned out to be.
+ *
+ * A walk if almost none of it was run, a run if almost none was walked, and
+ * mixed for everything in between — which is what a warm-up, a run and a walk
+ * home actually is. `mixedShare` is the band: a fifth of the distance either
+ * way is enough to say both happened.
+ *
+ * Nothing rides on this but the label and the summary's title. Distance, pace
+ * and challenge credit are identical whichever it returns.
+ */
+export function classifyActivity(state: ActivityTrackingState): ActivityType {
+  const total = state.walkingMeters + state.runningMeters;
+
+  if (total <= 0) {
+    return "walk";
+  }
+
+  const runShare = state.runningMeters / total;
+  const share = TRACKING_CONFIG.speed.mixedShare;
+
+  if (runShare >= 1 - share) {
+    return "run";
+  }
+
+  return runShare <= share ? "walk" : "mixed";
 }
 
 /**

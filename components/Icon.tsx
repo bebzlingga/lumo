@@ -85,6 +85,7 @@ import {
   TrashIcon,
   TreeIcon,
   TrophyIcon,
+  ShareFatIcon,
   UploadSimpleIcon,
   UserCirclePlusIcon,
   UserCircleIcon,
@@ -193,6 +194,7 @@ export type IconName =
   | "trash"
   | "tree"
   | "trophy"
+  | "share"
   | "upload"
   | "user"
   | "walk"
@@ -291,6 +293,7 @@ const iconMap: Record<IconName, PhosphorIcon> = {
   trash: TrashIcon,
   tree: TreeIcon,
   trophy: TrophyIcon,
+  share: ShareFatIcon,
   upload: UploadSimpleIcon,
   user: UserIcon,
   walk: PersonSimpleWalkIcon,

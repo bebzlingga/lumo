@@ -94,6 +94,16 @@ export type ActivityTrackingState = {
 
   /** Metres, accumulated leg by leg from accepted fixes only. */
   distanceMeters: number;
+  /**
+   * The same distance, split by how fast each leg was covered.
+   *
+   * Kept as the activity runs rather than derived at the end, because it is a
+   * property of each LEG and the route alone cannot say which legs were run —
+   * a fix every fifteen seconds averages a sprint and a stroll into the same
+   * line. The two always sum to `distanceMeters`.
+   */
+  walkingMeters: number;
+  runningMeters: number;
 
   /** Steps as reported by the pedometer, or null where there is none. */
   steps: number | null;

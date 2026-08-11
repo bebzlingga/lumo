@@ -4,12 +4,12 @@ import { AppText } from "@/components/ui";
 import { spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
-import { addDays, dayInitials, startOfWeekMonday } from "@/lib/date";
+import { addDays, dayInitials, parseDateKey, startOfWeekMonday } from "@/lib/date";
 import { formatDistance, summariesInRange } from "@/lib/move/movement";
 import type { MovementSummary } from "@/lib/move/types";
 
 /**
- * The week as seven dots.
+ * The last seven days as seven dots.
  *
  * Dots rather than bars because at zero a bar chart is seven invisible marks
  * and a lot of empty rail, which reads as broken. A dot is always there — it
@@ -19,15 +19,25 @@ import type { MovementSummary } from "@/lib/move/types";
 export function MoveWeekDots({
   summaries,
   todayKey,
-  accent
+  accent,
+  /**
+   * `rolling` ends on today and reaches back six days; `calendar` runs Monday
+   * to Sunday.
+   *
+   * Rolling is the honest answer to "how have I been doing lately" — a calendar
+   * week says almost nothing on a Monday morning, when six of its seven days
+   * have not happened yet.
+   */
+  window = "calendar"
 }: {
   summaries: MovementSummary[];
   todayKey: string;
   accent: string;
+  window?: "calendar" | "rolling";
 }) {
   const { palette } = useLumo();
 
-  const start = startOfWeekMonday(todayKey);
+  const start = window === "rolling" ? addDays(todayKey, -6) : startOfWeekMonday(todayKey);
   const days = Array.from({ length: 7 }, (_, index) => addDays(start, index));
   const inWeek = summariesInRange(summaries, start, days[6]);
   const busiest = Math.max(1, ...inWeek.map((entry) => entry.distanceMeters));
@@ -43,7 +53,9 @@ export function MoveWeekDots({
         return (
           <View key={day} style={styles.day}>
             <AppText variant="caption" color={day === todayKey ? palette.ink : palette.muted} numberOfLines={1}>
-              {dayInitials[(index + 1) % 7]}
+              {/* Read off the DATE rather than the position, since a rolling
+                  window can start on any weekday. */}
+              {dayInitials[parseDateKey(day).getDay()]}
             </AppText>
             {/* Fixed height so a bigger dot never shifts the labels either side. */}
             <View style={styles.dotWrap}>

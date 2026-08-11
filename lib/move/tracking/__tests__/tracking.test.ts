@@ -1,7 +1,15 @@
 import { TRACKING_CONFIG } from '../config'
 import { filterLocationPoint } from '../filter'
 import { gpsQualityFrom, isMovement, stepMovement } from '../movement'
-import { averagePace, estimateCalories, formatPace, smoothedPace, speedToPace } from '../pace'
+import {
+	averagePace,
+	elevationGain,
+	estimateCalories,
+	formatElevation,
+	formatPace,
+	smoothedPace,
+	speedToPace,
+} from '../pace'
 import {
 	beginTracking,
 	createActivity,
@@ -43,7 +51,7 @@ function fix(northM: number, seconds: number, accuracy = 5) {
 }
 
 function started(): ActivityTrackingState {
-	return beginTracking(createActivity({ activityId: 'a1', type: 'walk', now: T0 }), T0)
+	return beginTracking(createActivity({ activityId: 'a1', now: T0 }), T0)
 }
 
 /** Feeds a list of fixes through the pipeline in order. */
@@ -80,7 +88,7 @@ describe('bad fixes', () => {
 		expect(state.distanceMeters).toBe(0)
 	})
 
-	// 500 m in 2 s is 250 m/s. Not a fast runner — a receiver jumping.
+	// 500 m in 2 s is 250 m/s. Not a sprinter — a receiver jumping.
 	it('rejects a leg nothing could have walked', () => {
 		const state = walk(started(), [fix(0, 0), fix(500, 2)])
 
@@ -89,12 +97,7 @@ describe('bad fixes', () => {
 	})
 
 	it('rejects a fix from before the stream', () => {
-		const verdict = filterLocationPoint({
-			point: fix(20, 0),
-			previous: null,
-			newestAt: at(120),
-			type: 'walk',
-		})
+		const verdict = filterLocationPoint({ point: fix(20, 0), previous: null, newestAt: at(120) })
 
 		expect(verdict).toEqual({ accepted: false, reason: 'stale', distanceM: 0 })
 	})
@@ -200,7 +203,7 @@ describe('the clock', () => {
 	})
 
 	it('does not count the acquisition phase', () => {
-		const preparing = createActivity({ activityId: 'a1', type: 'walk', now: T0 })
+		const preparing = createActivity({ activityId: 'a1', now: T0 })
 		const waited = tick(preparing, at(30))
 
 		expect(waited.elapsedDuration).toBe(0)
@@ -255,7 +258,9 @@ describe('pace', () => {
 	it('says nothing when there is not enough walk to divide', () => {
 		expect(averagePace(4, 60_000)).toBeNull()
 		expect(smoothedPace([], T0)).toBeNull()
-		expect(formatPace(null)).toBe('—')
+		// Rendered as a zero of the right shape, not a dash — the null is still
+		// what the maths returns, and only the label is a number.
+		expect(formatPace(null)).toBe('0:00 /km')
 	})
 
 	it('converts between speed and pace', () => {
@@ -305,6 +310,58 @@ describe('gps quality', () => {
 	})
 })
 
+describe('what the activity turned out to be', () => {
+	/**
+	 * Nobody declares walk or run up front. Each LEG is judged by its own speed,
+	 * and the label is written at the finish — which is the only way an outing
+	 * that did both gets described honestly.
+	 */
+	const runLeg = (index: number) => fix(index * 30, index * 10)
+	const walkLeg = (index: number) => fix(index * 10, index * 10)
+
+	it('calls a steady stroll a walk', () => {
+		const state = finishActivity(walk(started(), [0, 1, 2, 3, 4].map(walkLeg)), at(50))
+
+		expect(state.type).toBe('walk')
+		expect(state.runningMeters).toBe(0)
+	})
+
+	it('calls a steady 3 m/s effort a run', () => {
+		const state = finishActivity(walk(started(), [0, 1, 2, 3, 4].map(runLeg)), at(50))
+
+		expect(state.type).toBe('run')
+		expect(state.walkingMeters).toBe(0)
+	})
+
+	// A warm-up walk, a run, and a walk home: one outing, and neither label
+	// on its own is true of it.
+	it('calls a walk-run-walk mixed', () => {
+		let state = walk(started(), [fix(0, 0), fix(10, 10), fix(20, 20)])
+		state = walk(state, [fix(50, 30), fix(80, 40), fix(110, 50)])
+		state = walk(state, [fix(120, 60), fix(130, 70)])
+		state = finishActivity(state, at(75))
+
+		expect(state.type).toBe('mixed')
+		expect(state.walkingMeters).toBeGreaterThan(0)
+		expect(state.runningMeters).toBeGreaterThan(0)
+	})
+
+	it('accepts a runner’s legs, which a walk ceiling would have thrown out', () => {
+		// 3 m/s — impossible for a walker, ordinary for a runner. One ceiling
+		// means it is simply movement.
+		const state = walk(started(), [0, 1, 2].map(runLeg))
+
+		expect(state.distanceMeters).toBeCloseTo(60, 0)
+		expect(state.rawPoints.every((point) => point.isAccepted)).toBe(true)
+	})
+
+	it('splits the distance it counts, never more', () => {
+		const state = finishActivity(walk(started(), [0, 1, 2, 3].map(walkLeg)), at(40))
+
+		expect(state.walkingMeters + state.runningMeters).toBeCloseTo(state.distanceMeters, 5)
+	})
+})
+
 describe('finishing', () => {
 	it('closes the activity and its last segment', () => {
 		let state = walk(started(), [fix(0, 0), fix(10, 10)])
@@ -323,6 +380,55 @@ describe('finishing', () => {
 
 		expect(state.distanceMeters).toBe(before)
 		expect(state.rawPoints[state.rawPoints.length - 1].rejectionReason).toBe('notTracking')
+	})
+})
+
+describe('elevation', () => {
+	/** A segment of fixes at the given altitudes, one every ten seconds. */
+	const climb = (altitudes: (number | null)[]) => [
+		{
+			id: 's1',
+			startedAt: T0,
+			points: altitudes.map((altitude, index) => ({
+				...fix(index * 10, index * 10),
+				altitude,
+				isAccepted: true,
+			})),
+		},
+	]
+
+	it('sums the climbs, not the net change', () => {
+		// Up 20, down 20, up 20: a loop that ends where it started still climbed.
+		expect(elevationGain(climb([100, 110, 120, 110, 100, 110, 120]))).toBe(40)
+	})
+
+	// GPS altitude wanders by metres while standing still. Summing every rise
+	// would report a hillside for a walk along a flat seafront.
+	it('ignores noise below the threshold', () => {
+		expect(elevationGain(climb([100, 102, 100, 101, 100, 102, 100]))).toBe(0)
+	})
+
+	/**
+	 * What the threshold does NOT do, stated so nobody is surprised by it.
+	 *
+	 * The reference follows every dip, so noise that wanders DOWN and then back
+	 * up by more than the threshold banks the difference — 98 to 102 is a real
+	 * four-metre climb as far as this can tell. A tighter rule would need the
+	 * altitudes smoothed first, which is a barometer's job rather than a
+	 * filter's.
+	 */
+	it('banks a rise that clears the threshold from the lowest point', () => {
+		expect(elevationGain(climb([100, 102, 99, 101, 98, 100, 102]))).toBe(4)
+	})
+
+	it('measures the next climb from the bottom of the dip', () => {
+		expect(elevationGain(climb([100, 90, 100]))).toBe(10)
+	})
+
+	it('says nothing when the device reported no altitude', () => {
+		expect(elevationGain(climb([null, null, null]))).toBeNull()
+		expect(formatElevation(null)).toBe('0 m')
+		expect(formatElevation(120)).toBe('120 m')
 	})
 })
 

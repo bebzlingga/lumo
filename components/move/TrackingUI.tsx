@@ -74,10 +74,22 @@ export function GpsHint({ quality }: { quality: GpsQuality }) {
 /** One number and its label. The screen's whole readout is a few of these. */
 export function Metric({ label, value, large = false }: { label: string; value: string; large?: boolean }) {
   const { palette } = useLumo();
+  /**
+   * "—" is the absence of a figure, so it is not set like one.
+   *
+   * At the same weight and size as a real number it read as a value in its own
+   * right — a row of dashes looked like a reading of nothing rather than
+   * nothing to read.
+   */
+  const missing = value === "—";
 
   return (
     <View style={styles.metric}>
-      <AppText color={palette.ink} style={large ? styles.metricValueLarge : styles.metricValue} numberOfLines={1}>
+      <AppText
+        color={missing ? palette.muted : palette.ink}
+        style={missing ? styles.metricMissing : large ? styles.metricValueLarge : styles.metricValue}
+        numberOfLines={1}
+      >
         {value}
       </AppText>
       <AppText variant="caption" color={palette.muted} numberOfLines={1}>
@@ -219,6 +231,11 @@ const styles = StyleSheet.create({
   metricValue: {
     fontFamily: fontFamilies.lexendSemiBold,
     fontSize: 20,
+    lineHeight: 26
+  },
+  metricMissing: {
+    fontFamily: fontFamilies.lexend,
+    fontSize: 15,
     lineHeight: 26
   },
   metricValueLarge: {

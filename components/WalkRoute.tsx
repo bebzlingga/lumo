@@ -118,9 +118,6 @@ export function WalkRoute({
     );
   }
 
-  const start = projected[0];
-  const end = projected[projected.length - 1];
-
   return (
     <View style={{ width, height }}>
       <Svg width={width} height={height}>
@@ -129,7 +126,7 @@ export function WalkRoute({
             points={projected.map((point) => `${point.x},${point.y}`).join(" ")}
             fill="none"
             stroke={accent}
-            strokeWidth={5}
+            strokeWidth={2}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
@@ -139,10 +136,9 @@ export function WalkRoute({
           <Circle key={`rejected-${index}`} cx={point.x} cy={point.y} r={3} fill={palette.danger} opacity={0.8} />
         ))}
 
-        {/* Where it began and where it ended. On a loop these land on top of
-            each other, which is exactly what a loop should look like. */}
-        <Circle cx={start.x} cy={start.y} r={7} fill={palette.greenDark} stroke={palette.white} strokeWidth={2.5} />
-        <Circle cx={end.x} cy={end.y} r={7} fill={accent} stroke={palette.white} strokeWidth={2.5} />
+        {/* No start or end marker. At this size the two dots were as heavy as
+            the line between them, and on a loop they landed on each other and
+            read as one blob on an otherwise clean shape. */}
       </Svg>
     </View>
   );

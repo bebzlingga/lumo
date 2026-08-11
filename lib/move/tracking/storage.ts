@@ -144,7 +144,7 @@ export function normalizeActivity(value: unknown): ActivityTrackingState | null 
     return null;
   }
 
-  if (raw.type !== "walk" && raw.type !== "run") {
+  if (raw.type !== "walk" && raw.type !== "run" && raw.type !== "mixed") {
     return null;
   }
 
@@ -168,6 +168,8 @@ export function normalizeActivity(value: unknown): ActivityTrackingState | null 
     movingDuration: positive(raw.movingDuration),
     pausedDuration: positive(raw.pausedDuration),
     distanceMeters: positive(raw.distanceMeters),
+    walkingMeters: positive(raw.walkingMeters),
+    runningMeters: positive(raw.runningMeters),
     steps: Number.isFinite(raw.steps) ? Math.max(0, Math.round(raw.steps as number)) : null,
     movement: raw.movement === "moving" || raw.movement === "possiblyStopped" || raw.movement === "stopped" ? raw.movement : "possiblyStopped",
     movementSince: Number.isFinite(raw.movementSince) ? (raw.movementSince as number) : (raw.startedAt as number),

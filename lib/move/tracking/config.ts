@@ -11,7 +11,17 @@
  * it. They are starting points measured against the phone, not laws.
  */
 
-export type ActivityType = "walk" | "run";
+/**
+ * What an activity turned out to BE, decided from the recording rather than
+ * asked for up front.
+ *
+ * Nobody is made to declare it, for two reasons. The label's only mechanical
+ * job was setting the speed ceiling, and getting it wrong threw away real
+ * movement: a jog recorded as a walk had its fastest legs rejected as
+ * impossible. And plenty of outings are genuinely both — a warm-up walk, a run,
+ * a walk home — which no single choice describes.
+ */
+export type ActivityType = "walk" | "run" | "mixed";
 
 export const TRACKING_CONFIG = {
   location: {
@@ -48,17 +58,35 @@ export const TRACKING_CONFIG = {
     duplicateM: 0.5
   },
 
-  /**
-   * Per-activity speed ceilings, in metres per second.
-   *
-   * A leg implying more than this did not happen: it is the receiver jumping.
-   * Walk's 4.5 m/s is 16 km/h — beyond a fast walk and comfortably above the
-   * fastest legitimate leg a walker produces. Run's 12 m/s is 43 km/h, past
-   * world-record sprint pace, because a runner's GPS legs spike far more than a
-   * walker's and a tight ceiling eats real running.
-   */
-  walk: { maxSpeedMs: 4.5 },
-  run: { maxSpeedMs: 12 },
+  speed: {
+    /**
+     * The ceiling every leg is judged against, in metres per second.
+     *
+     * ONE ceiling, not one per activity type. 12 m/s is 43 km/h — past
+     * world-record sprint pace — so nothing a person does on foot is ever
+     * rejected by it, whether they walked, ran, or did both in one outing.
+     *
+     * The cost of the generous number is that a receiver jumping 20 m between
+     * two fixes is no longer impossible on its face. That case is caught
+     * further down instead, by the teleport check and the minimum leg, which
+     * judge a fix against its NEIGHBOURS rather than against a label somebody
+     * chose before setting off.
+     */
+    maxMs: 12,
+    /**
+     * Above this, a leg was run rather than walked. 2.2 m/s is about 8 km/h —
+     * a slow jog, and comfortably above a brisk walk.
+     *
+     * Used only to describe an activity afterwards. Nothing is rejected by it.
+     */
+    runningMs: 2.2,
+    /**
+     * The share of distance that has to be running for an activity to be called
+     * a run, and walking for it to be called a walk. Anything between the two
+     * is mixed, which is what most real outings are.
+     */
+    mixedShare: 0.2
+  },
 
   distance: {
     /**
@@ -138,6 +166,20 @@ export const TRACKING_CONFIG = {
     staleAfterMs: 15_000
   },
 
+  elevation: {
+    /**
+     * How far the altitude must climb from the last reference before any of it
+     * counts, in metres.
+     *
+     * GPS altitude is far noisier than position — ±10 m is ordinary, and it
+     * wanders by several metres while standing still. Summing every rise would
+     * report a few hundred metres of ascent for a walk along a flat seafront.
+     * Only a sustained climb past this threshold banks, and the reference moves
+     * with it, so a long hill still adds up while noise never does.
+     */
+    thresholdM: 4
+  },
+
   battery: {
     /**
      * How the OS is asked for fixes while moving, and while stopped.
@@ -180,7 +222,7 @@ export const TRACKING_CONFIG = {
   maxTickMs: 30_000
 } as const;
 
-/** The speed ceiling for the activity being tracked. */
-export function maxSpeedFor(type: ActivityType): number {
-  return type === "run" ? TRACKING_CONFIG.run.maxSpeedMs : TRACKING_CONFIG.walk.maxSpeedMs;
+/** The one ceiling. Kept as a function so call sites read the same as before. */
+export function maxSpeed(): number {
+  return TRACKING_CONFIG.speed.maxMs;
 }

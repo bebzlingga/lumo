@@ -35,10 +35,17 @@ export function paceToSpeed(paceMsPerKm: PaceMsPerKm): number | null {
   return 1_000_000 / paceMsPerKm;
 }
 
-/** "6:24 /km", or a dash when there is nothing worth showing. */
+/**
+ * "6:24 /km", or a zero of the same shape when there is nothing to show yet.
+ *
+ * Zero rather than a dash: on a readout of four figures a row of dashes looked
+ * like the tracker had failed, where "0:00 /km" reads as "not yet". The VALUE
+ * stays null — only its rendering is a number, and nothing downstream of this
+ * ever sees a zero it did not measure.
+ */
 export function formatPace(paceMsPerKm: PaceMsPerKm | null): string {
   if (paceMsPerKm === null || !Number.isFinite(paceMsPerKm) || paceMsPerKm <= 0) {
-    return "—";
+    return "0:00 /km";
   }
 
   const totalSeconds = Math.round(paceMsPerKm / 1000);
@@ -48,10 +55,10 @@ export function formatPace(paceMsPerKm: PaceMsPerKm | null): string {
   return `${minutes}:${String(seconds).padStart(2, "0")} /km`;
 }
 
-/** "5.4 km/h". */
+/** "5.4 km/h", or "0.0 km/h" before there is one — see `formatPace`. */
 export function formatSpeed(metresPerSecond: number | null): string {
   if (metresPerSecond === null || !Number.isFinite(metresPerSecond) || metresPerSecond < 0) {
-    return "—";
+    return "0.0 km/h";
   }
 
   return `${((metresPerSecond * 3600) / 1000).toFixed(1)} km/h`;
@@ -131,11 +138,87 @@ export function averageSpeed(distanceM: number, movingMs: number): number | null
   return distanceM / (movingMs / 1000);
 }
 
-/** "1.24 km" / "840 m". */
+/**
+ * "0.0 km" / "0.4 km" / "5.2 km" — always kilometres, always one decimal.
+ *
+ * A live readout that switches units mid-walk is the problem this solves: at
+ * 999 m it read "999 m" and one step later "1.00 km", which is a jump in the
+ * one number somebody is watching. Holding the unit means the figure only ever
+ * climbs, and the first tenth arriving IS the feedback that it is working.
+ *
+ * `lib/move/movement.ts` keeps its own formatter, which does switch to metres —
+ * that one writes sentences about totals and history, where "840 m" reads
+ * better than "0.8 km".
+ */
 export function formatDistance(metres: number): string {
-  const safe = Math.max(0, metres);
+  return `${formatDistanceValue(metres)} km`;
+}
 
-  return safe < 1000 ? `${Math.round(safe)} m` : `${(safe / 1000).toFixed(2)} km`;
+/**
+ * Just the number, for a readout that sets the unit in its own size.
+ *
+ * Kept beside `formatDistance` so the two can never round differently — a hero
+ * reading 5.2 with a label saying 5.3 km would be the app disagreeing with
+ * itself on one screen.
+ */
+export function formatDistanceValue(metres: number): string {
+  return (Math.max(0, metres) / 1000).toFixed(1);
+}
+
+/**
+ * Total ascent, in metres — the sum of the climbs, not the net height change.
+ *
+ * A loop that ends where it started has a net change of zero and may still have
+ * gone up a hundred metres; ascent is what a walk actually cost.
+ *
+ * Hysteresis rather than a straight sum, for the reason in `TRACKING_CONFIG.
+ * elevation`: GPS altitude wanders by metres while standing still, so only a
+ * climb that clears the threshold banks, and the reference follows every dip so
+ * a long steady hill still accumulates.
+ *
+ * Null when the platform gave no altitudes at all — distinct from a flat walk,
+ * which is zero.
+ */
+export function elevationGain(segments: ActivitySegment[]): number | null {
+  let gain = 0;
+  let sawAltitude = false;
+
+  for (const segment of segments) {
+    let reference: number | null = null;
+
+    for (const point of segment.points) {
+      const altitude = point.altitude;
+
+      if (typeof altitude !== "number" || !Number.isFinite(altitude)) {
+        continue;
+      }
+
+      sawAltitude = true;
+
+      if (reference === null) {
+        reference = altitude;
+        continue;
+      }
+
+      const delta = altitude - reference;
+
+      if (delta >= TRACKING_CONFIG.elevation.thresholdM) {
+        gain += delta;
+        reference = altitude;
+      } else if (delta < 0) {
+        // Going down moves the mark with you, so the next climb is measured
+        // from the bottom of the dip rather than from the top of the last one.
+        reference = altitude;
+      }
+    }
+  }
+
+  return sawAltitude ? Math.round(gain) : null;
+}
+
+/** "120 m", or "0 m" when the device reported no altitude — see `formatPace`. */
+export function formatElevation(metres: number | null): string {
+  return metres === null ? "0 m" : `${metres} m`;
 }
 
 /** "14:22", or "1:14:22" once an activity passes the hour. */
