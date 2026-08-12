@@ -3,7 +3,7 @@ import { useRouter } from "expo-router";
 import React from "react";
 import { Alert, Animated as RNAnimated, Pressable, StyleSheet, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from "react-native-reanimated";
-import { fontFamilies, habitAccent, habitColorOption, radius, spacing } from "@/constants/theme";
+import { fontFamilies, habitAccent, habitColorOption, radius, spacing, tileRadius } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha, readableOn } from "@/lib/color";
 import { toDateKey } from "@/lib/date";
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
   iconBubble: {
     width: 44,
     height: 44,
-    borderRadius: radius.lg,
+    borderRadius: tileRadius(44),
     alignItems: "center",
     justifyContent: "center"
   },

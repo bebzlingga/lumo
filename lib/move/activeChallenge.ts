@@ -35,6 +35,19 @@ export type MoveParticipant = {
   leftAt: string | null;
 };
 
+/**
+ * How a team challenge's distance is met.
+ *
+ * `each` — everybody covers the full target. Four people, 100 km, four hundred
+ * kilometres walked between them.
+ *
+ * `shared` — the target is one pot the team fills together. Four people, 100 km,
+ * a hundred kilometres walked between them, roughly twenty-five each.
+ *
+ * Only ever set on a team challenge; solo routes have nobody to share with.
+ */
+export type TeamGoal = "each" | "shared";
+
 export type ActiveMoveChallenge = {
   id: string;
   variantId: string;
@@ -56,6 +69,15 @@ export type ActiveMoveChallenge = {
   /** Set on a team challenge so a member can tell whose it is. */
   ownerId: string | null;
   /**
+   * Whether the team splits the distance or each covers it. Chosen when the
+   * challenge starts and fixed for its life — changing it mid-run would move
+   * the finish line under everybody.
+   *
+   * Optional, and absent means `each`: that was the only behaviour before this
+   * existed, so a challenge stored without the field is one of those.
+   */
+  teamGoal?: TeamGoal;
+  /**
    * Days already bought back with a pause. Capped at `MAX_PAUSES`.
    *
    * Kept as a COUNT rather than a list of paused days: nothing needs to know
@@ -69,14 +91,28 @@ export type ChallengeProgress = {
   challenge: ActiveMoveChallenge;
   variant: MoveChallengeVariant;
   /**
-   * YOUR metres toward the target.
+   * The metres that count toward `targetM`.
    *
-   * On a team challenge this is your own contribution, not the group's — see
-   * the note on `complete`. The pooled figure is `teamM`, which is a
-   * motivator rather than the thing being measured.
+   * Yours, on a solo challenge and on a team one where everybody covers the
+   * full distance. On a SHARED team challenge it is the team's pooled figure,
+   * because there the pot is the thing being measured — see `teamGoal`.
    */
   currentM: number;
+  /**
+   * The distance being measured against.
+   *
+   * The variant's own figure, whatever the mode: a shared challenge divides the
+   * WORK rather than the target, so the team still fills the same 100 km. What
+   * each person is expected to walk is `shareM`.
+   */
   targetM: number;
+  /**
+   * One person's expected share, for the roster's rings.
+   *
+   * The full target when everybody covers it, and the target split across the
+   * team when it is shared.
+   */
+  shareM: number;
   /** 0–1, clamped, against `currentM`. */
   ratio: number;
   remainingM: number;
@@ -85,20 +121,19 @@ export type ChallengeProgress = {
   /**
    * Whether the CHALLENGE is done.
    *
-   * Solo: you reached the target. Team: **everyone** reached it.
+   * Solo: you reached the target. Team: it depends on `teamGoal` — `each` needs
+   * **everyone** there, `shared` needs the pooled total there.
    *
-   * Parallel rather than pooled, and this is the decision the whole design
-   * hangs on. Pooling four people into one 100 km total means each walks about
-   * twenty-five and all four take the 100K badge — the same badge someone earns
-   * walking a hundred alone. The badge would mean two different things
-   * depending on how many friends you have. Everyone doing the full distance
-   * keeps it meaning one thing, and it is still sociable: you are all walking
-   * the same road at the same time and can see how the others are getting on.
+   * `each` is the default, and the two are deliberately equal in what they
+   * earn: both file the route and both take the badge. Splitting a distance
+   * across a team is a different way of doing the same challenge, not a
+   * cheaper one — the app's own framing is that showing up is the point, and a
+   * team that carves 100 km into four showed up four times.
    */
   complete: boolean;
   /** True once the clock ran out short. Never true at the same time as `complete`. */
   expired: boolean;
-  /** Everyone's distance added up. Shown as "34.6 km together", never measured against. */
+  /** Everyone's distance added up. The measure itself when the target is shared. */
   teamM: number;
   /** How many are already there, of how many are taking part. */
   teamDone: number;
@@ -220,19 +255,34 @@ export function challengeProgress(input: {
 
   const roster = input.challenge.participants.filter((entry) => entry.leftAt === null);
   const teamM = roster.reduce((total, entry) => total + Math.max(0, entry.contributionM), 0);
-  const teamDone = roster.filter((entry) => entry.contributionM >= targetM).length;
+  const shared = variant.kind === "team" && input.challenge.teamGoal === "shared";
+  /**
+   * What one person is expected to walk.
+   *
+   * Split across whoever is STILL taking part, so somebody leaving raises
+   * everybody else's share rather than quietly shrinking the challenge. Falls
+   * back to the whole target with an empty roster, which is a challenge with
+   * nobody in it and completes on nothing.
+   */
+  const shareM = shared && roster.length > 0 ? targetM / roster.length : targetM;
+  const teamDone = roster.filter((entry) => entry.contributionM >= shareM).length;
+
+  // The pot on a shared challenge, your own legs on any other.
+  const measuredM = shared ? teamM : currentM;
 
   const everyoneThere = variant.kind === "team" && roster.length > 0 && teamDone === roster.length;
-  const complete = input.challenge.completedAt !== null || (variant.kind === "team" ? everyoneThere : currentM >= targetM);
+  const teamComplete = shared ? teamM >= targetM : everyoneThere;
+  const complete = input.challenge.completedAt !== null || (variant.kind === "team" ? teamComplete : currentM >= targetM);
   const endsAt = input.challenge.endsAt ? new Date(input.challenge.endsAt).getTime() : null;
 
   return {
     challenge: input.challenge,
     variant,
-    currentM,
+    currentM: measuredM,
     targetM,
-    ratio: targetM > 0 ? Math.min(1, currentM / targetM) : 0,
-    remainingM: Math.max(0, targetM - currentM),
+    shareM,
+    ratio: targetM > 0 ? Math.min(1, measuredM / targetM) : 0,
+    remainingM: Math.max(0, targetM - measuredM),
     // Rounded UP, so the last partial day still reads as "1 day left" rather
     // than "0 days left" while there is time on the clock.
     daysLeft: endsAt === null ? null : Math.max(0, Math.ceil((endsAt - input.now) / DAY_MS)),
@@ -324,6 +374,9 @@ export function normalizeActiveChallenge(value: unknown): ActiveMoveChallenge | 
           }))
       : [],
     ownerId: typeof raw.ownerId === "string" ? raw.ownerId : null,
+    // Anything unrecognised, including absent, is `each` — the behaviour every
+    // challenge stored before this field existed was running under.
+    teamGoal: raw.teamGoal === "shared" ? "shared" : "each",
     pausesUsed: Number.isFinite(raw.pausesUsed) ? Math.min(MAX_PAUSES, Math.max(0, Math.round(raw.pausesUsed as number))) : 0
   };
 }

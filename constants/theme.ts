@@ -511,35 +511,91 @@ export const layout = {
   tabScreenBottomPadding: floatingTabBarHeight + spacing.xxl + spacing.lg
 };
 
+/**
+ * The corner ladder. One scale, and everything in the app takes a step on it.
+ *
+ * Two halves, because they answer different questions.
+ *
+ * **The numbered steps (`xs`–`xl`) go by SIZE.** A corner is only soft in
+ * proportion to what it is on: 10pt on a 17pt calendar cell is a circle, and
+ * 10pt on a full-width card is barely a corner at all. These climb gently, and
+ * the small end deliberately climbs least — the things wearing `xs` and `sm`
+ * are chart bars and date cells, where a big radius eats the shape itself.
+ *
+ * **The named steps go by ROLE**, and they are what almost everything uses:
+ * `button`, `card`, `nav`, `sheet`, `hero`, `dialog`. They exist so a corner is
+ * chosen by what a thing IS rather than by how big it happens to be, which is
+ * what keeps two cards on different screens agreeing. They also climb with how
+ * far the surface floats above the page: a card lying on a page is tighter than
+ * a nav shell over it, which is tighter than a sheet on a scrim.
+ *
+ * Adding a hardcoded `borderRadius: 14` anywhere is how a set of corners drifts
+ * apart — take a step here instead, and add one if none of them fits.
+ */
 export const radius = {
-  xs: 4,
-  sm: 6,
-  md: 8,
-  lg: 12,
-  xl: 16,
-  // Brand-spec steps: 18 is the default card radius, 16 the primary button.
-  card: 18,
+  // Chart bars, calendar cells, the date strip — small enough that the corner
+  // is a hint rather than a shape.
+  xs: 6,
+  sm: 9,
+  md: 14,
+  lg: 18,
+  xl: 22,
+  /** Buttons, inputs and every other form control — see `control`. */
+  button: 20,
+  /** The default for anything card-shaped. By far the most-used step. */
+  card: 24,
+  /** Nav shells and segmented bars: floating chrome, so softer than a card. */
+  nav: 28,
   /**
    * The softer corner the full-bleed hero cards take — the daily progress card
    * and the group cards on Home. A named step because it was two separate
    * hardcoded 30s, which read as one card having drifted from the other rather
    * than as a deliberate second tier above `card`.
    */
-  hero: 30,
-  button: 16,
-  nav: 22,
-  sheet: 28,
+  hero: 34,
+  sheet: 34,
   /**
    * Every modal card in the app — pickers, celebrations, invite sheets.
    *
    * The date and time pickers set the shape long before the rest arrived, and
    * a dialog that opens at a different corner than the last one reads as a
-   * different app. Well above `card`: a sheet floating on a scrim carries a
-   * softer corner than a card lying on a page.
+   * different app. The top of the ladder: a sheet floating on a scrim carries a
+   * softer corner than anything lying on a page.
    */
-  dialog: 40,
+  dialog: 44,
   pill: 9999
 };
+
+/**
+ * The corner for a square icon tile, worked out from its side.
+ *
+ * A function rather than a step on the ladder, because this is the one place a
+ * fixed number cannot work: the app's glyph tiles run from 40 to 72pt, and any
+ * single radius that is a squircle on 72 is a circle on 40. Nothing about a
+ * tile's shape should change with its size — only its corner, in proportion.
+ *
+ * 34% of the side is the squircle every icon tile in the app wears. Half would
+ * be a circle; the app has those too, and they say `radius.pill` so a reader
+ * can tell a deliberate circle from a corner that grew into one.
+ */
+export function tileRadius(size: number): number {
+  return Math.round(size * 0.34);
+}
+
+/**
+ * The corner for a short single-line row, worked out from its height.
+ *
+ * The same problem `tileRadius` solves, one axis over. `radius.card` is drawn
+ * for something with paragraphs in it; on a 44–58pt row it is nearly half the
+ * height, and the row comes out a lozenge. A card that happens to be one line
+ * tall is still a card, and should not change shape because of what is in it.
+ *
+ * Capped at `radius.card`, so a tall row keeps the ordinary card corner and
+ * only short ones are pulled in.
+ */
+export function rowRadius(height: number): number {
+  return Math.min(radius.card, Math.round(height * 0.3));
+}
 
 /**
  * Shared sizing for form controls (inputs, dropdown triggers, buttons) so they

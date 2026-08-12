@@ -22,7 +22,7 @@ import { GroupActivityRow } from "@/components/GroupActivityRow";
 import { GroupBackdrop, useGroupBackdropSubjectBottom } from "@/components/GroupBackdrop";
 import { GroupInviteModal } from "@/components/GroupInviteModal";
 import { CROWN_GOLD, GroupMemberRow } from "@/components/GroupMemberRow";
-import { GroupMilestoneCelebration } from "@/components/GroupMilestoneCelebration";
+import { GroupWinCelebration } from "@/components/GroupWinCelebration";
 import { GroupRollCall } from "@/components/GroupRollCall";
 import { chartTrackColor } from "@/components/StatisticsViews";
 import { Icon, type IconName } from "@/components/Icon";
@@ -31,19 +31,19 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { Skeleton } from "@/components/Skeleton";
 import { EmptyState } from "@/components/states";
 import { AppText, Card, Screen } from "@/components/ui";
-import { fontFamilies, habitAccent, radius, spacing } from "@/constants/theme";
+import { fontFamilies, habitAccent, radius, spacing, tileRadius } from "@/constants/theme";
 import {
+  bestEarnedTrophy,
   challengeByName,
   challengeProgressFor,
   countWonChallenges,
-  earnedTrophyCount,
-  groupChallengesForGroup,
+  earnedTrophies,
   groupChallengeTierMeta,
-  groupRank,
   groupScoreForXp,
   groupTrophies,
   groupXpFromCounts,
-  productivityChallenges
+  productivityChallenges,
+  trophyVariantIcon
 } from "@/constants/groupChallenges";
 import { useLumo } from "@/context/LumoContext";
 import { buildGroupAvatarSvg, defaultAvatar } from "@/lib/avatar";
@@ -64,12 +64,21 @@ import { formatLumoId } from "@/lib/lumoId";
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const EMPTY_WEEK: MemberDayStatus[] = ["none", "none", "none", "none", "none", "none", "none"];
 // Logs tab starts by showing this many days, revealing more as you scroll down.
-/** The figures card's own inset. Named because the roll call nested inside it
- *  has to cancel exactly this to run its faces edge to edge. */
+/** The figures card's own inset, shared by the cards that copy its shape. */
 const STATS_CARD_PADDING = spacing.md;
 
 /** The share of the backdrop's subject zone the identity block rides up into. */
 const HERO_OVERLAP = 0.7;
+
+/**
+ * The backdrop's picnic, pulled up a little further here than on the Friends tab.
+ *
+ * This page carries the group's own face — a 104pt avatar and its name — under
+ * the scene rather than a row of tabs, so it needs the extra room, and the art
+ * has sky to spare at the top. Kept just under the ceiling `GROUP_PLATE_LIFT`
+ * documents: past ~0.07 the centre Lumo's flame reaches the page bar.
+ */
+const BACKDROP_LIFT = 0.07;
 
 const LOG_DAYS_PAGE = 3;
 
@@ -266,14 +275,14 @@ export default function GroupDetailScreen() {
   const [friends, setFriends] = React.useState<Friendship[]>([]);
   const [invitedIds, setInvitedIds] = React.useState<Set<string>>(() => new Set());
   // The plate fills the screen now, so the identity block is dropped to where
-  // the mascot and the table he leans on finish rather than starting straight
-  // under the header and running across him. The header is measured instead of
-  // assumed: its height moves with the Dynamic Island / notch inset.
+  // the picnic finishes rather than starting straight under the header and
+  // running across it. The header is measured instead of assumed: its height
+  // moves with the Dynamic Island / notch inset.
   const insets = useSafeAreaInsets();
   // The same wash Profile's charts use — `chartTrack` at full strength is the
   // warm sand, which reads as its own filled bar beside a short one.
   const trackColor = chartTrackColor(palette, isDark);
-  const subjectBottom = useGroupBackdropSubjectBottom();
+  const subjectBottom = useGroupBackdropSubjectBottom(BACKDROP_LIFT);
   const [headerBottom, setHeaderBottom] = React.useState(0);
   const handleHeaderLayout = React.useCallback(
     (event: LayoutChangeEvent) => {
@@ -285,12 +294,12 @@ export default function GroupDetailScreen() {
   /**
    * How far the identity block sits below the page bar.
    *
-   * `subjectBottom` is where the backdrop's mascot finishes, and the block used
-   * to clear him completely — which put the avatar a third of the way down the
-   * screen. It only rides down PART of that gap now: the lower stretch of his
-   * zone is the table edge he leans on rather than the character himself, and
-   * the plate fades as the page scrolls anyway, so overlapping it costs
-   * nothing and buys back the space the group's own face should be in.
+   * `subjectBottom` is where the backdrop's scene finishes, and the block used
+   * to clear it completely — which put the avatar a third of the way down the
+   * screen. It only rides down PART of that gap now: the lower stretch of that
+   * zone is the picnic blanket rather than the characters on it, and the plate
+   * fades as the page scrolls anyway, so overlapping it costs nothing and buys
+   * back the space the group's own face should be in.
    */
   const heroDrop = headerBottom > 0 ? Math.max(0, (subjectBottom - headerBottom) * (1 - HERO_OVERLAP)) : 0;
   const myLumoId = formatLumoId(lumoIdSuffix);
@@ -414,16 +423,22 @@ export default function GroupDetailScreen() {
   const group = loadedGroup;
   const memberCount = group.members.length;
 
-  // Shared challenge ladder — computed live from the group's synced metrics.
+  // The trophy shelf, resolved live from the group's synced metrics — the page's
+  // rank chip, its trophy count and its celebration all read from this one list.
   // Plain consts (not useMemo): this runs after the early-return guards above,
   // so a hook here would break the rules-of-hooks order.
-  const challengeProgress = groupChallengesForGroup({
+  const trophyMetrics = {
     members: memberCount,
     completions: group.progress,
     streak: group.streak,
-    rollCallStreak: group.rollCallStreak
-  });
-  const rank = groupRank(challengeProgress);
+    rollCallStreak: group.rollCallStreak,
+    challengesWon: countWonChallenges(group.habits, group.completedDaysByHabit)
+  };
+  const trophies = earnedTrophies(trophyMetrics);
+  // The group's rank, which used to be the highest milestone on the ladder and is
+  // now the best trophy on the shelf — the shelf tests the same metrics, so
+  // nothing about what a group is proud of changed with the ladder's removal.
+  const rank = bestEarnedTrophy(trophyMetrics);
   const rankAccent = rank ? groupChallengeTierMeta[rank.tier].accent : palette.muted;
 
   // Group Score (XP) — powers the level chip + the level-up celebration.
@@ -432,13 +447,6 @@ export default function GroupDetailScreen() {
     countByHabit[habit.id] = group.members.reduce((sum, member) => sum + (member.contributionByHabit?.[habit.id] ?? 0), 0);
   }
   const groupScore = groupScoreForXp(groupXpFromCounts(group.habits, countByHabit));
-  const earnedTrophies = earnedTrophyCount({
-    members: memberCount,
-    completions: group.progress,
-    streak: group.streak,
-    rollCallStreak: group.rollCallStreak,
-    challengesWon: countWonChallenges(group.habits, group.completedDaysByHabit)
-  });
   // How many of the built-in challenges the group has taken on.
   const activeChallengeCount = group.habits.filter((habit) => challengeByName(habit.name)).length;
 
@@ -782,12 +790,12 @@ export default function GroupDetailScreen() {
     });
 
   return (
-    // This page's own plate, with Lumo leaning in at the top right — so the
-    // generic landscape is switched off rather than layered under it. See
+    // The social plate — the picnic this page shares with the Friends tab — so
+    // the generic landscape is switched off rather than layered under it. See
     // GroupBackdrop for why it isn't a `backgroundVariant`.
     <Screen
       backgroundVariant={null}
-      backgroundNode={<GroupBackdrop scrollY={scrollY} />}
+      backgroundNode={<GroupBackdrop scrollY={scrollY} lift={BACKDROP_LIFT} />}
       contentStyle={styles.content}
       refreshControl={
         <RefreshControl
@@ -845,8 +853,8 @@ export default function GroupDetailScreen() {
             was the glyph's own caption. */}
         <View style={[styles.chipRow, styles.heroChipRow]}>
           <MetaChip
-            icon={rank ? rank.icon : "award"}
-            label={rank ? rank.title : "Unranked"}
+            icon={rank ? trophyVariantIcon[rank.variant] : "award"}
+            label={rank ? rank.name : "Unranked"}
             tint={alpha(rankAccent, "1F")}
             color={rankAccent}
           />
@@ -857,6 +865,24 @@ export default function GroupDetailScreen() {
           />
         </View>
       </View>
+
+      {/* Who is here today, straight under the group's name — the faces ARE the
+          group, so they open the page rather than closing the figures card the
+          way they used to. Down there they read as a legend for the arithmetic
+          above them, and you had to get past three numbers to find out whether
+          anyone had shown up.
+
+          It bleeds past the screen's gutter itself, so it wants no wrapper here —
+          nesting it in one would stop the last face at the margin instead of
+          letting it scroll off the edge. */}
+      <GroupRollCall
+        members={group.members}
+        myLumoId={myLumoId}
+        myCheers={myCheers}
+        cheersFor={cheersFor}
+        progressFor={rollCallProgress}
+        onMemberPress={handleMemberTap}
+      />
 
       {/* The group's figures in one card, the shape Profile and the habit page
           both use: the two live numbers at display size, the rest in a strip
@@ -935,25 +961,6 @@ export default function GroupDetailScreen() {
           ))}
         </View>
 
-        {/* Who is here today, the card's bottom band — under the same hairline
-            that divides the figures above it. The faces are the group itself
-            rather than a legend for the arithmetic, so they sit last and get
-            the full width of the card.
-
-            `inset` is the card's own padding, which the row's full-bleed has to
-            cancel — the screen gutter it defaults to is a different number and
-            would leave the first face indented. */}
-        <View style={[styles.statsRule, { backgroundColor: palette.hairline }]} />
-
-        <GroupRollCall
-          members={group.members}
-          myLumoId={myLumoId}
-          myCheers={myCheers}
-          cheersFor={cheersFor}
-          progressFor={rollCallProgress}
-          inset={STATS_CARD_PADDING}
-          onMemberPress={handleMemberTap}
-        />
       </View>
 
       {/* Straight after the faces: challenges and trophies are what the group
@@ -978,14 +985,14 @@ export default function GroupDetailScreen() {
           art={TROPHY_ART}
           mat={TROPHY_MAT}
           ink={TROPHY_INK}
-          value={earnedTrophies}
+          value={trophies.length}
           total={groupTrophies.length}
           title="Trophies"
           caption="Earned"
         />
       </View>
 
-      <GroupMilestoneCelebration groupName={group.name} milestones={challengeProgress} scoreLevel={groupScore.level} />
+      <GroupWinCelebration groupName={group.name} trophies={trophies} scoreLevel={groupScore.level} />
 
       <SegmentedControl options={GROUP_TABS} value={activeTab} onChange={setActiveTab} style={styles.tabs} />
 
@@ -1534,7 +1541,7 @@ const styles = StyleSheet.create({
   weekHabitIcon: {
     width: 40,
     height: 40,
-    borderRadius: radius.lg,
+    borderRadius: tileRadius(40),
     alignItems: "center",
     justifyContent: "center",
     // Nudged down off the row's centre line. `top` rather than a margin: RN

@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Modal, ScrollView, StyleProp, StyleSheet, View, ViewStyle } from "react-native"
 import { WheelTimePicker } from "./WheelTimePicker";
-import { CTA_FILL, defaultHabitColor, fontFamilies, habitAccent, habitColorPickerOptions, layout, radius, spacing } from "@/constants/theme";
+import { CTA_FILL, defaultHabitColor, fontFamilies, habitAccent, habitColorPickerOptions, layout, radius, spacing, tileRadius } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha, readableOn } from "@/lib/color";
 import { dayLabels, dayNames, parseDateKey, toDateKey } from "@/lib/date";
@@ -932,7 +932,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 44,
     height: 44,
-    borderRadius: radius.xl
+    borderRadius: tileRadius(44)
   },
   colorChipRow: {
     alignItems: "center",

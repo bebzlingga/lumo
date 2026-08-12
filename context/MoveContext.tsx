@@ -11,7 +11,8 @@ import {
   type ActiveMoveChallenge,
   type ChallengeProgress,
   type MoveParticipant,
-  type StartRefusal
+  type StartRefusal,
+  type TeamGoal
 } from "@/lib/move/activeChallenge";
 import { trackMove } from "@/lib/move/analytics";
 import { challengeClient } from "@/lib/move/challengeClient";
@@ -105,7 +106,12 @@ type MoveContextValue = {
    * Returns a domain refusal rather than throwing, so the screen can print the
    * reason instead of failing opaquely.
    */
-  startChallenge: (variantId: string, participants?: MoveParticipant[]) => { ok: true } | { ok: false; reason: StartRefusal };
+  startChallenge: (
+    variantId: string,
+    participants?: MoveParticipant[],
+    /** How a team splits the distance. Ignored on a solo route. */
+    teamGoal?: TeamGoal
+  ) => { ok: true } | { ok: false; reason: StartRefusal };
   /** Abandons the active challenge. Movement history is untouched. */
   leaveChallenge: () => void;
   /** Buys a day back on the deadline. Capped — see `pauseState`. */
@@ -316,7 +322,18 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
             }
           : current
       );
-    })();
+    })().catch(() => {
+      /**
+       * A team sync that fails changes nothing here.
+       *
+       * Your own figure comes from the device's summaries and is already on
+       * screen; this only refreshes what the OTHERS have done, and a stale
+       * roster is a far better outcome than an error over a walk. Caught
+       * explicitly rather than left to float — every other network call in Move
+       * is guarded the same way, and an unhandled rejection here would surface
+       * as a red box in development for a condition that is entirely ordinary.
+       */
+    });
 
     return () => {
       cancelled = true;
@@ -468,7 +485,7 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
 
         return true;
       },
-      startChallenge(variantId, participants = []) {
+      startChallenge(variantId, participants = [], teamGoal = "each") {
         const check = canStartChallenge({
           active: stateRef.current.active,
           variantId,
@@ -493,6 +510,7 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
             completedAt: null,
             participants,
             ownerId: participants.length > 0 ? ME : null,
+            teamGoal,
             pausesUsed: 0
           }
         }));
@@ -505,7 +523,8 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
             variant,
             startedAt,
             endsAt: challengeEndsAt(variant, startedAt) ?? null,
-            friendIds: participants.filter((entry) => entry.userId !== ME).map((entry) => entry.userId)
+            friendIds: participants.filter((entry) => entry.userId !== ME).map((entry) => entry.userId),
+            teamGoal
           })
           .catch(() => undefined);
 

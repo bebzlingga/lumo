@@ -1,8 +1,24 @@
 import * as Haptics from "expo-haptics";
 import { useFocusEffect, useRouter } from "expo-router";
 import React from "react";
-import { ActivityIndicator, Alert, Animated, Easing, Modal, RefreshControl, ScrollView, StyleSheet, TextInput, View } from "react-native"
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Easing,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent
+} from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SegmentedControl } from "@/components/controls";
+import { GroupBackdrop, useGroupBackdropSubjectBottom } from "@/components/GroupBackdrop";
 import { Icon, type IconName } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { HoldProgressRing } from "@/components/HoldProgressRing";
@@ -40,6 +56,18 @@ const LUMO_ID_PREFIX = "LUMO-";
  *  Named because the group card's activity chip row bleeds against it and has
  *  to cancel exactly this, not the screen gutter. */
 const LIST_CARD_PADDING = spacing.md;
+
+/**
+ * How much of the backdrop's picnic the tab row may sit over, as a fraction of
+ * the gap between the page bar and the foot of the scene.
+ *
+ * 0 clears the scene completely, which puts the tabs a third of the way down the
+ * screen; 1 starts them straight under the bar and runs the pills across the
+ * three of them. This lands the row on the blanket's front corner — the
+ * picnic's own foreground, clear of the characters — so the page reads as
+ * sitting IN FRONT of the scene rather than beginning after it.
+ */
+const SCENE_OVERLAP = 0.15;
 
 function maskLumoId(text: string) {
   let value = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -555,6 +583,38 @@ export default function FriendsScreen() {
   /** The group habit currently mid-write, so its row cannot be fired twice. */
   const [busyHabitId, setBusyHabitId] = React.useState<string | null>(null);
 
+  /**
+   * Drives the backdrop's fade — see GroupBackdrop.
+   *
+   * Set by hand from `handleScroll` rather than by `Animated.event`, matching
+   * the group page: `Screen` takes a single onScroll, and one interpolated
+   * opacity per frame on the JS driver is cheap.
+   */
+  const scrollY = React.useRef(new Animated.Value(0)).current;
+  const handleScroll = React.useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      scrollY.setValue(event.nativeEvent.contentOffset.y);
+    },
+    [scrollY]
+  );
+  // The plate fills the screen, so the tabs are dropped to where the picnic
+  // finishes rather than starting straight under the header and running across
+  // it. The header is measured instead of assumed: its height moves with the
+  // Dynamic Island / notch inset.
+  const insets = useSafeAreaInsets();
+  const subjectBottom = useGroupBackdropSubjectBottom();
+  const [headerBottom, setHeaderBottom] = React.useState(0);
+  const handleHeaderLayout = React.useCallback(
+    (event: LayoutChangeEvent) => {
+      const { y, height } = event.nativeEvent.layout;
+      setHeaderBottom(insets.top + y + height);
+    },
+    [insets.top]
+  );
+  // Zero until the bar has been measured — dropping the tabs on a guess would
+  // land them somewhere else on the first frame and jump.
+  const sceneDrop = headerBottom > 0 ? Math.max(0, (subjectBottom - headerBottom) * (1 - SCENE_OVERLAP)) : 0;
+
   const loadData = React.useCallback(async () => {
     const [loadedGroups, loadedFriends, loadedFriendInvites, loadedGroupInvites] = await Promise.all([
       friendsService.listGroups(),
@@ -725,7 +785,12 @@ export default function FriendsScreen() {
     React.useCallback(() => {
       setActiveTab("habits");
       loadData();
-    }, [loadData])
+      // `Screen` puts the scroller back to the top on focus; this puts the
+      // backdrop's fade back with it. Without it a tab left scrolled down comes
+      // back with the picnic still faded out, since the reset is unanimated and
+      // may not emit a scroll event to track.
+      scrollY.setValue(0);
+    }, [loadData, scrollY])
   );
 
   const inviteComplete = inviteId.length === "LUMO-XXXX-XX".length;
@@ -783,7 +848,9 @@ export default function FriendsScreen() {
 
   if (FRIENDS_COMING_SOON) {
     return (
-      <Screen contentStyle={styles.content}>
+      // No page bar on this one, so it puts back the top padding `styles.content`
+      // gives up for the pinned header.
+      <Screen contentStyle={[styles.content, styles.unpinnedContent]}>
         <View style={styles.hero}>
           <View style={[styles.badge, { backgroundColor: palette.greenSoft }]}>
             <Icon name="friends" size={30} color={palette.greenDark} weight="bulk" />
@@ -832,8 +899,15 @@ export default function FriendsScreen() {
   }
 
   return (
+    // The social plate — the picnic this tab shares with a group's own page — so
+    // the generic landscape is switched off rather than layered under it. See
+    // GroupBackdrop for why it isn't a `backgroundVariant`.
     <Screen
+      backgroundVariant={null}
+      backgroundNode={<GroupBackdrop scrollY={scrollY} />}
       contentStyle={styles.content}
+      onScroll={handleScroll}
+      scrollEventThrottle={16}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -845,50 +919,60 @@ export default function FriendsScreen() {
           }}
         />
       }
+      // Written as `stickyHeader` rather than as the first child — which `Screen`
+      // would pin by itself — only so the bar can be wrapped and measured, which
+      // is what the tab row drops from.
+      stickyHeader={
+        <View onLayout={handleHeaderLayout}>
+          {/* The app's page header, same as Habits and Profile: outlined 38pt
+              button, centred serif title. This was the last tab still running its
+              own — a left-aligned Lexend-Black 34 headline over a filled green
+              circle, which made Friends look like a different app from the tab
+              beside it. */}
+          <ScreenHeader
+            title={TAB_TITLE[activeTab]}
+            // Invitations are an inbox, not a peer of Groups and Friends — they
+            // arrive unbidden and empty out as you deal with them. As a tab they
+            // sat there reading "0" most of the time; on the bar they are silent
+            // until something is actually waiting, and the count is visible from
+            // either tab rather than only once you have gone looking.
+            // 22, matching Profile: these two carry `bulk` glyphs, whose lighter
+            // duotone strokes read a size smaller than the bold ones every other
+            // header uses at 20.
+            leftAction={{
+              icon: "notifications",
+              label: "Invitations",
+              iconWeight: "bulk",
+              iconSize: 22,
+              badge: inviteCount,
+              onPress: () => setInvitesVisible(true)
+            }}
+            rightAction={{
+              // A bare bold + on Groups, exactly as the Habits header draws its
+              // add button — `elementPlus` is a plus inside a square, which read
+              // as a different control from the one doing the same job one tab
+              // over.
+              icon: activeTab === "friends" ? "userCircleAdd" : "plus",
+              // Habits come only from groups, so the Habits tab keeps the Groups
+              // tab's action rather than offering none.
+              label: activeTab === "friends" ? "Invite a friend" : "Create a group",
+              iconWeight: activeTab === "friends" ? "bulk" : "bold",
+              iconSize: activeTab === "friends" ? 22 : 20,
+              onPress: () => {
+                if (activeTab === "friends") {
+                  setInviteVisible(true);
+                } else {
+                  router.push("/group/new");
+                }
+              }
+            }}
+          />
+        </View>
+      }
     >
-      {/* The app's page header, same as Habits and Profile: outlined 38pt button,
-          centred serif title. This was the last tab still running its own — a
-          left-aligned Lexend-Black 34 headline over a filled green circle, which
-          made Friends look like a different app from the tab beside it. */}
-      <ScreenHeader
-        title={TAB_TITLE[activeTab]}
-        // Invitations are an inbox, not a peer of Groups and Friends — they
-        // arrive unbidden and empty out as you deal with them. As a tab they
-        // sat there reading "0" most of the time; on the bar they are silent
-        // until something is actually waiting, and the count is visible from
-        // either tab rather than only once you have gone looking.
-        // 22, matching Profile: these two carry `bulk` glyphs, whose lighter
-        // duotone strokes read a size smaller than the bold ones every other
-        // header uses at 20.
-        leftAction={{
-          icon: "notifications",
-          label: "Invitations",
-          iconWeight: "bulk",
-          iconSize: 22,
-          badge: inviteCount,
-          onPress: () => setInvitesVisible(true)
-        }}
-        rightAction={{
-          // A bare bold + on Groups, exactly as the Habits header draws its add
-          // button — `elementPlus` is a plus inside a square, which read as a
-          // different control from the one doing the same job one tab over.
-          icon: activeTab === "friends" ? "userCircleAdd" : "plus",
-          // Habits come only from groups, so the Habits tab keeps the Groups
-          // tab's action rather than offering none.
-          label: activeTab === "friends" ? "Invite a friend" : "Create a group",
-          iconWeight: activeTab === "friends" ? "bulk" : "bold",
-          iconSize: activeTab === "friends" ? 22 : 20,
-          onPress: () => {
-            if (activeTab === "friends") {
-              setInviteVisible(true);
-            } else {
-              router.push("/group/new");
-            }
-          }
-        }}
-      />
-
-      <View style={styles.tabRow}>
+      {/* Dropped past the picnic — `styles.tabRow`'s own 8pt, plus however much
+          of the scene there is to clear. */}
+      <View style={[styles.tabRow, { marginTop: spacing.xs + sceneDrop }]}>
         <SegmentedControl options={HABITS_TAB} value={activeTab} onChange={setActiveTab} style={styles.tabHabits} />
         <SegmentedControl options={SOCIAL_TABS} value={activeTab} onChange={setActiveTab} style={styles.tabSocial} />
       </View>
@@ -1141,8 +1225,16 @@ export default function FriendsScreen() {
 
 const styles = StyleSheet.create({
   content: {
+    // The pinned bar has already spent the screen's top padding. `Screen` zeroes
+    // this itself for a header written as its first child; this page passes its
+    // bar as `stickyHeader` so it can be measured, which opts out of that — so
+    // the zero is stated here instead.
+    paddingTop: 0,
     paddingBottom: layout.tabScreenBottomPadding,
     gap: spacing.lg
+  },
+  unpinnedContent: {
+    paddingTop: spacing.lg
   },
   hero: {
     alignItems: "center",
@@ -1429,10 +1521,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
-    marginTop: -spacing.md,
-    // Takes the screen's 24pt stack gap up to the same 32 the sections below
-    // use between blocks, so the tabs sit in the page's own rhythm rather than
-    // a tighter one of their own.
+    /**
+     * 8 on top of the header's own 16pt margin, for the same 24 Habits leaves
+     * under its bar.
+     *
+     * This used to be -16, cancelling that margin: with the header inside the
+     * scroller the page's 24pt stack gap landed under it as well, and the two
+     * together were too much. Pinned, the stack gap is gone and the negative
+     * margin left the tabs touching the bar.
+     */
+    marginTop: spacing.xs,
+    // Takes the gap below up to the same 32 the sections use between blocks, so
+    // the tabs sit in the page's own rhythm rather than a tighter one.
     marginBottom: spacing.xs
   },
   tabHabits: {
@@ -1483,7 +1583,7 @@ const styles = StyleSheet.create({
   friendRemove: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center"
   },

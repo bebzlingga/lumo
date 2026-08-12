@@ -8,6 +8,7 @@ import { TrophyDialog } from "@/components/TrophyDialog";
 import { TrophyImage } from "@/components/TrophyImage";
 import { AppText, Screen } from "@/components/ui";
 import {
+  TROPHY_MIN_MEMBERS,
   countWonChallenges,
   groupChallengeTierMeta,
   groupTrophies,
@@ -99,10 +100,16 @@ export default function GroupTrophiesScreen() {
     // #0A1330 sky with white-alpha text that ignored light/dark entirely, so it
     // stayed night-time even with the rest of the app in light mode.
     <Screen backgroundVariant="trophies" backgroundIntensity="medium" contentStyle={styles.content}>
-      <ScreenHeader title="Trophies" leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }} />
+      <ScreenHeader title="Trophies" leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }} style={styles.header} />
 
+      {/* The opening line says what the shelf IS — unless the group is one
+          person, in which case the more useful thing it can say is why none of
+          it is reachable yet. Without this the page reads as sixteen awards that
+          simply refuse to unlock however long you keep checking in. */}
       <AppText variant="bodySmall" color={palette.subtle} style={styles.intro}>
-        Sixteen awards across four tiers — each one earned by the whole group, not by any one member.
+        {metrics.members < TROPHY_MIN_MEMBERS
+          ? `Sixteen awards across four tiers — every one earned by the group together, so the shelf opens once there are ${TROPHY_MIN_MEMBERS} of you. Invite a friend to get started.`
+          : "Sixteen awards across four tiers — each one earned by the whole group, not by any one member."}
       </AppText>
 
       {/* One shelf in ladder order, not four labelled sections. Each award
@@ -133,6 +140,7 @@ export default function GroupTrophiesScreen() {
         trophy={selected}
         earned={selected ? isEarned(selected) : false}
         current={selected ? metrics[selected.metric] : 0}
+        members={metrics.members}
         onClose={() => setSelected(null)}
       />
     </Screen>
@@ -194,8 +202,16 @@ function TrophyTile({
 
 const styles = StyleSheet.create({
   content: {
+    /** Air between the pinned bar and the opening line — the same 12 the bar
+     *  takes above itself, and the same pair Challenges carries. */
+    paddingTop: spacing.sm,
     paddingBottom: spacing.xxl,
     gap: spacing.md
+  },
+  /** A breather above the bar — the same extra gap Challenges takes, since the
+   *  two open from the same pair of tiles and are read as one set. */
+  header: {
+    marginTop: spacing.sm
   },
   loading: {
     flex: 1,

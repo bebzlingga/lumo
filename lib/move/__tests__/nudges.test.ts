@@ -20,6 +20,7 @@ function progress(over: Partial<ChallengeProgress> = {}): ChallengeProgress {
 		variant,
 		currentM: 8000,
 		targetM: 10_000,
+		shareM: 10_000,
 		ratio: 0.8,
 		remainingM: 2000,
 		daysLeft: 4,

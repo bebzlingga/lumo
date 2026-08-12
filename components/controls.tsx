@@ -326,12 +326,13 @@ const styles = StyleSheet.create({
 		fontFamily: fontFamilies.lexendSemiBold,
 		fontSize: 11,
 	},
-	// Card radius, not a pill — the control sits in the same surface language
-	// as everything else on screen.
+	// Fully rounded, track and segments alike. A pill is what a switch between
+	// two or three views looks like everywhere else; at a card radius this read
+	// as a small panel that happened to have buttons in it.
 	segmented: {
 		flexDirection: 'row',
 		alignItems: 'center',
-		borderRadius: radius.lg,
+		borderRadius: radius.pill,
 		borderWidth: StyleSheet.hairlineWidth,
 		padding: 4,
 		gap: 4,
@@ -341,7 +342,7 @@ const styles = StyleSheet.create({
 		minHeight: 36,
 		alignItems: 'center',
 		justifyContent: 'center',
-		borderRadius: radius.lg,
+		borderRadius: radius.pill,
 		paddingHorizontal: spacing.xs,
 	},
 	segmentText: {
@@ -357,14 +358,14 @@ const styles = StyleSheet.create({
 	toggleTrack: {
 		width: 44,
 		height: 26,
-		borderRadius: 13,
+		borderRadius: radius.pill,
 		padding: 3,
 		justifyContent: 'center',
 	},
 	toggleThumb: {
 		width: 20,
 		height: 20,
-		borderRadius: 10,
+		borderRadius: radius.pill,
 		backgroundColor: '#FFFFFF',
 	},
 })

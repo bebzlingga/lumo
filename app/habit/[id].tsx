@@ -7,7 +7,7 @@ import { HabitIcon } from "@/components/HabitIcon";
 import { Icon, type IconName } from "@/components/Icon";
 import { Pressable } from "@/components/Pressable";
 import { AppText, Button, Card, LoadingState, Screen } from "@/components/ui";
-import { fontFamilies, habitAccent, habitColorOption, radius, spacing } from "@/constants/theme";
+import { fontFamilies, habitAccent, habitColorOption, radius, spacing, tileRadius } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha, readableOn } from "@/lib/color";
 import { daysBetween, parseDateKey, toDateKey } from "@/lib/date";
@@ -555,7 +555,7 @@ const styles = StyleSheet.create({
   headerIcon: {
     width: 60,
     height: 60,
-    borderRadius: radius.xl,
+    borderRadius: tileRadius(60),
     alignItems: "center",
     justifyContent: "center"
   },

@@ -154,6 +154,29 @@ export function timeAgo(iso: string) {
   return days === 1 ? "Yesterday" : `${days}d ago`;
 }
 
+/**
+ * "Today", "Yesterday", or "August 10, 2026".
+ *
+ * The two nearest days are named rather than dated: on a list of the last week
+ * they are the two rows somebody is actually looking for, and "Aug 12" makes
+ * you work out which one that is. Everything older gets the full date — a bare
+ * "Aug 10" is ambiguous the moment a list spans a year boundary.
+ *
+ * `todayKey` is passed rather than read, so this stays pure and testable and
+ * cannot disagree with the caller about what day it is.
+ */
+export function formatRelativeDate(dateKey: string, todayKey: string) {
+  if (dateKey === todayKey) {
+    return "Today";
+  }
+
+  if (dateKey === addDays(todayKey, -1)) {
+    return "Yesterday";
+  }
+
+  return parseDateKey(dateKey).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+}
+
 // "Sunday, 05 Jun 2026" — day/month/year assembled by hand so the order
 // doesn't flip with the device locale.
 export function formatHistoryDate(dateKey: string) {

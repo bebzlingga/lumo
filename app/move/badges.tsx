@@ -1,17 +1,16 @@
 import { useRouter } from "expo-router";
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { useMoveAccent } from "@/components/move/ChallengeUI";
+import { Icon } from "@/components/Icon";
 import { MoveBadge } from "@/components/move/MoveBadge";
 import { Pressable } from "@/components/Pressable";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Screen } from "@/components/ui";
-import { fontFamilies, spacing } from "@/constants/theme";
+import { fontFamilies, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { useMove } from "@/context/MoveContext";
-import { describeFamilyProgress, hasMilestone } from "@/lib/move/achievements";
+import { hasMilestone } from "@/lib/move/achievements";
 import { MOVE_FAMILIES } from "@/lib/move/challengeDefs";
-import { formatDistance } from "@/lib/move/movement";
 
 /**
  * The badge collection.
@@ -23,7 +22,6 @@ import { formatDistance } from "@/lib/move/movement";
 export default function MoveBadgesScreen() {
   const router = useRouter();
   const { palette } = useLumo();
-  const accent = useMoveAccent();
   const move = useMove();
 
   const earned = MOVE_FAMILIES.filter((entry) => hasMilestone(move.achievements, entry.id)).length;
@@ -32,13 +30,24 @@ export default function MoveBadgesScreen() {
     <Screen contentStyle={styles.content}>
       <ScreenHeader title="Move Badges" leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }} />
 
-      <View style={styles.head}>
-        <AppText color={accent.glyph} style={styles.total} numberOfLines={1}>
-          {formatDistance(move.totalDistanceM)}
+      {/* What the shelf is, said once at the top.
+          The figure that used to sit here — total distance moved — belongs to
+          the Stats tab; on a page of badges it answered a question nobody had
+          come to ask. This answers the one they did: what are these, and how do
+          I get one. */}
+      <View style={styles.intro}>
+        <AppText variant="bodySmall" color={palette.body} style={styles.introBody}>
+          One badge for each distance, from your first kilometre to three hundred. Each is earned by finishing a challenge at that
+          distance — alone, against the clock, or with friends. Any one of the three earns it.
         </AppText>
-        <AppText variant="bodySmall" color={palette.subtle} style={styles.headBlurb}>
-          moved with Lumo · {earned} of {MOVE_FAMILIES.length} badges
-        </AppText>
+        {/* The Stats tab's own pill, verbatim — one collection's count should
+            not be a chip on one screen and a sentence on another. */}
+        <View style={[styles.introBadge, { backgroundColor: palette.greenSoft }]}>
+          <Icon name="trophy" size={14} color={palette.greenDark} weight="bulk" />
+          <AppText variant="caption" color={palette.greenDark} style={styles.introCount}>
+            {earned} of {MOVE_FAMILIES.length} earned
+          </AppText>
+        </View>
       </View>
 
       <View style={styles.grid}>
@@ -69,7 +78,7 @@ export default function MoveBadgesScreen() {
                   unlocked,
                   unlockedAt: null
                 }}
-                size={76}
+                size={104}
               />
               <AppText variant="caption" color={unlocked ? palette.ink : palette.muted} numberOfLines={1} style={styles.cellName}>
                 {family.title}
@@ -79,22 +88,6 @@ export default function MoveBadgesScreen() {
         })}
       </View>
 
-      <View style={styles.list}>
-        {MOVE_FAMILIES.map((family) => {
-          const routes = describeFamilyProgress(move.achievements, family);
-
-          return (
-            <View key={family.id} style={styles.listRow}>
-              <AppText variant="bodySmall" color={routes ? palette.ink : palette.body} numberOfLines={1}>
-                {family.title}
-              </AppText>
-              <AppText variant="caption" color={palette.subtle} numberOfLines={1} style={styles.listDetail}>
-                {routes ?? family.subtitle}
-              </AppText>
-            </View>
-          );
-        })}
-      </View>
     </Screen>
   );
 }
@@ -104,41 +97,51 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingBottom: spacing.xxl
   },
-  head: {
+  intro: {
     alignItems: "center",
-    gap: spacing.xxs,
-    paddingVertical: spacing.sm
+    gap: spacing.md,
+    // Air on both sides, so the explanation reads as its own passage rather
+    // than as a caption stuck between the page bar and the shelf.
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg
   },
-  total: {
+  introBody: {
+    // Regular against the app's semibold caption: this is prose, not a label.
+    fontFamily: fontFamilies.lexend,
+    lineHeight: 21,
+    textAlign: "center"
+  },
+  introBadge: {
+    flexDirection: "row",
+    alignSelf: "center",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill
+  },
+  introCount: {
     fontFamily: fontFamilies.lexendBold,
-    fontSize: 38,
-    lineHeight: 46
+    letterSpacing: 0.4
   },
-  headBlurb: {
-    fontFamily: fontFamilies.lexend
-  },
+  // Centred, not space-between. Seven badges two to a row leaves a lone last
+  // one, and space-between stranded it against the left edge as if a partner
+  // had failed to load.
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between"
+    justifyContent: "center"
   },
+  // Two to a row: at 104pt three no longer fit, and a badge is the thing this
+  // page is for — bigger and fewer beats smaller and tidier.
   cell: {
     alignItems: "center",
     gap: spacing.xxs,
-    width: "31%",
+    width: "48%",
     paddingVertical: spacing.sm
   },
   cellName: {
     fontFamily: fontFamilies.lexendSemiBold,
     textAlign: "center"
-  },
-  list: {
-    gap: spacing.sm
-  },
-  listRow: {
-    gap: 2
-  },
-  listDetail: {
-    fontFamily: fontFamilies.lexend
   }
 });

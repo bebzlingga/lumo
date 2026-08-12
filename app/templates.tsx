@@ -4,7 +4,7 @@ import React from 'react'
 import { Alert, Animated, StyleSheet, View } from 'react-native'
 import { Icon } from '@/components/Icon'
 import { AppText, LoadingState, Screen } from '@/components/ui'
-import { fontFamilies, radius, spacing } from '@/constants/theme'
+import { fontFamilies, radius, rowRadius, spacing, tileRadius } from '@/constants/theme'
 import { starterPacks, templateToDraft, type HabitTemplate, type StarterPack } from '@/constants/habitTemplates'
 import { useLumo } from '@/context/LumoContext'
 import { alpha, readableOn } from '@/lib/color'
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
 		gap: spacing.sm,
 		borderWidth: 1,
 		borderColor: 'transparent',
-		borderRadius: radius.card,
+		borderRadius: rowRadius(58),
 		paddingHorizontal: spacing.md,
 		paddingVertical: spacing.sm,
 		minHeight: 58,
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
 	habitIcon: {
 		width: 34,
 		height: 34,
-		borderRadius: radius.lg,
+		borderRadius: tileRadius(34),
 		alignItems: 'center',
 		justifyContent: 'center',
 	},

@@ -1074,13 +1074,13 @@ const styles = StyleSheet.create({
 	checkEmpty: {
 		width: 20,
 		height: 20,
-		borderRadius: 10,
+		borderRadius: radius.pill,
 		borderWidth: 2,
 	},
 	checkFilled: {
 		width: 20,
 		height: 20,
-		borderRadius: 10,
+		borderRadius: radius.pill,
 		alignItems: 'center',
 		justifyContent: 'center',
 	},

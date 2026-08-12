@@ -27,9 +27,17 @@ import { alpha } from "@/lib/color";
  */
 export type MoveScope = "today" | "overall";
 
+/**
+ * The labels and the values are deliberately different words.
+ *
+ * The values are what the code reasons about — one tab is today, the other is
+ * everything. The labels are what the tabs are FOR: the first is where a walk
+ * starts, the second is where the figures live. "Today" also collided with the
+ * app's own Today tab one bar down, which made the same word mean two places.
+ */
 const OPTIONS: { value: MoveScope; label: string }[] = [
-  { value: "today", label: "Today" },
-  { value: "overall", label: "Overall" }
+  { value: "today", label: "Move" },
+  { value: "overall", label: "Stats" }
 ];
 
 export function MoveScopeTabs({
@@ -80,7 +88,7 @@ export function MoveScopeTabs({
               variant="caption"
               color={selected ? palette.ink : palette.subtle}
               numberOfLines={1}
-              style={selected ? styles.labelActive : undefined}
+              style={[styles.label, selected ? styles.labelActive : null]}
             >
               {option.label}
             </AppText>
@@ -95,9 +103,16 @@ const styles = StyleSheet.create({
   track: {
     alignSelf: "center",
     flexDirection: "row",
-    // A hair of padding so the raised segment sits inside the track rather than
-    // flush against its border.
-    padding: 2,
+    /**
+     * The surround the raised segment sits in, rather than being flush against
+     * the track's border.
+     *
+     * 4, not the 2 this started on: at 2 the white segment read as touching the
+     * hairline and the whole control looked crowded. This is the most it can
+     * take — 4 either side of a 30pt segment brings the track to exactly the
+     * 38pt button line beside it, which is what `segment`'s own note is about.
+     */
+    padding: spacing.xxs,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
     shadowOffset: { width: 0, height: 3 },
@@ -108,13 +123,21 @@ const styles = StyleSheet.create({
   segment: {
     alignItems: "center",
     justifyContent: "center",
-    // 30 keeps the whole track inside the page bar's 38pt button line. Under
-    // the 44pt tap-target guidance on its own, which is why the header gives
-    // the row `hitSlop` — see the note at the call site.
+    // 30 plus the track's own 4pt surround puts the control on the page bar's
+    // 38pt button line — level with the circles either side of it, and no
+    // taller, so the bar's height is still set by those buttons. Under the 44pt
+    // tap-target guidance on its own, which is why the header gives the row
+    // `hitSlop` — see the note at the call site.
     minHeight: 30,
     minWidth: 74,
     paddingHorizontal: spacing.sm,
     borderRadius: radius.pill
+  },
+  // A shade over the caption's 12: two short words in a wide track read small,
+  // and this pair names where you are in the whole section.
+  label: {
+    fontSize: 13,
+    lineHeight: 17
   },
   labelActive: {
     fontFamily: fontFamilies.lexendSemiBold

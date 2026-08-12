@@ -122,6 +122,17 @@ export type ActivityTrackingState = {
   /** Every fix, accepted or not, newest last. Bounded — see the config. */
   rawPoints: RawLocationPoint[];
 
+  /**
+   * Who set out with you, by display name.
+   *
+   * Names and nothing else, on purpose. A plain move has no row on the server
+   * and no session anybody joins, so there is no honest way to know how far a
+   * companion has walked — storing an id here would only invite a figure to be
+   * invented for it later. What this supports is "you went with Ana and Sam",
+   * which is true, and which the summary and the share card can both say.
+   */
+  companions?: string[];
+
   /** Set when the user takes over from auto-pause. Manual always wins. */
   manuallyPaused: boolean;
   autoPauseEnabled: boolean;

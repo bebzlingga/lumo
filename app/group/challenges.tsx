@@ -14,7 +14,7 @@ import {
 	type ChallengeProgress,
 	type ProductivityChallenge,
 } from '@/constants/groupChallenges'
-import { fontFamilies, radius, spacing } from '@/constants/theme'
+import { fontFamilies, radius, spacing, tileRadius } from '@/constants/theme'
 import { useLumo } from '@/context/LumoContext'
 import { alpha } from '@/lib/color'
 import { friendsService, type Group } from '@/lib/friends'
@@ -110,6 +110,7 @@ export default function GroupChallengesScreen() {
 			<ScreenHeader
 				title='Challenges'
 				leftAction={{ icon: 'back', label: 'Back', onPress: () => router.back() }}
+				style={styles.header}
 			/>
 
 			<AppText
@@ -299,8 +300,28 @@ const styles = StyleSheet.create({
 		marginBottom: spacing.sm,
 	},
 	content: {
+		/**
+		 * Air between the pinned bar and the page's opening line.
+		 *
+		 * `Screen` zeroes this for a pinned header — the bar has already spent the
+		 * screen's top padding — which left the intro sitting straight under it.
+		 * The same 12 the bar takes above itself, so the two sides of the header
+		 * are balanced; Trophies carries the pair as well.
+		 */
+		paddingTop: spacing.sm,
 		paddingBottom: spacing.xxl,
 		gap: spacing.md,
+	},
+	/**
+	 * A breather above the bar, on top of the screen's own top padding.
+	 *
+	 * This page and Trophies open from the pair of tiles on the group page and
+	 * are read as one set, so they take the same extra gap — the two of them sit
+	 * deeper than a tab screen does, where the bar has a tab bar's worth of
+	 * chrome under it to balance against.
+	 */
+	header: {
+		marginTop: spacing.sm,
 	},
 	loading: {
 		flex: 1,
@@ -328,7 +349,7 @@ const styles = StyleSheet.create({
 	cardIcon: {
 		width: 40,
 		height: 40,
-		borderRadius: radius.lg,
+		borderRadius: tileRadius(40),
 		alignItems: 'center',
 		justifyContent: 'center',
 	},

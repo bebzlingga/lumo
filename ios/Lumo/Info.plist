@@ -62,7 +62,7 @@
     <key>NSMicrophoneUsageDescription</key>
     <string>Lumo needs the microphone to dictate your journal.</string>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>Lumo needs photo access to attach images to your journal.</string>
+    <string>Lumo needs photo access to attach images to your journal, and to put one of your photos behind a walk when you share it.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>Lumo uses speech recognition to turn your voice into text.</string>
     <key>NSUserActivityTypes</key>
@@ -88,15 +88,24 @@
          repo never runs. -->
     <!-- Lumo Move reads steps, distance and Apple exercise time so walks and
          runs count toward Move goals and badges automatically. It reads ONLY
-         those three types and never writes to Health, which is why there is no
-         NSHealthUpdateUsageDescription below — the share key is required by the
-         OS whenever HealthKit is linked, the update key only when writing.
+         those three types and never writes to Health — `movementProvider.ts`
+         asks for `{ read: HK_READ }` and passes no share types at all.
+
+         NSHealthUpdateUsageDescription is here anyway, and that is not a
+         contradiction. The OS only prompts with it when an app requests write
+         authorisation, but App Store Connect's upload validator scans the
+         LINKED BINARY: the HealthKit library ships write APIs whether or not
+         they are called, so a build without this key is rejected at submission
+         with "Missing purpose string in Info.plist". Removing it fails the
+         upload, not the build — which is why this comment exists.
 
          Mirrored in app.json for parity. The plist is what actually ships —
          app.json's infoPlist block is only read during prebuild, which this
          repo never runs. -->
     <key>NSHealthShareUsageDescription</key>
     <string>Lumo reads your steps, walking and running distance, and active minutes so your movement counts toward your Move goals, badges and challenges automatically.</string>
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>Lumo never adds anything to Health — it only reads your steps, distance and active minutes. This appears because the Health framework Lumo uses is able to write, not because Lumo does.</string>
     <key>UIBackgroundModes</key>
     <array>
         <string>audio</string>

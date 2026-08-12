@@ -1,5 +1,5 @@
 import React from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { Avatar } from "@/components/Avatar";
 import { Icon, type IconName } from "@/components/Icon";
@@ -7,14 +7,20 @@ import { MoveBadge } from "@/components/move/MoveBadge";
 import { Pressable } from "@/components/Pressable";
 import { AppText } from "@/components/ui";
 import { MOVE_ACCENT } from "@/constants/tools";
-import { CTA_FILL, fontFamilies, radius, spacing } from "@/constants/theme";
+import { CTA_FILL, fontFamilies, radius, rowRadius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { ME } from "@/context/MoveContext";
 import { alpha, readableOn } from "@/lib/color";
 import { friendsService, type Friendship } from "@/lib/friends";
 import { formatInstant } from "@/lib/date";
 import { describeFamilyProgress, familyEarnedAt, hasMilestone, previousFamily, type MoveAchievement } from "@/lib/move/achievements";
-import { activeParticipants, type ActiveMoveChallenge, type ChallengeProgress, type MoveParticipant } from "@/lib/move/activeChallenge";
+import {
+  activeParticipants,
+  type ActiveMoveChallenge,
+  type ChallengeProgress,
+  type MoveParticipant,
+  type TeamGoal
+} from "@/lib/move/activeChallenge";
 import { describeVariantDuration, describeVariantKind, type MoveChallengeVariant, type MoveMilestoneFamily } from "@/lib/move/challengeDefs";
 import { formatDistance, formatKilometres } from "@/lib/move/movement";
 import type { AvatarConfig } from "@/lib/avatar";
@@ -236,13 +242,16 @@ export function ChallengeSummary({
   variant,
   family,
   /** Names of friends coming along. Empty on a solo route. */
-  withNames = []
+  withNames = [],
+  /** How the team splits it, so the last line describes the walk they chose. */
+  teamGoal = "each"
 }: {
   variant: MoveChallengeVariant;
   family: MoveMilestoneFamily;
   withNames?: string[];
+  teamGoal?: TeamGoal;
 }) {
-  const { palette, isDark } = useLumo();
+  const { palette } = useLumo();
 
   const rows: { icon: IconName; label: string; value: string }[] = [
     { icon: "target", label: "Goal", value: formatDistance(variant.targetM) },
@@ -253,8 +262,42 @@ export function ChallengeSummary({
   ];
 
   return (
-    // The page and the card are the same colour now, so the shadow is the only
-    // thing that makes this a card. Matches `MoveOptionGroup` above it exactly.
+    <MoveSummaryCard rows={rows}>
+
+      {withNames.length > 0 ? (
+        <AppText variant="caption" color={palette.subtle} style={styles.summaryWith}>
+          With {withNames.join(", ")}.{" "}
+          {teamGoal === "shared"
+            ? `${formatDistance(variant.targetM)} between the ${withNames.length + 1} of you.`
+            : `You each cover ${formatDistance(variant.targetM)}.`}
+        </AppText>
+      ) : null}
+    </MoveSummaryCard>
+  );
+}
+
+/**
+ * A card of labelled facts.
+ *
+ * Pulled out of `ChallengeSummary` so the plain-move screen can say what it is
+ * about to do in the same shape — a card that answers "what am I taking on"
+ * should not look like two different cards depending on whether a badge is at
+ * the end of it.
+ *
+ * The page and the card are the same colour, so the shadow is the only thing
+ * that makes this a card. Matches `MoveOptionGroup` exactly.
+ */
+export function MoveSummaryCard({
+  rows,
+  /** Anything that belongs under the rows — a note about who is coming, say. */
+  children
+}: {
+  rows: { icon: IconName; label: string; value: string }[];
+  children?: React.ReactNode;
+}) {
+  const { palette, isDark } = useLumo();
+
+  return (
     <View style={[styles.summary, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
       {rows.map((row, index) => (
         <View
@@ -273,12 +316,7 @@ export function ChallengeSummary({
           </AppText>
         </View>
       ))}
-
-      {withNames.length > 0 ? (
-        <AppText variant="caption" color={palette.subtle} style={styles.summaryWith}>
-          With {withNames.join(", ")}. You each cover {formatDistance(variant.targetM)}.
-        </AppText>
-      ) : null}
+      {children}
     </View>
   );
 }
@@ -347,10 +385,6 @@ export function ChallengeFacts({ facts }: { facts: { icon: IconName; label: stri
 
 export type TeamMemberView = { userId: string; name: string; avatar?: AvatarConfig | null };
 
-/** The outside of a member's progress ring, and the face that sits inside it. */
-const AVATAR_RING = 58;
-const AVATAR_FACE = 44;
-
 /** A stable empty roster, so a screen with no challenge does not re-run the hook. */
 const NO_PARTICIPANTS: MoveParticipant[] = [];
 
@@ -410,13 +444,17 @@ export function useTeamMembers(participants: MoveParticipant[] | undefined): Tea
 }
 
 /**
- * Who else is on it, and how they are doing.
+ * Who is ahead, and by how far.
  *
- * A row of faces, each ringed by its own progress, with the name and the
- * distance under it. Ordered by contribution but deliberately unnumbered — no
- * places, no medals. Everyone is walking the same distance; this is company,
- * not a leaderboard, which is also why there is no heading over it and no total
- * under it: both invited a comparison the ring already declines to make.
+ * A ranked list, ordered by distance covered. It replaced a row of faces that
+ * was deliberately unranked — "company, not a leaderboard" — because a team
+ * challenge is a race often enough that pretending otherwise only hid the one
+ * number everybody was already working out for themselves. The ordering was
+ * always by contribution; this just says so.
+ *
+ * The softer parts of that original idea are kept: your own row is marked so a
+ * glance finds it, and anybody who has covered their share is green whatever
+ * position they are in — being there matters more than being first.
  */
 export function TeamContributions({
   challenge,
@@ -433,64 +471,63 @@ export function TeamContributions({
   const accent = useMoveAccent();
 
   const byId = new Map(members.map((member) => [member.userId, member]));
+  // Already sorted biggest-first, which is the running order.
   const roster = activeParticipants(challenge);
+  const leader = roster[0]?.contributionM ?? 0;
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.team}
-      /**
-       * Grows to fill when the roster is short, so two or three faces sit in
-       * the middle of the screen rather than pinned to its left edge — and
-       * scrolls the moment there are more than fit.
-       */
-      contentContainerStyle={styles.teamRow}
-    >
-      {roster.map((participant) => {
+    <View style={styles.team}>
+      {roster.map((participant, index) => {
         const member = byId.get(participant.userId);
-        const name = participant.userId === meId ? "You" : (member?.name ?? participant.name);
-        const done = participant.contributionM >= progress.targetM;
+        const mine = participant.userId === meId;
+        const name = mine ? "You" : (member?.name ?? participant.name);
+        // Against the SHARE, not the whole target: on a split challenge those
+        // are different numbers, and the share is what this person owes.
+        const done = participant.contributionM >= progress.shareM;
+        /**
+         * The bar behind each row, measured against the LEADER rather than the
+         * target.
+         *
+         * Early on every bar against a 100 km target is a sliver and the list
+         * reads as empty; against the leader it shows the gap, which is the
+         * thing a ranked list is for.
+         */
+        const ratio = leader > 0 ? Math.min(1, participant.contributionM / leader) : 0;
 
         return (
           <View
             key={participant.userId}
             accessible
-            accessibilityLabel={`${name}, ${formatKilometres(participant.contributionM)} of ${formatKilometres(progress.targetM)}`}
-            style={styles.member}
+            accessibilityLabel={`${index + 1}. ${name}, ${formatKilometres(participant.contributionM)}`}
+            style={[styles.rankRow, mine ? { backgroundColor: alpha(accent.glyph, "14") } : null]}
           >
-            {/* The ring IS the bar: the same ratio, wrapped around the face it
-                belongs to, so the person and their progress are one object
-                instead of a row that has to be read left to right. */}
-            <View style={styles.memberRing}>
-              <ChallengeRing
-                ratio={participant.contributionM / Math.max(1, progress.targetM)}
-                size={AVATAR_RING}
-                accent={done ? palette.greenDark : accent.glyph}
-                track={alpha(palette.hairline, "80")}
-              />
+            {/* The bar sits UNDER the row's content rather than beside it, so a
+                long name never squeezes it to nothing. */}
+            <View pointerEvents="none" style={[styles.rankFill, { width: `${Math.round(ratio * 100)}%`, backgroundColor: alpha(done ? palette.greenDark : accent.glyph, "1F") }]} />
 
-              <View style={styles.memberFace} pointerEvents="none">
-                {member?.avatar ? (
-                  <Avatar config={member.avatar} size={AVATAR_FACE} />
-                ) : (
-                  <View style={[styles.avatarFallback, { backgroundColor: alpha(palette.hairline, "80") }]}>
-                    <Icon name="user" size={20} color={palette.muted} weight="bulk" />
-                  </View>
-                )}
+            <AppText variant="caption" color={index === 0 ? palette.ink : palette.muted} style={styles.rankNumber}>
+              {index + 1}
+            </AppText>
+
+            {member?.avatar ? (
+              <Avatar config={member.avatar} size={28} />
+            ) : (
+              <View style={[styles.avatarFallback, { backgroundColor: alpha(palette.hairline, "80") }]}>
+                <Icon name="user" size={14} color={palette.muted} weight="bulk" />
               </View>
-            </View>
+            )}
 
-            <AppText variant="caption" color={palette.ink} numberOfLines={1} style={styles.memberName}>
+            <AppText variant="caption" color={palette.ink} numberOfLines={1} style={styles.rankName}>
               {name}
             </AppText>
-            <AppText variant="caption" color={done ? palette.greenDark : palette.subtle} numberOfLines={1}>
+
+            <AppText variant="caption" color={done ? palette.greenDark : palette.body} numberOfLines={1} style={styles.rankValue}>
               {formatKilometres(participant.contributionM)}
             </AppText>
           </View>
         );
       })}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -628,46 +665,42 @@ const styles = StyleSheet.create({
     marginVertical: 2
   },
   team: {
-    alignSelf: "stretch"
+    alignSelf: "stretch",
+    gap: spacing.xxs,
+    paddingTop: spacing.sm
   },
-  teamRow: {
-    flexGrow: 1,
+  rankRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "center",
+    alignItems: "center",
     gap: spacing.sm,
-    // Air above the ring, which the facts row above it has none of — without it
-    // the two blocks touched and read as one.
-    paddingTop: spacing.md,
-    paddingHorizontal: spacing.md
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
+    borderRadius: rowRadius(44),
+    overflow: "hidden"
   },
-  member: {
-    alignItems: "center",
-    gap: 2,
-    width: AVATAR_RING + spacing.md
+  rankFill: {
+    ...StyleSheet.absoluteFillObject,
+    right: undefined
   },
-  memberRing: {
-    alignItems: "center",
-    justifyContent: "center",
-    width: AVATAR_RING,
-    height: AVATAR_RING,
-    marginBottom: spacing.xxs
+  rankNumber: {
+    width: 14,
+    fontFamily: fontFamilies.lexendBold,
+    textAlign: "center"
   },
-  memberFace: {
-    position: "absolute",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  memberName: {
+  rankName: {
+    flex: 1,
     fontFamily: fontFamilies.lexendSemiBold,
     fontSize: 13,
     lineHeight: 18
   },
+  rankValue: {
+    fontFamily: fontFamilies.lexendSemiBold
+  },
   avatarFallback: {
     alignItems: "center",
     justifyContent: "center",
-    width: AVATAR_FACE,
-    height: AVATAR_FACE,
+    width: 28,
+    height: 28,
     borderRadius: radius.pill
   }
 });

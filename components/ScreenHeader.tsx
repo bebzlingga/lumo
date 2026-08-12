@@ -27,6 +27,13 @@ type ScreenHeaderAction = {
   iconWeight?: IconWeight;
   iconSize?: number;
   iconColor?: string;
+  /**
+   * The outline's colour, for a button that is not on the app's own canvas.
+   *
+   * `palette.hairline` is drawn for cream; over a photograph or an image the
+   * ring vanishes. Callers that know what is behind them pass their own.
+   */
+  borderColor?: string;
   iconStyle?: StyleProp<ViewStyle>;
   /** Count pip on the button's shoulder. Hidden at 0, capped at "9+". */
   badge?: number;
@@ -65,7 +72,7 @@ function HeaderButton({ action }: { action: ScreenHeaderAction }) {
       hitSlop={10}
       style={({ pressed }) => [
         styles.button,
-        { borderColor: action.render ? "transparent" : palette.hairline, opacity: pressed ? 0.6 : 1 }
+        { borderColor: action.render ? "transparent" : (action.borderColor ?? palette.hairline), opacity: pressed ? 0.6 : 1 }
       ]}
     >
       <View pointerEvents="none" style={action.iconStyle}>
@@ -166,6 +173,15 @@ export function ScreenHeader({
     </View>
   );
 }
+
+/**
+ * The marker `Screen` looks for to pin this bar above its scroller.
+ *
+ * A flag on the component rather than an import, because `ScreenHeader` already
+ * imports `AppText` from `ui` — reading a property off the element's type lets
+ * `Screen` recognise a header without the two files importing each other.
+ */
+ScreenHeader.isPageHeader = true;
 
 const styles = StyleSheet.create({
   header: {

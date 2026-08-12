@@ -20,6 +20,15 @@ export default function TipSectionScreen() {
   // where they are in the path and offered the next one at the foot.
   const index = TIP_SECTIONS.findIndex((item) => item.slug === slug);
   const next = index >= 0 ? TIP_SECTIONS[index + 1] : undefined;
+  /**
+   * The chapter's own hue, carried from the index.
+   *
+   * Everything on this page that was green takes it — the badge, the action
+   * lines, the next-chapter tile — so arriving from a blue card lands on a blue
+   * page rather than on a page that looks like every other one. Falls back to
+   * the app's green for a slug that no longer exists.
+   */
+  const accent = section?.accent ?? palette.greenDark;
 
   return (
     <Screen contentStyle={styles.content}>
@@ -31,8 +40,8 @@ export default function TipSectionScreen() {
               sits in the path and what it covers rather than repeating it. */}
           <View style={styles.header}>
             {/* The same pill the Tips index puts beside each chapter title. */}
-            <View style={[styles.chapterBadge, { backgroundColor: alpha(palette.greenDark, "14") }]}>
-              <AppText variant="caption" color={palette.greenDark} numberOfLines={1} style={styles.chapterText}>
+            <View style={[styles.chapterBadge, { backgroundColor: alpha(accent, "14") }]}>
+              <AppText variant="caption" color={accent} numberOfLines={1} style={styles.chapterText}>
                 Chapter {index + 1} of {TIP_SECTIONS.length}
               </AppText>
             </View>
@@ -54,10 +63,10 @@ export default function TipSectionScreen() {
               </AppText>
               {/* The action used to be glued onto the body with a blank line,
                   which made the one thing to actually DO read as more prose. */}
-              <View style={[styles.action, { backgroundColor: alpha(palette.greenDark, "12") }]}>
+              <View style={[styles.action, { backgroundColor: alpha(accent, "12") }]}>
                 <View style={styles.actionHead}>
-                  <Icon name="checkCircle" size={14} color={palette.greenDark} weight="bulk" />
-                  <AppText variant="caption" color={palette.greenDark} style={styles.actionLabel}>
+                  <Icon name="checkCircle" size={14} color={accent} weight="bulk" />
+                  <AppText variant="caption" color={accent} style={styles.actionLabel}>
                     Try this
                   </AppText>
                 </View>
@@ -78,8 +87,10 @@ export default function TipSectionScreen() {
                 { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow, opacity: pressed ? 0.85 : 1 }
               ]}
             >
-              <View style={[styles.nextIcon, { backgroundColor: alpha(palette.greenDark, "14") }]}>
-                <Icon name={next.icon} size={20} color={palette.greenDark} weight="bulk" />
+              {/* The chapter it points AT, not the one it sits on: the tile is
+                  a preview of where the arrow goes. */}
+              <View style={[styles.nextIcon, { backgroundColor: alpha(next.accent, "14") }]}>
+                <Icon name={next.icon} size={20} color={next.accent} weight="bulk" />
               </View>
               <View style={styles.nextCopy}>
                 <AppText variant="caption" color={palette.subtle} style={styles.nextLabel}>
@@ -104,6 +115,8 @@ export default function TipSectionScreen() {
 
 const styles = StyleSheet.create({
   content: {
+    // Air under the pinned bar, matching the index.
+    paddingTop: spacing.lg,
     paddingBottom: spacing.xxl,
     gap: spacing.xs
   },

@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, AppState, ScrollView, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import ConfettiCannon from 'react-native-confetti-cannon'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { fontFamilies, layout, radius, spacing } from '@/constants/theme'
+import { fontFamilies, layout, radius, spacing, tileRadius } from '@/constants/theme'
 import { TOOLS } from '@/constants/tools'
 import { MoveHomeCard } from '@/components/move/MoveCards'
 import { useMove } from '@/context/MoveContext'
@@ -544,7 +544,7 @@ const styles = StyleSheet.create({
 	resourceIcon: {
 		width: 40,
 		height: 40,
-		borderRadius: radius.xl,
+		borderRadius: tileRadius(40),
 		alignItems: 'center',
 		justifyContent: 'center',
 	},

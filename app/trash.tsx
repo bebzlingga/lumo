@@ -5,7 +5,7 @@ import { HabitIcon } from "@/components/HabitIcon";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Card, LoadingState, Screen } from "@/components/ui";
-import { fontFamilies, radius, spacing } from "@/constants/theme";
+import { fontFamilies, radius, spacing, tileRadius } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
     height: 60,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.xl,
+    borderRadius: tileRadius(60),
     marginBottom: spacing.xs
   },
   emptyTitle: {
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
   icon: {
     width: 40,
     height: 40,
-    borderRadius: radius.lg,
+    borderRadius: tileRadius(40),
     alignItems: "center",
     justifyContent: "center"
   },

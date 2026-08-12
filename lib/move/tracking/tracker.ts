@@ -34,6 +34,8 @@ export type StartInput = {
   activityId: string;
   now: number;
   autoPause?: boolean;
+  /** Display names of whoever came along. See `ActivityTrackingState`. */
+  companions?: string[];
 };
 
 /**
@@ -68,6 +70,7 @@ export function createActivity(input: StartInput): ActivityTrackingState {
     lastAccuracyM: null,
     segments: [],
     rawPoints: [],
+    companions: input.companions?.length ? input.companions : undefined,
     manuallyPaused: false,
     autoPauseEnabled: input.autoPause ?? TRACKING_CONFIG.autoPause.enabled
   };

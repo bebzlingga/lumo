@@ -26,7 +26,10 @@ export default function MoveChallengesScreen() {
   const move = useMove();
 
   return (
-    <Screen contentStyle={styles.content}>
+    /* The one screen whose bar scrolls. The list IS the page — seven cards and
+       nothing else — and a pinned bar over a page with no other chrome read as
+       a strip of empty canvas above it. */
+    <Screen contentStyle={styles.content} pinHeader={false}>
       <ScreenHeader title="Challenges" leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }} />
 
       <View style={styles.list}>
@@ -51,6 +54,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl
   },
   list: {
-    gap: spacing.xs
+    gap: spacing.xs,
+    // Clears the header by more than the page's own stack gap: the first card's
+    // shadow was landing right under the bar.
+    paddingTop: spacing.xs
   }
 });

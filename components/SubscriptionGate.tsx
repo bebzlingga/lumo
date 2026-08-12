@@ -6,7 +6,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Screen } from "@/components/ui";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BACKGROUND_ASPECT } from "@/constants/backgroundAssets";
-import { CTA_FILL, fontFamilies, radius, spacing } from "@/constants/theme";
+import { CTA_FILL, fontFamilies, radius, spacing, tileRadius } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { useTabBarVisibility } from "@/context/TabBarVisibility";
@@ -443,7 +443,7 @@ const styles = StyleSheet.create({
   rowIcon: {
     width: 44,
     height: 44,
-    borderRadius: radius.xl,
+    borderRadius: tileRadius(44),
     alignItems: "center",
     justifyContent: "center"
   },

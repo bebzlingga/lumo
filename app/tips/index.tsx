@@ -6,7 +6,7 @@ import { Pressable } from "@/components/Pressable";
 import { alpha } from "@/lib/color";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Screen } from "@/components/ui";
-import { fontFamilies, radius, spacing } from "@/constants/theme";
+import { fontFamilies, radius, spacing, tileRadius } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { TIP_SECTIONS, TipSection } from "@/lib/tips";
 
@@ -27,7 +27,12 @@ function TipCard({ section, step, onPress }: { section: TipSection; step: number
         }
       ]}
     >
-      <Icon name={section.icon} size={18} color={palette.greenDark} weight="bulk" />
+      {/* The glyph in the chapter's own hue, on a tile of the same wash — the
+          shape every icon in the app sits in. It was a bare green glyph, which
+          made five different chapters look like five of the same thing. */}
+      <View style={[styles.cardIcon, { backgroundColor: alpha(section.accent, "1F") }]}>
+        <Icon name={section.icon} size={18} color={section.accent} weight="bulk" />
+      </View>
       <View style={styles.cardText}>
         <View style={styles.cardTitleLine}>
           {/* Two lines, not one: the longest chapter name ("Willpower &
@@ -38,8 +43,8 @@ function TipCard({ section, step, onPress }: { section: TipSection; step: number
           </AppText>
           {/* The intro calls these five chapters that build on one another, so
               each card carries its place in that order. */}
-          <View style={[styles.cardStep, { backgroundColor: alpha(palette.greenDark, "14") }]}>
-            <AppText variant="caption" color={palette.greenDark} numberOfLines={1} style={styles.cardStepText}>
+          <View style={[styles.cardStep, { backgroundColor: alpha(section.accent, "14") }]}>
+            <AppText variant="caption" color={section.accent} numberOfLines={1} style={styles.cardStepText}>
               Chapter {step}
             </AppText>
           </View>
@@ -102,8 +107,18 @@ export default function TipsScreen() {
 
 const styles = StyleSheet.create({
   content: {
+    // Air under the pinned bar. The headline is a 38pt serif and it was sitting
+    // straight against the header, which read as the page starting mid-sentence.
+    paddingTop: spacing.lg,
     paddingBottom: spacing.xxl,
     gap: spacing.xs
+  },
+  cardIcon: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 38,
+    height: 38,
+    borderRadius: tileRadius(38)
   },
   headline: {
     fontFamily: fontFamilies.serifBlack,

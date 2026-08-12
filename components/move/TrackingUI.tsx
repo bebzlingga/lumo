@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, type StyleProp, type TextStyle } from "react-native";
 import { Icon } from "@/components/Icon";
 import { AppText } from "@/components/ui";
 import { fontFamilies, radius, spacing } from "@/constants/theme";
@@ -72,7 +72,29 @@ export function GpsHint({ quality }: { quality: GpsQuality }) {
 }
 
 /** One number and its label. The screen's whole readout is a few of these. */
-export function Metric({ label, value, large = false }: { label: string; value: string; large?: boolean }) {
+export function Metric({
+  label,
+  value,
+  large = false,
+  /**
+   * Overrides for a readout that is not on the app's own canvas.
+   *
+   * The share card can be laid over the walker's photo, where `palette.ink` may
+   * be invisible — so the colours and an outline style come from the caller
+   * rather than being read from the theme. Omitted everywhere else, which keeps
+   * every other Metric on the palette.
+   */
+  color,
+  labelColor,
+  textStyle
+}: {
+  label: string;
+  value: string;
+  large?: boolean;
+  color?: string;
+  labelColor?: string;
+  textStyle?: StyleProp<TextStyle>;
+}) {
   const { palette } = useLumo();
   /**
    * "—" is the absence of a figure, so it is not set like one.
@@ -86,13 +108,13 @@ export function Metric({ label, value, large = false }: { label: string; value: 
   return (
     <View style={styles.metric}>
       <AppText
-        color={missing ? palette.muted : palette.ink}
-        style={missing ? styles.metricMissing : large ? styles.metricValueLarge : styles.metricValue}
+        color={missing ? (labelColor ?? palette.muted) : (color ?? palette.ink)}
+        style={[missing ? styles.metricMissing : large ? styles.metricValueLarge : styles.metricValue, textStyle]}
         numberOfLines={1}
       >
         {value}
       </AppText>
-      <AppText variant="caption" color={palette.muted} numberOfLines={1}>
+      <AppText variant="caption" color={labelColor ?? palette.muted} numberOfLines={1} style={textStyle}>
         {label}
       </AppText>
     </View>

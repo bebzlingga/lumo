@@ -1,22 +1,20 @@
 import {
+	TROPHY_MIN_MEMBERS,
+	bestEarnedTrophy,
 	challengeProgressFor,
 	challengeTarget,
-	completedChallengeCount,
 	countWonChallenges,
 	earnedTrophyCount,
-	groupChallengesForGroup,
-	groupRank,
 	groupScoreForXp,
 	groupTrophies,
 	groupXpFromCounts,
 	productivityChallenges,
 	trophyEarned,
 	xpForHabitName,
-	type GroupMetrics,
+	type GroupTrophy,
 	type GroupTrophyMetrics,
 } from '../groupChallenges'
 
-const NO_METRICS: GroupMetrics = { members: 0, completions: 0, streak: 0, rollCallStreak: 0 }
 const NO_TROPHY_METRICS: GroupTrophyMetrics = {
 	members: 0,
 	completions: 0,
@@ -24,6 +22,8 @@ const NO_TROPHY_METRICS: GroupTrophyMetrics = {
 	rollCallStreak: 0,
 	challengesWon: 0,
 }
+/** Nothing done, but past the member floor — the baseline for testing a target. */
+const PAIRED_METRICS: GroupTrophyMetrics = { ...NO_TROPHY_METRICS, members: TROPHY_MIN_MEMBERS }
 
 describe('groupScoreForXp', () => {
 	it('starts everyone at level 1 with zero XP', () => {
@@ -84,23 +84,29 @@ describe('groupXpFromCounts', () => {
 	})
 })
 
-describe('groupChallengesForGroup', () => {
-	it('unlocks strictly in sequence', () => {
-		const ladder = groupChallengesForGroup(NO_METRICS)
-		expect(ladder[0].unlocked).toBe(true)
-		expect(ladder[1].unlocked).toBe(false)
+// The ten-level milestone ladder these tests covered is gone — the trophy shelf
+// tests the same metrics, and `bestEarnedTrophy` is what the group page now reads
+// for its rank.
+describe('bestEarnedTrophy', () => {
+	it('has no rank before anything is earned', () => {
+		expect(bestEarnedTrophy(NO_TROPHY_METRICS)).toBeNull()
 	})
 
-	it('marks a level complete once its metric target is met', () => {
-		const strong: GroupMetrics = { members: 50, completions: 5000, streak: 500, rollCallStreak: 500 }
-		const ladder = groupChallengesForGroup(strong)
-		expect(ladder.every((entry) => entry.complete)).toBe(true)
-		expect(completedChallengeCount(ladder)).toBe(ladder.length)
-		expect(groupRank(ladder)).not.toBeNull()
+	it('is the last trophy on the shelf for a maxed-out group', () => {
+		const strong: GroupTrophyMetrics = {
+			members: 50,
+			completions: 5000,
+			streak: 500,
+			rollCallStreak: 500,
+			challengesWon: 500,
+		}
+		expect(bestEarnedTrophy(strong)?.id).toBe(groupTrophies[groupTrophies.length - 1].id)
 	})
 
-	it('has no rank before the first level is completed', () => {
-		expect(groupRank(groupChallengesForGroup(NO_METRICS))).toBeNull()
+	it('is the best of a partial shelf, not the newest metric', () => {
+		// Bronze completions only: the shelf's first entry, whatever else is zero.
+		const bronze: GroupTrophyMetrics = { ...PAIRED_METRICS, completions: 14 }
+		expect(bestEarnedTrophy(bronze)?.tier).toBe('bronze')
 	})
 })
 
@@ -140,14 +146,34 @@ describe('trophies', () => {
 
 	it('awards a trophy once its metric reaches the target', () => {
 		const trophy = groupTrophies[0]
-		const metrics: GroupTrophyMetrics = { ...NO_TROPHY_METRICS, [trophy.metric]: trophy.target }
+		const metrics: GroupTrophyMetrics = { ...PAIRED_METRICS, [trophy.metric]: trophy.target }
 		expect(trophyEarned(trophy, metrics)).toBe(true)
 	})
 
 	it('does not award below the target', () => {
 		const trophy = groupTrophies[0]
-		const metrics: GroupTrophyMetrics = { ...NO_TROPHY_METRICS, [trophy.metric]: trophy.target - 1 }
+		const metrics: GroupTrophyMetrics = { ...PAIRED_METRICS, [trophy.metric]: trophy.target - 1 }
 		expect(trophyEarned(trophy, metrics)).toBe(false)
+	})
+
+	// A group of one can reach every non-member metric on its own — a month of
+	// solo check-ins would otherwise unlock "Team Effort".
+	it('awards nothing to a group of one, whatever it has done', () => {
+		const solo: GroupTrophyMetrics = {
+			members: 1,
+			completions: 9999,
+			streak: 9999,
+			rollCallStreak: 9999,
+			challengesWon: 9999,
+		}
+		expect(earnedTrophyCount(solo)).toBe(0)
+	})
+
+	it('opens the shelf at the member floor', () => {
+		const trophy = groupTrophies.find((entry) => entry.metric !== 'members') as GroupTrophy
+		const met = { ...NO_TROPHY_METRICS, [trophy.metric]: trophy.target }
+		expect(trophyEarned(trophy, { ...met, members: TROPHY_MIN_MEMBERS - 1 })).toBe(false)
+		expect(trophyEarned(trophy, { ...met, members: TROPHY_MIN_MEMBERS })).toBe(true)
 	})
 
 	it('awards every trophy to a maxed-out group', () => {

@@ -27,7 +27,7 @@ const HIDDEN_TABS = new Set(["settings", "profile"]);
 
 const tabIcons: Record<string, IconName> = {
   today: "home",
-  habits: "colorFilter",
+  habits: "circlesThreePlus",
   // Lumo Move sits between the personal side of the app and the social side,
   // which is where it belongs: it is a major feature of its own rather than a
   // tool tucked inside Today.
@@ -138,7 +138,7 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBar
             shrink with the highlight, which now sits 2pt inside it top and
             bottom and 4pt in on each side (the cell's own px-1). */}
         <View
-          className="h-[54px] w-full items-center justify-center rounded-[16px]"
+          className="h-[54px] w-full items-center justify-center rounded-[20px]"
           style={{ backgroundColor: isFocused ? activeBackground : "transparent" }}
         >
         {/* Dim only the icon/label — the badge stays vivid on inactive tabs. */}
@@ -208,9 +208,10 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBar
       style={[{ paddingHorizontal: layout.screenPaddingX, paddingBottom: bottomInset + bottomGap }, hideStyle]}
     >
       <View
-        // 28 (radius.sheet), not 22 — a 72pt-tall bar carried its old corner
-        // like a card rather than like the floating shell it is.
-        className="w-full rounded-[28px]"
+        // `radius.card`, one step below the nav shell's own token: at 32 the
+        // 72pt bar was reading as a lozenge, and the tab items inside it (20)
+        // sat in corners far rounder than their own.
+        className="w-full rounded-[24px]"
         style={{
           height: layout.floatingTabBarHeight,
           backgroundColor: shellBackground,

@@ -2,7 +2,7 @@ import * as Haptics from "expo-haptics";
 import React from "react";
 import { Alert, Animated, Easing, Pressable, StyleSheet, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
-import { fontFamilies, habitAccent, habitColorOption, radius, spacing } from "@/constants/theme";
+import { fontFamilies, habitAccent, habitColorOption, radius, spacing, tileRadius } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { toDateKey } from "@/lib/date";
@@ -570,7 +570,7 @@ const styles = StyleSheet.create({
   widgetIcon: {
     width: 46,
     height: 46,
-    borderRadius: radius.xl,
+    borderRadius: tileRadius(46),
     alignItems: "center",
     justifyContent: "center"
   },

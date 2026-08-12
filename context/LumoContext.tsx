@@ -834,7 +834,12 @@ export function LumoProvider({ children }: { children: ReactNode }) {
       }
 
       unsubscribe = subscribeToUserNotifications(userId);
-    })();
+    })().catch(() => {
+      // Push is a nicety: no token means no notifications, and the app is
+      // otherwise unaffected. Caught rather than left to float — an unhandled
+      // rejection here reads as a crash in development for a phone that simply
+      // has no network.
+    });
 
     // Tapping any of our notifications deep-links to the relevant screen.
     const tapSub = Notifications.addNotificationResponseReceivedListener((response) => {

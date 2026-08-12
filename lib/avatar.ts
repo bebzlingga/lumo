@@ -3,7 +3,7 @@
 import "@/lib/polyfills";
 import { Avatar, Style } from "@dicebear/core";
 import clayDefinition from "@dicebear/styles/clay.json";
-import moodsDefinition from "@dicebear/styles/moods.json";
+import thumbsDefinition from "@dicebear/styles/thumbs.json";
 
 /**
  * Avatars use DiceBear's "clay" style — a soft clay creature rather than the
@@ -15,7 +15,7 @@ import moodsDefinition from "@dicebear/styles/moods.json";
  * re-parses the whole definition.
  */
 const clayStyle = new Style(clayDefinition);
-const moodsStyle = new Style(moodsDefinition);
+const thumbsStyle = new Style(thumbsDefinition);
 
 export type AvatarConfig = {
   body: string;
@@ -137,14 +137,20 @@ export function buildAvatarSvg(config: AvatarConfig) {
   return svg.replace(/<metadata[\s\S]*?<\/metadata>/, "");
 }
 
-// Group avatar: a deterministic DiceBear "moods" face seeded by the group id,
-// so every member sees the same face without storing anything. Scaled down so
-// the art isn't clipped by the circular containers it renders in.
+// Group avatar: a deterministic DiceBear "thumbs" face seeded by the group id,
+// so every member sees the same face without storing anything. Thumbs rather
+// than the moods circle it used to draw — a group's mark sits beside the members'
+// own clay creatures, and a plain smiley read as a placeholder next to them.
+// Scaled down so the art isn't clipped by the circular containers it renders in.
 //
 // `scale` is a multiplier in core 10, capped at 10 — it was a percentage in
 // core 9, so the 75 that used to mean "75%" is now 0.75.
+//
+// Cast for the same reason `buildAvatarSvg` casts: the options type a `Style`
+// infers from its JSON indexes every key as a number, which the seed is not.
 export function buildGroupAvatarSvg(seed: string) {
-  const svg = new Avatar(moodsStyle, { seed, scale: 0.75 }).toString();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const svg = new Avatar(thumbsStyle, { seed, scale: 0.75 } as any).toString();
 
   return svg.replace(/<metadata[\s\S]*?<\/metadata>/, "");
 }

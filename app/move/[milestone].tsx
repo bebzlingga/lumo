@@ -1,24 +1,25 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
-import { Alert, Modal, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, StyleSheet, View } from "react-native";
 import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
 import { ChallengeHeadline, ChallengeSummary, TeamContributions, useMoveAccent, useTeamMembers } from "@/components/move/ChallengeUI";
 import { MoveBadge } from "@/components/move/MoveBadge";
+import { MoveFriendPicker } from "@/components/move/MoveFriendPicker";
 import { MoveOptionGroup, MoveOptionRow } from "@/components/move/MoveOptionRow";
 import { Pressable } from "@/components/Pressable";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { EmptyState } from "@/components/states";
-import { AppText, Button, LumoInput, Screen } from "@/components/ui";
+import { AppText, Button, Screen } from "@/components/ui";
 import { fontFamilies, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { ME, useMove } from "@/context/MoveContext";
 import { alpha, readableOn } from "@/lib/color";
 import { friendsService, type Friendship } from "@/lib/friends";
 import { challengeClient } from "@/lib/move/challengeClient";
-import { pauseState, START_REFUSAL_COPY } from "@/lib/move/activeChallenge";
+import { pauseState, START_REFUSAL_COPY, type TeamGoal } from "@/lib/move/activeChallenge";
 import { familyProgress, hasMilestone, hasVariant, isFamilyLocked, previousFamily } from "@/lib/move/achievements";
 import { describeUnlockRule, findFamily } from "@/lib/move/challengeDefs";
+import { formatDistance } from "@/lib/move/movement";
 
 /**
  * One milestone, and the three routes to its badge.
@@ -41,6 +42,8 @@ export default function MilestoneScreen() {
   /** Null while loading, so an empty list is not mistaken for "no friends". */
   const [friends, setFriends] = React.useState<Friendship[] | null>(null);
   const [picked, setPicked] = React.useState<string[]>([]);
+  /** How a team splits the distance. Only asked on the team route. */
+  const [teamGoal, setTeamGoal] = React.useState<TeamGoal>("each");
   /**
    * Friends already on a challenge.
    *
@@ -49,15 +52,6 @@ export default function MilestoneScreen() {
    */
   const [busy, setBusy] = React.useState<Set<string>>(new Set());
   const [pickerOpen, setPickerOpen] = React.useState(false);
-  /**
-   * The dialog's own working copy.
-   *
-   * Committed to `picked` on Done and thrown away otherwise, so ticking through
-   * a list is not the same act as inviting somebody — and closing the sheet
-   * without meaning to costs nothing.
-   */
-  const [draft, setDraft] = React.useState<string[]>([]);
-  const [query, setQuery] = React.useState("");
 
   React.useEffect(() => {
     let active = true;
@@ -139,24 +133,29 @@ export default function MilestoneScreen() {
   // A team route cannot start a friend short: the roster IS the challenge, and
   // one that can never complete is worse than one that will not start.
   const ready = short <= 0;
-  const pickedFriends = (friends ?? []).filter((entry) => picked.includes(entry.profile.id as string));
-  const searchable = (friends ?? []).filter((entry) => {
-    const name = entry.profile.nickname || entry.profile.lumoId;
+  /**
+   * What one person walks on a shared challenge, as it stands.
+   *
+   * Recomputed as friends are added, because the answer changes with the size
+   * of the team — "roughly 25 km each" is the whole reason somebody picks this
+   * mode, and it would be an odd thing to hide until the challenge started.
+   */
+  const shareCopy = (() => {
+    const size = picked.length + 1;
 
-    return name.toLowerCase().includes(query.trim().toLowerCase());
-  });
+    if (!chosen || size < 2) {
+      return "Fill one target together, however you divide it.";
+    }
+
+    return `${formatDistance(chosen.targetM)} between ${size} of you — about ${formatDistance(chosen.targetM / size)} each.`;
+  })();
+  const pickedFriends = (friends ?? []).filter((entry) => picked.includes(entry.profile.id as string));
 
   function toggleFriend(id: string) {
     setPicked((current) => (current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]));
   }
 
-  function toggleDraft(id: string) {
-    setDraft((current) => (current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]));
-  }
-
   function openPicker() {
-    setDraft(picked);
-    setQuery("");
     setPickerOpen(true);
   }
 
@@ -173,7 +172,7 @@ export default function MilestoneScreen() {
           ]
         : [];
 
-    const result = move.startChallenge(chosen.id, participants);
+    const result = move.startChallenge(chosen.id, participants, teamGoal);
 
     if (!result.ok) {
       setRefusal(START_REFUSAL_COPY[result.reason]);
@@ -363,6 +362,36 @@ export default function MilestoneScreen() {
         </View>
       ) : chosen ? (
         <>
+          {/* Asked before the roster, because it changes what the roster is
+              FOR: on a shared target two friends halve the walk, on the other
+              they each take the whole of it. Only shown on the team route —
+              there is nobody to split a solo one with. */}
+          {team ? (
+            <View style={styles.section}>
+              <AppText variant="bodySmall" color={palette.ink} style={styles.sectionTitle}>
+                How will you do it
+              </AppText>
+
+              <MoveOptionGroup>
+                <MoveOptionRow
+                  icon="user"
+                  title="Everyone walks it"
+                  subtitle={`You each cover ${formatDistance(chosen.targetM)}.`}
+                  selected={teamGoal === "each"}
+                  onPress={() => setTeamGoal("each")}
+                />
+                <MoveOptionRow
+                  icon="friends"
+                  title="Share the distance"
+                  subtitle={shareCopy}
+                  selected={teamGoal === "shared"}
+                  onPress={() => setTeamGoal("shared")}
+                  last
+                />
+              </MoveOptionGroup>
+            </View>
+          ) : null}
+
           {/* Picking who is coming happens HERE, not on a screen of its own —
               the roster is part of the choice, and a route that needs friends
               should not hide behind a Continue button to say so. */}
@@ -394,7 +423,9 @@ export default function MilestoneScreen() {
                 <View style={[styles.friendsCard, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
                   <Icon name="friends" size={30} color={palette.subtle} weight="bulk" />
                   <AppText variant="bodySmall" color={palette.subtle} style={styles.friendsEmptyBody}>
-                    This route is walked together — everyone covers the full distance, side by side.
+                    {teamGoal === "shared"
+                      ? "This route is walked together — one distance, divided between you."
+                      : "This route is walked together — everyone covers the full distance, side by side."}
                   </AppText>
                   <Button label="Add Friends" icon="userCircleAdd" variant="ghost" onPress={openPicker} />
                 </View>
@@ -443,7 +474,7 @@ export default function MilestoneScreen() {
             <AppText variant="bodySmall" color={palette.ink} style={styles.sectionTitle}>
               What you are taking on
             </AppText>
-            <ChallengeSummary variant={chosen} family={family} withNames={pickedNames} />
+            <ChallengeSummary variant={chosen} family={family} withNames={pickedNames} teamGoal={teamGoal} />
           </View>
 
           {refusal ? (
@@ -470,105 +501,21 @@ export default function MilestoneScreen() {
         </>
       ) : null}
 
-      {/* Picking happens in a dialog so the card above stays a roster rather
-          than a scroll of everyone you know. Search included: past a dozen
-          friends the list alone stops being pickable. */}
-      <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
-        <View style={styles.pickerScrim}>
-          <View style={[styles.pickerCard, { backgroundColor: palette.card }]}>
-            {friends && friends.length > 0 ? (
-              // `surface`, not the input's default `card`: the dialog itself is
-              // a card, and a field the same colour as the sheet behind it
-              // reads as a label rather than something to type in.
-              <LumoInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder="Search friends…"
-                autoCapitalize="none"
-                style={{ backgroundColor: palette.surface }}
-              />
-            ) : null}
-
-            <ScrollView style={styles.pickerList} keyboardShouldPersistTaps="handled">
-              {friends === null ? null : friends.length === 0 ? (
-                <>
-                  <EmptyState
-                    icon="friends"
-                    title="No friends yet"
-                    body="Add a friend in Lumo and you can take this route on together."
-                  />
-                  <Button
-                    label="Find Friends"
-                    icon="userCircleAdd"
-                    variant="ghost"
-                    onPress={() => {
-                      setPickerOpen(false);
-                      router.push("/friends");
-                    }}
-                  />
-                </>
-              ) : searchable.length === 0 ? (
-                <EmptyState icon="search" title="Nobody by that name" body="Try a different search." />
-              ) : (
-                <MoveOptionGroup flush>
-                  {searchable.map((friend, index) => {
-                    const id = friend.profile.id as string;
-                    const isPicked = draft.includes(id);
-                    // One challenge at a time applies to them too, so the invite
-                    // would be refused on arrival. Saying so here beats letting
-                    // it fail later for a reason nobody could see.
-                    const taken = busy.has(id);
-
-                    return (
-                      <MoveOptionRow
-                        key={id}
-                        title={friend.profile.nickname || friend.profile.lumoId}
-                        // The Lumo ID stays put when picked: the tick already
-                        // says they are in, and swapping the line underneath
-                        // moves the one piece of information that identifies
-                        // two friends with the same first name.
-                        subtitle={taken ? "Already on a challenge" : friend.profile.lumoId}
-                        selected={isPicked && !taken}
-                        disabled={taken}
-                        flush
-                        onPress={() => toggleDraft(id)}
-                        last={index === searchable.length - 1}
-                        leading={<Avatar config={friend.profile.avatar} size={44} />}
-                        trailing={
-                          <View
-                            style={[
-                              styles.friendCheck,
-                              isPicked && !taken
-                                ? { backgroundColor: palette.greenDark, borderColor: palette.greenDark }
-                                : { borderColor: palette.hairline }
-                            ]}
-                          >
-                            {isPicked && !taken ? <Icon name="check" size={11} color={palette.white} weight="bold" /> : null}
-                          </View>
-                        }
-                      />
-                    );
-                  })}
-                </MoveOptionGroup>
-              )}
-            </ScrollView>
-
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Done"
-              onPress={() => {
-                setPicked(draft);
-                setPickerOpen(false);
-              }}
-              style={({ pressed }) => [styles.pickerDone, { backgroundColor: accent.primary, opacity: pressed ? 0.85 : 1 }]}
-            >
-              <AppText variant="button" color={palette.white}>
-                Done
-              </AppText>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      {/* One picker, shared with the plain-move flow — see `MoveFriendPicker`. */}
+      <MoveFriendPicker
+        visible={pickerOpen}
+        friends={friends}
+        picked={picked}
+        // One challenge at a time applies to them too, so an invite would be
+        // refused on arrival. Saying so in the list beats letting it fail later
+        // for a reason nobody could see.
+        unavailable={new Map([...busy].map((id) => [id, "Already on a challenge"]))}
+        onClose={() => setPickerOpen(false)}
+        onDone={(next) => {
+          setPicked(next);
+          setPickerOpen(false);
+        }}
+      />
     </Screen>
   );
 }
@@ -668,39 +615,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
     maxWidth: 280
-  },
-  pickerScrim: {
-    flex: 1,
-    justifyContent: "center",
-    padding: spacing.lg,
-    backgroundColor: "rgba(0,0,0,0.55)"
-  },
-  // `radius.dialog` and an spacing.xl inset — the geometry every dialog in the
-  // app shares, so a Lumo sheet is one shape wherever it opens.
-  pickerCard: {
-    maxHeight: "80%",
-    gap: spacing.md,
-    padding: spacing.xl,
-    borderRadius: radius.dialog
-  },
-  pickerList: {
-    flexGrow: 0
-  },
-  pickerDone: {
-    alignSelf: "flex-end",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: spacing.xl,
-    borderRadius: radius.pill
-  },
-  friendCheck: {
-    alignItems: "center",
-    justifyContent: "center",
-    width: 20,
-    height: 20,
-    borderRadius: radius.pill,
-    borderWidth: 2
   },
   sectionHead: {
     flexDirection: "row",

@@ -6,7 +6,7 @@ import { Pressable } from "@/components/Pressable";
 import { SegmentedRing } from "@/components/QuickDoneWidgets";
 import { chartTrackColor } from "@/components/StatisticsViews";
 import { AppText } from "@/components/ui";
-import { fontFamilies, habitAccent, habitColorOption, radius, spacing } from "@/constants/theme";
+import { fontFamilies, habitAccent, habitColorOption, radius, spacing, tileRadius } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { defaultAvatar } from "@/lib/avatar";
 import { alpha, readableOn } from "@/lib/color";
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
   iconBubble: {
     width: 40,
     height: 40,
-    borderRadius: radius.lg,
+    borderRadius: tileRadius(40),
     alignItems: "center",
     justifyContent: "center"
   },

@@ -662,8 +662,40 @@ export type WalkRecord = {
   habitIds: string[];
   mood?: WalkMood;
   note?: string;
+  /**
+   * What the tracker worked out, for the server.
+   *
+   * Optional and inert locally — nothing in the app reads it. It exists so the
+   * facts the engine computed at the finish (which of walk/run it was, paused
+   * time, average pace, the integrity verdict) survive the trip through the
+   * walk store to `walkRow`, instead of being recomputed from a route that no
+   * longer has the raw fixes to recompute them from.
+   *
+   * Absent on a walk recorded before the tracker existed, and on one that came
+   * from anywhere else; `walkRow` has a defined fallback for every field.
+   */
+  facts?: ActivityFacts;
   /** False until this walk has reached the server. Never blocks anything local. */
   synced: boolean;
+};
+
+/**
+ * The tracker's own findings, in the shape the server row wants.
+ *
+ * Declared here rather than imported from `walkSync` so `WalkRecord` does not
+ * depend on the sync layer — the record is the app's shape, and sync is one of
+ * its readers.
+ */
+export type ActivityFacts = {
+  type?: "walk" | "run";
+  elapsedMs?: number;
+  pausedMs?: number;
+  averagePaceMsPerKm?: number | null;
+  averageSpeedMs?: number | null;
+  caloriesEstimate?: number | null;
+  segmentCount?: number;
+  integrityOk?: boolean;
+  integrityReason?: string | null;
 };
 
 export type WalkState = {

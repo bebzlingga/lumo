@@ -1,6 +1,7 @@
-import { routePoints } from "@/lib/move/tracking/tracker";
+import { averagePace, averageSpeed, estimateCalories } from "@/lib/move/tracking/pace";
+import { classifyActivity, routePoints } from "@/lib/move/tracking/tracker";
 import type { ActivityTrackingState } from "@/lib/move/tracking/types";
-import type { WalkPoint, WalkRecord } from "@/lib/walk";
+import type { ActivityFacts, WalkPoint, WalkRecord } from "@/lib/walk";
 
 /**
  * The new tracker, in the shapes the rest of Lumo already speaks.
@@ -57,7 +58,38 @@ export function toWalkRecordFromActivity(state: ActivityTrackingState, habitIds:
     steps: state.steps,
     route,
     habitIds,
+    facts: activityFacts(state),
     synced: false
+  };
+}
+
+/**
+ * What the tracker worked out, packed for the server.
+ *
+ * Computed HERE, at the finish, because this is the last moment the raw
+ * recording exists: the record keeps a simplified route and three totals, and
+ * paused time, segment count and the walk/run split cannot be recovered from
+ * those. Without this the sync layer had to fall back to defaults for every one
+ * of them — every walk uploading as a "walk" that never paused, with no pace
+ * and one segment, however it was actually recorded.
+ *
+ * `mixed` is reported to the server as a run: the column takes walk or run, and
+ * an outing with running in it is better described as a run than as a walk.
+ */
+export function activityFacts(state: ActivityTrackingState): ActivityFacts {
+  const kind = classifyActivity(state);
+  const integrity = checkIntegrity(state);
+
+  return {
+    type: kind === "walk" ? "walk" : "run",
+    elapsedMs: state.elapsedDuration,
+    pausedMs: state.pausedDuration,
+    averagePaceMsPerKm: averagePace(state.distanceMeters, state.movingDuration),
+    averageSpeedMs: averageSpeed(state.distanceMeters, state.movingDuration),
+    caloriesEstimate: estimateCalories({ distanceM: state.distanceMeters, movingMs: state.movingDuration }),
+    segmentCount: state.segments.length,
+    integrityOk: integrity.ok,
+    integrityReason: integrity.ok ? null : integrity.reason
   };
 }
 

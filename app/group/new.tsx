@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
   activityAction: {
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center"
   },

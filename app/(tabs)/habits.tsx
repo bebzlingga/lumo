@@ -47,53 +47,58 @@ export default function HabitsScreen() {
 	}
 
 	return (
-		<Screen contentStyle={{ paddingBottom: layout.tabScreenBottomPadding }}>
-			{/* Same shape as the journal editor's top bar: outlined icon on each
-			    side, title and its line centred between them. */}
-			<View style={styles.screenHeader}>
-				<Pressable
-					accessibilityRole='button'
-					accessibilityLabel='Browse starter packs'
-					onPress={() => router.push('/templates')}
-					onPressIn={() => setPacksPressed(true)}
-					onPressOut={() => setPacksPressed(false)}
-					hitSlop={10}
-					style={[styles.headerButton, { borderColor: palette.hairline, opacity: packsPressed ? 0.6 : 1 }]}
+		<Screen
+			contentStyle={{ paddingBottom: layout.tabScreenBottomPadding }}
+			// Pinned, like every other page bar in the app: the way to add a
+			// habit should not be something you scroll back up to find.
+			// Same shape as the journal editor's top bar: outlined icon on each
+			// side, title and its line centred between them.
+			stickyHeader={
+				<View style={styles.screenHeader}>
+			<Pressable
+				accessibilityRole='button'
+				accessibilityLabel='Browse starter packs'
+				onPress={() => router.push('/templates')}
+				onPressIn={() => setPacksPressed(true)}
+				onPressOut={() => setPacksPressed(false)}
+				hitSlop={10}
+				style={[styles.headerButton, { borderColor: palette.hairline, opacity: packsPressed ? 0.6 : 1 }]}
+			>
+				<Icon
+					name='bookmark'
+					size={20}
+					color={palette.ink}
+					weight='bulk'
+				/>
+			</Pressable>
+			<View style={styles.headerCopy}>
+				<AppText
+					color={palette.ink}
+					style={styles.screenTitle}
+					numberOfLines={1}
 				>
-					<Icon
-						name='bookmark'
-						size={20}
-						color={palette.ink}
-						weight='bulk'
-					/>
-				</Pressable>
-				<View style={styles.headerCopy}>
-					<AppText
-						color={palette.ink}
-						style={styles.screenTitle}
-						numberOfLines={1}
-					>
-						Habits
-					</AppText>
-				</View>
-				<Pressable
-					accessibilityRole='button'
-					accessibilityLabel='Add habit'
-					onPress={() => router.push('/habit/new')}
-					onPressIn={() => setAddPressed(true)}
-					onPressOut={() => setAddPressed(false)}
-					hitSlop={10}
-					style={[styles.headerButton, { borderColor: palette.hairline, opacity: addPressed ? 0.6 : 1 }]}
-				>
-					<Icon
-						name='plus'
-						size={20}
-						color={palette.ink}
-						weight='bold'
-					/>
-				</Pressable>
+					Habits
+				</AppText>
 			</View>
-
+			<Pressable
+				accessibilityRole='button'
+				accessibilityLabel='Add habit'
+				onPress={() => router.push('/habit/new')}
+				onPressIn={() => setAddPressed(true)}
+				onPressOut={() => setAddPressed(false)}
+				hitSlop={10}
+				style={[styles.headerButton, { borderColor: palette.hairline, opacity: addPressed ? 0.6 : 1 }]}
+			>
+				<Icon
+					name='plus'
+					size={20}
+					color={palette.ink}
+					weight='bold'
+				/>
+			</Pressable>
+		</View>
+			}
+		>
 			{hasNoHabits ? null : (
 				<View style={styles.filterRow}>
 					<SegmentedControl options={ACTIVE_FILTER} value={filter} onChange={setFilter} style={styles.filterActive} />

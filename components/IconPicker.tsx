@@ -1,6 +1,6 @@
 import React from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { radius, spacing } from "@/constants/theme";
+import { radius, spacing, tileRadius } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { HabitCategory } from "@/types/habit";
@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 48,
     height: 48,
-    borderRadius: radius.xl
+    borderRadius: tileRadius(48)
   },
   glyph: {
     alignItems: "center",

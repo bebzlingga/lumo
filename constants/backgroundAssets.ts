@@ -176,8 +176,15 @@ export type HomePlateFit = {
  * art still starts at y=0 and still reaches past the foot of the screen, so
  * there is nothing above it and nothing below it to see.
  *
- * `shiftY` would move him down too, but by pushing the plate off the top of the
- * screen — which leaves a strip of bare canvas above it. That is why it is 0.
+ * `shiftY` lifts the plate by a fraction of its own height — 0.022 is about
+ * 20pt on a phone, which is what this is set to. It is a fraction rather than a
+ * point value so `homeSceneBottom` moves with it: the greeting's reserve is
+ * measured from the same number, and the content follows the art up rather than
+ * leaving a gap where it used to end.
+ *
+ * There is room to lift because the plate stands about 2.3 screen-widths tall —
+ * far past the foot of any phone. Push it much further and the bottom edge
+ * arrives, and with it a strip of bare canvas under the art.
  *
  * `sceneBottom` comes down as `scale` goes up: it is a fraction of the plate's
  * height, and the plate is now taller than the screen. The two always move
@@ -194,7 +201,7 @@ export type HomePlateFit = {
  * would mean drawing the plate offset with that strip exposed, which is why
  * there is no `shiftX`.
  */
-const HOME_FIT: HomePlateFit = { scale: 1.1, shiftY: 0, sceneBottom: 0.26 }
+const HOME_FIT: HomePlateFit = { scale: 1.1, shiftY: 0.022, sceneBottom: 0.26 }
 
 export const HOME_PLATE_FIT: Record<HomePeriod, HomePlateFit> = {
 	earlyMorning: HOME_FIT,

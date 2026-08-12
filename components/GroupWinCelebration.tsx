@@ -2,7 +2,7 @@ import * as Haptics from "expo-haptics";
 import React from "react";
 import { Modal, Pressable, Share, StyleSheet, useWindowDimensions, View } from "react-native";
 import ConfettiCannon from "react-native-confetti-cannon";
-import { groupChallengeTierMeta, type GroupChallengeProgress } from "@/constants/groupChallenges";
+import { groupChallengeTierMeta, trophyVariantIcon, type GroupTrophy } from "@/constants/groupChallenges";
 import { fontFamilies, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { Icon } from "@/components/Icon";
@@ -11,73 +11,78 @@ import { AppText } from "@/components/ui";
 const CONFETTI_COLORS = ["#FFC94D", "#4BA97A", "#5B9BD5", "#E8871A", "#D0405E", "#FFFFFF"];
 
 type Payload =
-  | { kind: "milestone"; milestone: GroupChallengeProgress }
+  | { kind: "trophy"; trophy: GroupTrophy }
   | { kind: "level"; level: number };
 
 /**
- * Watches the group's completed-milestone count and score level, and pops a
- * confetti celebration the moment either climbs. Only fires on in-session
- * transitions — the first render sets the baseline so historical wins never
- * re-celebrate. Mirrors BadgeUnlockCelebration's baseline-ref pattern.
+ * Watches the group's trophy count and score level, and pops a confetti
+ * celebration the moment either climbs. Only fires on in-session transitions —
+ * the first render sets the baseline so historical wins never re-celebrate.
+ * Mirrors BadgeUnlockCelebration's baseline-ref pattern.
+ *
+ * Trophies, not the milestone ladder this used to watch: that ladder is gone (see
+ * the note at the top of `constants/groupChallenges.ts`), and the shelf tests the
+ * same metrics. A group that would have seen "First Wins" now sees the trophy of
+ * the same name, once.
  */
-export function GroupMilestoneCelebration({
+export function GroupWinCelebration({
   groupName,
-  milestones,
+  trophies,
   scoreLevel
 }: {
   groupName: string;
-  milestones: GroupChallengeProgress[];
+  /** The group's earned trophies, in shelf order — best last. */
+  trophies: GroupTrophy[];
   scoreLevel: number;
 }) {
   const { palette, isDark } = useLumo();
   const { width } = useWindowDimensions();
   const [payload, setPayload] = React.useState<Payload | null>(null);
 
-  const completedCount = milestones.filter((milestone) => milestone.complete).length;
-  const previousCompleted = React.useRef<number | null>(null);
+  const trophyCount = trophies.length;
+  const previousTrophies = React.useRef<number | null>(null);
   const previousLevel = React.useRef<number | null>(null);
 
   React.useEffect(() => {
-    if (previousCompleted.current === null) {
-      previousCompleted.current = completedCount;
+    if (previousTrophies.current === null) {
+      previousTrophies.current = trophyCount;
       previousLevel.current = scoreLevel;
       return;
     }
 
-    const prevCompleted = previousCompleted.current;
+    const prevTrophies = previousTrophies.current;
     const prevLevel = previousLevel.current ?? scoreLevel;
-    previousCompleted.current = completedCount;
+    previousTrophies.current = trophyCount;
     previousLevel.current = scoreLevel;
 
-    // A new milestone outranks a bare level-up when both land on the same tick.
-    if (completedCount > prevCompleted) {
-      const completed = milestones.filter((milestone) => milestone.complete);
-      const newest = completed[completed.length - 1];
+    // A new trophy outranks a bare level-up when both land on the same tick.
+    if (trophyCount > prevTrophies) {
+      const newest = trophies[trophies.length - 1];
       if (newest) {
-        setPayload({ kind: "milestone", milestone: newest });
+        setPayload({ kind: "trophy", trophy: newest });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       }
     } else if (scoreLevel > prevLevel) {
       setPayload({ kind: "level", level: scoreLevel });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     }
-    // `milestones` is intentionally read from the current closure, not a dep:
-    // it changes identity every render, and completedCount already captures the
-    // only transition we care about.
+    // `trophies` is intentionally read from the current closure, not a dep: it
+    // changes identity every render, and trophyCount already captures the only
+    // transition we care about.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [completedCount, scoreLevel]);
+  }, [trophyCount, scoreLevel]);
 
   function close() {
     setPayload(null);
   }
 
-  const accent = payload?.kind === "milestone" ? groupChallengeTierMeta[payload.milestone.tier].accent : palette.accent;
-  const icon = payload?.kind === "milestone" ? payload.milestone.icon : "crown1";
-  const kicker = payload?.kind === "milestone" ? `${groupChallengeTierMeta[payload.milestone.tier].label.toUpperCase()} MILESTONE` : "LEVEL UP";
-  const title = payload?.kind === "milestone" ? payload.milestone.title : `Level ${payload?.level ?? ""}`;
+  const accent = payload?.kind === "trophy" ? groupChallengeTierMeta[payload.trophy.tier].accent : palette.accent;
+  const icon = payload?.kind === "trophy" ? trophyVariantIcon[payload.trophy.variant] : "crown1";
+  const kicker = payload?.kind === "trophy" ? `${groupChallengeTierMeta[payload.trophy.tier].label.toUpperCase()} TROPHY` : "LEVEL UP";
+  const title = payload?.kind === "trophy" ? payload.trophy.name : `Level ${payload?.level ?? ""}`;
   const subtitle =
-    payload?.kind === "milestone"
-      ? payload.milestone.description
+    payload?.kind === "trophy"
+      ? payload.trophy.requirement
       : `${groupName} just reached a new group level. Keep the momentum going!`;
 
   const cardBackground = isDark ? palette.surfaceStrong : palette.greenDark;
@@ -86,7 +91,7 @@ export function GroupMilestoneCelebration({
 
   async function share() {
     const line =
-      payload?.kind === "milestone"
+      payload?.kind === "trophy"
         ? `just unlocked "${title}"`
         : `just hit Level ${payload?.level ?? ""}`;
     await Share.share({ message: `🎉 Our group "${groupName}" on Lumo ${line}! Come climb with us.` }).catch(() => undefined);

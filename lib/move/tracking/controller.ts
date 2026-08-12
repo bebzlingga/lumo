@@ -1,6 +1,7 @@
 import { TRACKING_CONFIG } from "@/lib/move/tracking/config";
 import {
   currentFix,
+  lastKnownFix,
   setSamplingProfile,
   startTracking,
   stopTracking,
@@ -59,6 +60,7 @@ class ActivityTrackerController {
 
   private clock: ReturnType<typeof setInterval> | null = null;
   private autosave: ReturnType<typeof setInterval> | null = null;
+  private prepareRetry: ReturnType<typeof setInterval> | null = null;
   private foregroundWatch: FixWatch | null = null;
   private stepWatch: StepWatch | null = null;
   /** Steps at the moment the activity began, so the count is this walk's own. */
@@ -137,19 +139,97 @@ class ActivityTrackerController {
       return permission;
     }
 
-    // Background delivery is the primary source; a foreground watch is only
-    // added when background permission was refused, so the two never double up.
-    if (permission === "foreground-only" && !this.foregroundWatch) {
+    /**
+     * A foreground watch ALWAYS, not only when background permission was
+     * refused.
+     *
+     * The background task is configured with a distance filter — it exists for
+     * when the screen is off and the phone is in a pocket, and it is right that
+     * it stays quiet while nothing moves. But that made the app appear broken
+     * while somebody stood still with it open: no fixes, the last one stale
+     * after fifteen seconds, and a badge reading "Searching" with a perfect
+     * lock behind it.
+     *
+     * The two sources overlapping is fine. Distance is accumulated leg by leg
+     * along a path, so more points on the same path do not add up to more
+     * kilometres, and the filter drops duplicates and jitter before either can.
+     */
+    if (!this.foregroundWatch) {
       this.foregroundWatch = await watchForeground((fix) => this.onFix(fix));
+    }
+
+    // The OS usually has something already — instant, coarse, and enough to
+    // point the map somewhere real while the receiver works.
+    const known = await lastKnownFix();
+
+    if (known) {
+      this.seedFrame(known);
     }
 
     const fix = await currentFix();
 
     if (fix) {
       this.onPrepareFix(fix);
+    } else {
+      this.retryPrepare();
     }
 
     return permission;
+  }
+
+  /**
+   * Asks again, on a timer, until a fix lands.
+   *
+   * `currentFix` fails outright indoors, in a lift, in a car park — and used to
+   * fail once and never try again, leaving the screen searching forever with
+   * nothing behind it doing anything. Stops as soon as anything arrives, from
+   * here or from the watch.
+   */
+  private retryPrepare(): void {
+    if (this.prepareRetry) {
+      return;
+    }
+
+    const startedAt = Date.now();
+
+    this.prepareRetry = setInterval(() => {
+      const timedOut = Date.now() - startedAt > TRACKING_CONFIG.location.startupTimeoutMs * 4;
+
+      if (this.prepare.accuracyM !== null || timedOut) {
+        this.stopPrepareRetry();
+
+        return;
+      }
+
+      void currentFix().then((fix) => {
+        if (fix) {
+          this.onPrepareFix(fix);
+          this.stopPrepareRetry();
+        }
+      });
+    }, 3000);
+  }
+
+  private stopPrepareRetry(): void {
+    if (this.prepareRetry) {
+      clearInterval(this.prepareRetry);
+      this.prepareRetry = null;
+    }
+  }
+
+  /**
+   * Somewhere to point the map, from a fix too old to trust for anything else.
+   *
+   * Sets the position but NOT the quality: a two-minute-old reading says
+   * nothing about the signal right now, and showing "Good" on the strength of
+   * it would be the indicator lying about the one thing it is for.
+   */
+  private seedFrame(fix: PendingFix): void {
+    if (this.state || this.prepare.accuracyM !== null) {
+      return;
+    }
+
+    this.onFix(fix);
   }
 
   private onPrepareFix(fix: PendingFix): void {
@@ -168,7 +248,7 @@ class ActivityTrackerController {
    * Called after the countdown, never before it: the seconds spent counting
    * down are not walking, and the engine's clock starts at `beginTracking`.
    */
-  async start(options: { autoPause?: boolean } = {}): Promise<void> {
+  async start(options: { autoPause?: boolean; companions?: string[] } = {}): Promise<void> {
     const now = Date.now();
 
     if (this.prepare.permission === null) {
@@ -178,7 +258,12 @@ class ActivityTrackerController {
     // Anything the acquisition phase queued belongs to nobody.
     await clearQueue();
 
-    const created = createActivity({ activityId: createWalkId(), now, autoPause: options.autoPause });
+    const created = createActivity({
+      activityId: createWalkId(),
+      now,
+      autoPause: options.autoPause,
+      companions: options.companions
+    });
 
     this.set(beginTracking(created, now));
     this.startSteps();
@@ -266,6 +351,34 @@ class ActivityTrackerController {
     return this.state;
   }
 
+  /**
+   * Releases the device if no activity ever started.
+   *
+   * The acquisition phase turns the receiver ON — background updates and a
+   * foreground watch — before there is anything to record, which is the point:
+   * the first fixes after a cold start are the bad ones and they are best spent
+   * before the clock. But nothing turned it back OFF again on the way out. Open
+   * the screen, decline the permission or simply change your mind, and both
+   * sources kept running for the life of the process: the location indicator
+   * lit, the battery draining, for a walk nobody took.
+   *
+   * A no-op once an activity exists. Leaving a screen must never end a
+   * recording — that is the whole reason the controller outlives the screen.
+   */
+  async releaseIfIdle(): Promise<void> {
+    if (this.state) {
+      return;
+    }
+
+    this.stopPrepareRetry();
+    this.foregroundWatch?.stop();
+    this.foregroundWatch = null;
+    await stopTracking();
+
+    this.prepare = { quality: "unavailable", accuracyM: null, ready: false, permission: null };
+    this.emitPrepare();
+  }
+
   /** Throws the activity away, and stops the device with it. */
   async discard(): Promise<void> {
     this.stopTimers();
@@ -347,6 +460,7 @@ class ActivityTrackerController {
       this.autosave = null;
     }
 
+    this.stopPrepareRetry();
     this.foregroundWatch?.stop();
     this.foregroundWatch = null;
     this.stepWatch?.stop();

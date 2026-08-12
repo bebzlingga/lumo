@@ -18,7 +18,7 @@ import {
 	productivityChallenges,
 	type ProductivityChallenge,
 } from '@/constants/groupChallenges'
-import { brand, control, fontFamilies, radius, spacing } from '@/constants/theme'
+import { brand, control, fontFamilies, radius, spacing, tileRadius } from '@/constants/theme'
 import { useLumo } from '@/context/LumoContext'
 import { alpha, readableOn } from '@/lib/color'
 import { friendsService, type Group, type GroupHabit } from '@/lib/friends'
@@ -177,6 +177,27 @@ export default function ChallengeDetailScreen() {
 						    was both low-contrast and clashing. At `medium` the copy reads
 						    straight off the canvas, so four stacked frames around four
 						    paragraphs are just frames. */}
+						{/* First, before the motivation: the terms. A group standing on
+						    this page is deciding whether to commit, and "Monk Mode" over a
+						    paragraph about focus never told them it meant no feeds, no junk
+						    food and two hours of deep work — so each member started with a
+						    different idea of what they had agreed to. */}
+						<View style={styles.section}>
+							<SectionHeading label='What counts as done' />
+							{/* The number is part of the line, not a chip beside it — the same way
+							    "How it works" below numbers its steps. A tinted badge per rule turned
+							    a list of terms into a row of ornaments, and on 75 Hard that was ten of
+							    them down the page. */}
+							<View style={styles.steps}>
+								{challenge.rules.map((rule, index) => (
+									<InfoRow
+										key={rule}
+										label={`${index + 1}. ${rule}`}
+									/>
+								))}
+							</View>
+						</View>
+
 						<View style={styles.section}>
 							<SectionHeading label='Why it matters' />
 							<AppText
@@ -509,7 +530,7 @@ const styles = StyleSheet.create({
 	heroIcon: {
 		width: 72,
 		height: 72,
-		borderRadius: radius.xl,
+		borderRadius: tileRadius(72),
 		alignItems: 'center',
 		justifyContent: 'center',
 	},

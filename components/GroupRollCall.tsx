@@ -12,10 +12,11 @@ import { defaultAvatar } from "@/lib/avatar";
 import { alpha } from "@/lib/color";
 import type { GroupMember } from "@/lib/friends";
 
-// Small: the row is a band inside the figures card now, not a card of its own,
-// so the faces are one line of it rather than the thing it is about. Sized down
-// together — the ring's lead over the avatar is the breathing room the 3pt
-// stroke sits in, and closing that would draw the ring onto the portrait.
+// Small: this is one line of faces under the group's name, not a card of its
+// own — a row of portraits at profile size would outweigh the group's own
+// avatar right above it. Sized as a pair — the ring's lead over the avatar is
+// the breathing room the 3pt stroke sits in, and closing that would draw the
+// ring onto the portrait.
 const RING_SIZE = 46;
 const AVATAR_SIZE = 38;
 /** The done pip on the avatar's shoulder. */
@@ -58,8 +59,11 @@ function AvatarProgressRing({
 }
 
 /**
- * Who has shown up today — a row of faces along the bottom of the group's
- * figures card, under the hairline that divides it.
+ * Who has shown up today — a row of faces on the canvas, directly under the
+ * group's name.
+ *
+ * It used to be the bottom band of the figures card, which put the people below
+ * the arithmetic about them; up here it is the first thing the page says.
  *
  * No heading, no count: a titled panel around six avatars was announcing
  * something the avatars say by being there. Checked-in members carry a filled
@@ -73,7 +77,6 @@ export function GroupRollCall({
   myCheers,
   cheersFor,
   progressFor,
-  inset = layout.screenPaddingX,
   onMemberPress
 }: {
   members: GroupMember[];
@@ -81,9 +84,6 @@ export function GroupRollCall({
   myCheers: number;
   cheersFor: (member: GroupMember) => number;
   progressFor: (member: GroupMember) => number;
-  /** The horizontal inset this row sits in, which its bleed has to cancel:
-   *  the screen gutter by default, or a card's padding when nested. */
-  inset?: number;
   onMemberPress: (member: GroupMember) => void;
 }) {
   const { palette, isDark } = useLumo();
@@ -95,13 +95,13 @@ export function GroupRollCall({
           or four rows of faces and push everything below it down the page; now
           it stays one row and runs off the edge. Full-bleed so that row starts
           at the screen's own margin and ends at the far edge rather than inside
-          a gutter — `contentContainerStyle` puts the inset back on the content,
+          a gutter — `contentContainerStyle` puts the gutter back on the content,
           which is what lets the last avatar scroll clear of the screen. */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={[styles.scroll, { marginHorizontal: -inset }]}
-        contentContainerStyle={[styles.row, { paddingHorizontal: inset }]}
+        style={styles.scroll}
+        contentContainerStyle={styles.row}
       >
         {members.map((member) => {
           const memberCheers = cheersFor(member);
@@ -127,11 +127,11 @@ export function GroupRollCall({
                 <Avatar config={member.profile.avatar ?? defaultAvatar()} size={AVATAR_SIZE} />
                 {member.checkedInToday ? (
                   // Filled, and ringed in the surface it sits on so it stays
-                  // legible where it overlaps the progress stroke behind it.
-                  // The card, not the canvas: the row lives inside the figures
-                  // card, and the two are different creams in light mode — a
-                  // canvas ring reads as a halo around every tick.
-                  <View style={[styles.check, { backgroundColor: checkFill, borderColor: palette.card }]}>
+                  // legible where it overlaps the progress stroke behind it. The
+                  // canvas, not the card: the row moved out of the figures card,
+                  // and the two are different creams in light mode — the card's
+                  // ring would read as a halo around every tick.
+                  <View style={[styles.check, { backgroundColor: checkFill, borderColor: palette.canvas }]}>
                     <Icon name="check" size={10} color={palette.white} weight="bold" />
                   </View>
                 ) : null}
@@ -140,10 +140,14 @@ export function GroupRollCall({
                 {isMe ? "You" : member.profile.nickname || "Friend"}
               </AppText>
               {memberCheers > 0 ? (
+                // The flame and the number, with nothing between them. It read
+                // "×3" — a multiplier sign borrowed from the habit rows, where it
+                // multiplies a target. Here it is a count of cheers, and a count
+                // needs no operator.
                 <View style={styles.cheerRow}>
                   <FireIcon size={10} />
                   <AppText variant="caption" color={palette.greenDark} style={styles.cheerCount}>
-                    ×{memberCheers}
+                    {memberCheers}
                   </AppText>
                 </View>
               ) : null}
@@ -152,9 +156,14 @@ export function GroupRollCall({
         })}
       </ScrollView>
 
-      {/* Cheers you've been sent today. A quiet line under the faces rather than
-          the dismissible banner it used to be — a card you can close is a
-          notification, and this is just part of today's picture. */}
+      {/* Cheers you've been sent today: one centred line on the canvas, carrying
+          its weight instead of a card.
+
+          Not the dismissible banner this once was, and not the panel it briefly
+          became — a card you can close is a notification, and a card you cannot is
+          furniture around a single sentence. Semibold and centred is enough to
+          separate it from the names above: it is the one line on this row
+          addressed to YOU rather than about the group. */}
       {myCheers > 0 ? (
         <AppText variant="caption" color={palette.subtle} style={styles.cheersLine}>
           You got {myCheers} {myCheers === 1 ? "cheer" : "cheers"} today — friends have your back.
@@ -165,20 +174,33 @@ export function GroupRollCall({
 }
 
 const styles = StyleSheet.create({
-  // A little more air above the faces than the card's own gap gives: the rule
-  // sits right on top of the progress rings otherwise, and the row needs to
-  // read as its own band rather than as a caption hanging off the divider.
+  /**
+   * The band's own air, on top of the page's 8pt stack gap.
+   *
+   * More above than the 4 it carried inside the figures card: out on the canvas
+   * the name and chips land right on the progress rings without it. Less below,
+   * because the names — and the cheers line under them — already sit in their own
+   * white space, so a matching 12 there left the figures card adrift from the
+   * faces it belongs to.
+   */
   wrap: {
-    gap: spacing.xs,
-    paddingTop: spacing.xxs
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xxs
   },
-  // Escapes whatever inset the row sits in, so the faces run edge to edge —
-  // the screen's gutter on its own, the card's padding when nested in one. Set
-  // from `inset` rather than hardcoded, because the two are different numbers
-  // and cancelling the wrong one leaves the first face indented or clipped.
-  scroll: {},
+  // Escapes the screen's gutter so the faces run edge to edge, and the content
+  // puts it back — a plain row would stop at the margin, which reads as a list
+  // that has ended rather than one that carries on off-screen.
+  //
+  // Hardcoded to `layout.screenPaddingX` again now that the row sits on the
+  // canvas. It took the inset as a prop while it was nested in the figures card,
+  // whose padding is a different number; there is one caller and one gutter.
+  scroll: {
+    marginHorizontal: -layout.screenPaddingX
+  },
   row: {
     flexDirection: "row",
+    paddingHorizontal: layout.screenPaddingX,
     alignItems: "flex-start",
     // Tight: each face already reserves RING_SIZE and centres inside it, so
     // there is white space either side of every avatar before the gap is even
@@ -231,9 +253,9 @@ const styles = StyleSheet.create({
     lineHeight: 12,
     fontFamily: fontFamilies.lexendSemiBold
   },
-  // Left, like the faces above it now are.
   cheersLine: {
-    fontFamily: fontFamilies.lexend,
-    lineHeight: 17
+    fontFamily: fontFamilies.lexendSemiBold,
+    lineHeight: 17,
+    textAlign: "center"
   }
 });

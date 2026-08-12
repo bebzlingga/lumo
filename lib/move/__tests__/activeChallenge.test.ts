@@ -50,6 +50,8 @@ function challenge(over: Partial<ActiveMoveChallenge> = {}): ActiveMoveChallenge
 		pausesUsed: 0,
 		participants: [],
 		ownerId: null,
+		// The default the normaliser fills in, so a round-trip matches.
+		teamGoal: 'each',
 		...over,
 	}
 }
@@ -222,6 +224,74 @@ describe('challenge progress', () => {
 
 		expect(progress?.complete).toBe(true)
 		expect(progress?.teamDone).toBe(2)
+	})
+
+	describe('a shared target', () => {
+		// The other way to run a team route: one pot, filled together.
+		const shared = (contributions: number[]) =>
+			challenge({
+				variantId: '10k-team',
+				teamGoal: 'shared',
+				participants: contributions.map((metres, index) => ({
+					userId: index === 0 ? 'me' : `f${index}`,
+					name: index === 0 ? 'You' : `Friend ${index}`,
+					contributionM: metres,
+					leftAt: null,
+				})),
+			})
+
+		it('measures the pool rather than your own legs', () => {
+			const progress = challengeProgress({ challenge: shared([4000, 3000]), summaries: [day('2026-08-11', 4000)], ...base })
+
+			// `currentM` is the team's total here, not the 4 km this device walked.
+			expect(progress?.currentM).toBe(7000)
+			expect(progress?.targetM).toBe(10_000)
+			expect(progress?.remainingM).toBe(3000)
+		})
+
+		it('splits the target across whoever is still taking part', () => {
+			expect(challengeProgress({ challenge: shared([0, 0]), summaries: [], ...base })?.shareM).toBe(5000)
+			expect(challengeProgress({ challenge: shared([0, 0, 0, 0]), summaries: [], ...base })?.shareM).toBe(2500)
+		})
+
+		it('counts somebody done once they have covered their share, not the whole target', () => {
+			// 5 km each on a 10 km pot: one there, one not.
+			const progress = challengeProgress({ challenge: shared([5200, 1000]), summaries: [day('2026-08-11', 5200)], ...base })
+
+			expect(progress?.teamDone).toBe(1)
+		})
+
+		it('completes when the pool reaches the target, however it was divided', () => {
+			// Lopsided on purpose: 9 km and 1.2 km still fills a 10 km pot.
+			const progress = challengeProgress({ challenge: shared([9000, 1200]), summaries: [day('2026-08-11', 9000)], ...base })
+
+			expect(progress?.complete).toBe(true)
+		})
+
+		it('is short while the pool is short, however far one person walked', () => {
+			const progress = challengeProgress({ challenge: shared([9000, 500]), summaries: [day('2026-08-11', 9000)], ...base })
+
+			expect(progress?.complete).toBe(false)
+		})
+
+		// A leaver raises everybody else's share rather than shrinking the pot,
+		// so walking off cannot make a challenge easier for the people left.
+		it('re-splits the target when somebody leaves', () => {
+			const left = challenge({
+				variantId: '10k-team',
+				teamGoal: 'shared',
+				participants: [
+					{ userId: 'me', name: 'You', contributionM: 3000, leftAt: null },
+					{ userId: 'a', name: 'Abdul', contributionM: 3000, leftAt: null },
+					{ userId: 'g', name: 'Gone', contributionM: 2000, leftAt: iso(T0 + DAY) },
+				],
+			})
+			const progress = challengeProgress({ challenge: left, summaries: [], ...base })
+
+			expect(progress?.shareM).toBe(5000)
+			// The leaver's metres go with them, so the pot is the two who remain.
+			expect(progress?.currentM).toBe(6000)
+		})
 	})
 
 	// Someone who walks off stops being counted toward "everyone is there" —

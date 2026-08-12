@@ -44,10 +44,11 @@ export function MoveOptionGroup({
     // `overflow: hidden`, and the clipping is what keeps the first and last
     // rows inside the rounded corner. The shadow lives on the outer one.
     <View style={[styles.groupShadow, { shadowColor: isDark ? "transparent" : palette.shadow }]}>
-      {/* A hairline as well as the shadow. The page and the card are the same
-          colour now, and a 7% shadow alone left a list of routes reading as
-          loose rows on the background rather than as one card. */}
-      <View style={[styles.group, { backgroundColor: palette.card, borderColor: palette.hairline }, style]}>{children}</View>
+      {/* Shadow only. The hairline that used to sit on top of it drew a second
+          edge inside the shadow's own, which read as a card with a line around
+          it rather than as one raised surface — and every other card in Move is
+          told apart by its shadow alone. */}
+      <View style={[styles.group, { backgroundColor: palette.card }, style]}>{children}</View>
     </View>
   );
 }
@@ -147,7 +148,6 @@ const styles = StyleSheet.create({
   },
   group: {
     borderRadius: radius.card,
-    borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden"
   },
   // Dimmed rather than hidden. Colour is not the only cue — the row is also

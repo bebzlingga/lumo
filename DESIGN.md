@@ -318,7 +318,7 @@ The dark surfaces are where Claude shows its product chrome — code blocks, ter
 - Dark navy product mockup cards (`{colors.surface-dark}` — #181715) carrying code blocks, terminal panels, model comparison data — the brand shows the product chrome at scale rather than abstract marketing illustrations.
 - Light cream feature cards (`{colors.surface-card}` — #efe9de) — slightly darker than canvas, used for content-driven feature explanations.
 - Anthropic radial-spike mark — a small black asterisk-like glyph (4-spoke radial) — appears as the brand wordmark prefix and as a content marker.
-- Border radius is hierarchical: `{rounded.md}` (8px) for buttons + inputs, `{rounded.lg}` (12px) for content + product cards, `{rounded.xl}` (16px) for the hero illustration container, `{rounded.pill}` for badges.
+- Border radius is hierarchical: `radius.button` (20px) for buttons + inputs, `radius.card` (24px) for content + product cards, `radius.hero` (34px) for full-bleed hero cards, `radius.pill` for badges. See the scale below.
 - Section rhythm `{spacing.section}` (96px) — modern-SaaS standard. Internal card padding stays generous at `{spacing.xl}` (32px).
 
 ## Colors
@@ -433,15 +433,33 @@ The elevation philosophy is **color-block first, shadow rare**. Most depth comes
 
 ### Border Radius Scale
 
+One ladder, in `constants/theme.ts` as `radius`. Nothing in the app hardcodes a
+corner — a `borderRadius: 14` written inline is how a set of corners drifts
+apart, so take a step here or add one.
+
+The scale has two halves. The **numbered steps go by size**, because a corner is
+only soft in proportion to what it sits on, and they climb gently at the small
+end where the radius would otherwise eat the shape. The **named steps go by
+role**, and they are what almost everything uses — a corner picked by what a
+thing *is* rather than how big it happens to be is what keeps two cards on two
+screens agreeing. The named steps also climb with how far a surface floats above
+the page.
+
 | Token | Value | Use |
 |---|---|---|
-| `{rounded.xs}` | 4px | Reserved for badge accents and tiny dropdowns |
-| `{rounded.sm}` | 6px | Small inline buttons, dropdown items |
-| `{rounded.md}` | 8px | Standard CTA buttons, text inputs, category tabs |
-| `{rounded.lg}` | 12px | Content cards (feature, pricing, code-window, model-comparison) |
-| `{rounded.xl}` | 16px | Hero illustration container, the larger marquee components |
-| `{rounded.pill}` | 9999px | Badge pills, "NEW" tags |
-| `{rounded.full}` | 9999px / 50% | Avatar substitutes, icon buttons |
+| `radius.xs` | 6px | Chart bars, calendar cells, the date strip |
+| `radius.sm` | 9px | Small squares and tiles |
+| `radius.md` | 14px | Skeletons and small panels |
+| `radius.lg` | 18px | Inner blocks and wells inside a card |
+| `radius.xl` | 22px | Large inner blocks |
+| `tileRadius(size)` | 34% of the side | Square icon tiles — a function, not a step: any fixed radius that is a squircle at 72pt is a circle at 40 |
+| `rowRadius(height)` | 30% of the height, capped at `card` | Short single-line rows, for the same reason one axis over |
+| `radius.button` | 20px | Every form control — see `control.radius` |
+| `radius.card` | 24px | The default for anything card-shaped |
+| `radius.nav` | 28px | Nav shells, segmented bars, floating chrome |
+| `radius.hero` / `radius.sheet` | 34px | Full-bleed hero cards; bottom sheets |
+| `radius.dialog` | 44px | Every modal — pickers, celebrations, invite sheets |
+| `radius.pill` | 9999px | Pills, badges, and any square meant to read as a circle |
 
 ### Photography & Illustrations
 Claude's hero rarely uses photography. Instead it uses:

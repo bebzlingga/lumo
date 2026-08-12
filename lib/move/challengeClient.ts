@@ -1,6 +1,6 @@
 import { ensureSignedIn, isSupabaseConfigured, supabase } from "@/lib/supabase";
-import type { ActiveMoveChallenge, MoveParticipant } from "@/lib/move/activeChallenge";
-import type { MoveChallengeVariant } from "@/lib/move/challengeDefs";
+import type { ActiveMoveChallenge, MoveParticipant, TeamGoal } from "@/lib/move/activeChallenge";
+import { findFamily, type MoveChallengeVariant } from "@/lib/move/challengeDefs";
 
 /**
  * The server side of Move challenges.
@@ -61,6 +61,8 @@ export const challengeClient = {
     endsAt: string | null;
     /** Friend profile ids. Excludes the owner, who is added here. */
     friendIds: string[];
+    /** How the team splits the distance — see `TeamGoal`. */
+    teamGoal?: TeamGoal;
   }): Promise<{ id: string } | null> {
     const userId = await ensureSignedIn();
 
@@ -75,7 +77,19 @@ export const challengeClient = {
         milestone_id: input.variant.milestoneId,
         owner: userId,
         started_at: input.startedAt,
-        ends_at: input.endsAt
+        ends_at: input.endsAt,
+        team_goal: input.teamGoal ?? "each",
+        /**
+         * Whether this rung is behind Pro, sent so the SERVER can hold the gate.
+         *
+         * The column defaults to false, and leaving it to that default is how a
+         * Pro challenge used to insert as a free one — the policy checks
+         * `is_pro = false or has_active_subscription()`, so an unflagged row
+         * sails past a check that exists precisely because the client's own
+         * refusal is in a build somebody can replace. The flag travels with the
+         * definition (`challengeDefs.ts`), so a new Pro rung needs no migration.
+         */
+        is_pro: findFamily(input.variant.milestoneId)?.pro ?? false
       })
       .select("id")
       .maybeSingle();

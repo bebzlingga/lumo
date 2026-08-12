@@ -181,7 +181,35 @@ export default function JournalScreen() {
         <TodayEmptyState onWrite={writeToday} onBrowse={() => setDismissed(true)} />
       </Modal>
 
-      <Screen scroll={false} contentStyle={styles.content} edges={["left", "right"]}>
+      <Screen
+        scroll={false}
+        contentStyle={styles.content}
+        edges={["left", "right"]}
+        /* Pinned, like every other page bar in the app. The safe-area inset is
+           spent here because this screen does not take the top edge — the list
+           runs under the status bar behind it. */
+        stickyHeader={
+          <View style={[styles.titleRow, { paddingTop: Math.max(0, insets.top - spacing.xs) }]}>
+            <View style={styles.titleBlock}>
+              <AppText color={palette.ink} style={styles.title}>
+                Journal
+              </AppText>
+              <AppText variant="bodySmall" color={palette.subtle}>
+                Reflect, express, and grow.
+              </AppText>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="New journal entry"
+              onPress={startNewEntry}
+              hitSlop={10}
+              style={({ pressed }) => [styles.headerButton, { borderColor: palette.hairline, opacity: pressed ? 0.6 : 1 }]}
+            >
+              <Icon name="plus" size={20} color={palette.ink} weight="bold" />
+            </Pressable>
+          </View>
+        }
+      >
         <SectionList
         ref={listRef}
         sections={sections}
@@ -196,38 +224,20 @@ export default function JournalScreen() {
         onEndReachedThreshold={0.4}
         onEndReached={() => setVisibleCount((current) => Math.min(current + PAGE_SIZE, entries.length))}
         ListHeaderComponent={
-          <View style={styles.header}>
-            <View style={[styles.hero, { paddingTop: insets.top + spacing.md }]}>
-              <View style={styles.titleRow}>
-                <View style={styles.titleBlock}>
-                  <AppText color={palette.ink} style={styles.title}>
-                    Journal
-                  </AppText>
-                  <AppText variant="bodySmall" color={palette.subtle}>
-                    Reflect, express, and grow.
-                  </AppText>
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="New journal entry"
-                  onPress={startNewEntry}
-                  hitSlop={10}
-                  style={({ pressed }) => [styles.headerButton, { borderColor: palette.hairline, opacity: pressed ? 0.6 : 1 }]}
-                >
-                  <Icon name="plus" size={20} color={palette.ink} weight="bold" />
-                </Pressable>
-              </View>
+          /* Only shown having come from "View Entries" with today still
+             unwritten. Once the day has an entry the header is just its title —
+             nothing left to invite.
 
-              {/* Only shown having come from "View Entries" with today still
-                  unwritten. Once the day has an entry the header is just its
-                  title — nothing left to invite.
-
-                  The same card the home screen ends on, prompt and all: these
-                  are two doors into today's entry, and they were two separate
-                  builds of the same plate until now. */}
-              {todayIsBlank && dismissed ? <DailyReflectionCard prompt={reflectionPromptFor(todayKey)} onPress={openToday} /> : null}
+             The same card the home screen ends on, prompt and all: these are two
+             doors into today's entry, and they were two separate builds of the
+             same plate until now. Inside the list rather than pinned with the
+             title: it is content, and a card that never scrolls away would take
+             a third of the screen with it. */
+          todayIsBlank && dismissed ? (
+            <View style={styles.header}>
+              <DailyReflectionCard prompt={reflectionPromptFor(todayKey)} onPress={openToday} />
             </View>
-          </View>
+          ) : null
         }
         renderSectionHeader={({ section }) => (
           <AppText color={palette.ink} style={styles.monthHeading}>
@@ -459,6 +469,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: layout.screenPaddingX,
+    paddingTop: spacing.md,
     paddingBottom: layout.tabScreenBottomPadding,
     gap: spacing.xs
   },
@@ -493,13 +504,6 @@ const styles = StyleSheet.create({
   // The gap is what separates the title from the reflection card under it. It
   // lives here rather than as a margin on the card, because the card is shared
   // with the home screen, where the screen's own row gap already spaces it.
-  hero: {
-    gap: spacing.ml,
-    marginHorizontal: -layout.screenPaddingX,
-    paddingHorizontal: layout.screenPaddingX,
-    paddingBottom: spacing.md,
-    overflow: "hidden"
-  },
   // Same geometry as a habit card: 16pt all round, 16pt between the thumbnail
   // and the copy, 66pt floor.
   // Serif, a step down from a screen heading: it labels the run of entries

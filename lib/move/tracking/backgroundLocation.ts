@@ -305,9 +305,17 @@ export async function currentFix(): Promise<PendingFix | null> {
   }
 
   try {
-    const sample = await location.getCurrentPositionAsync({
-      accuracy: location.Accuracy.BestForNavigation
-    });
+    /**
+     * `High`, not `BestForNavigation`, for the FIRST fix.
+     *
+     * BestForNavigation asks the receiver for its finest answer and will sit
+     * there for tens of seconds getting it — which is the right trade once a
+     * walk is under way and quite the wrong one while somebody is standing on
+     * the doorstep watching a badge say "Searching". High is a few metres
+     * coarser and arrives in a fraction of the time; the watch that follows is
+     * still BestForNavigation, so the route itself loses nothing.
+     */
+    const sample = await location.getCurrentPositionAsync({ accuracy: location.Accuracy.High });
 
     return toPendingFix(sample as unknown as LocationSample);
   } catch {
@@ -315,10 +323,37 @@ export async function currentFix(): Promise<PendingFix | null> {
   }
 }
 
-/** A foreground watch, for when background permission was refused. */
+/**
+ * Whatever the OS already has, instantly.
+ *
+ * Costs nothing and returns whatever any app last asked for — often seconds
+ * old, sometimes minutes. Far too coarse to record, and it never enters the
+ * pipeline: its only job is to give the map somewhere to point before the first
+ * real fix lands, instead of opening on the whole country.
+ */
+export async function lastKnownFix(): Promise<PendingFix | null> {
+  const location = loadLocation();
+
+  if (!location) {
+    return null;
+  }
+
+  try {
+    const sample = await location.getLastKnownPositionAsync();
+
+    return sample ? toPendingFix(sample as unknown as LocationSample) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A foreground watch. Runs whenever the app is on screen — see the controller. */
 export type FixWatch = { stop: () => void };
 
-export async function watchForeground(onFix: (fix: PendingFix) => void): Promise<FixWatch | null> {
+export async function watchForeground(
+  onFix: (fix: PendingFix) => void,
+  options: { distanceInterval?: number; timeInterval?: number } = {}
+): Promise<FixWatch | null> {
   const location = loadLocation();
 
   if (!location) {
@@ -329,8 +364,20 @@ export async function watchForeground(onFix: (fix: PendingFix) => void): Promise
     const subscription = await location.watchPositionAsync(
       {
         accuracy: location.Accuracy.BestForNavigation,
-        distanceInterval: 5,
-        timeInterval: 2000
+        /**
+         * Zero distance by default, and that is the fix for "Searching" that
+         * never resolves.
+         *
+         * A distance filter tells the OS not to bother us until we have MOVED
+         * that far — so standing still, waiting to set off, no fixes arrive at
+         * all, the last one goes stale after fifteen seconds and the indicator
+         * drops to Searching while the receiver is sitting there with a perfect
+         * lock. Time-based delivery keeps the reading honest while stationary;
+         * the engine throws away what does not move, which is where standing
+         * still is supposed to be handled.
+         */
+        distanceInterval: options.distanceInterval ?? 0,
+        timeInterval: options.timeInterval ?? 1000
       },
       (sample) => onFix(toPendingFix(sample as unknown as LocationSample))
     );

@@ -23,6 +23,7 @@ import {
   ChatCircleTextIcon,
   ChatsCircleIcon,
   CheckCircleIcon,
+  CirclesThreePlusIcon,
   CheckIcon,
   ClockIcon,
   CloudArrowUpIcon,
@@ -129,6 +130,7 @@ export type IconName =
   | "check"
   | "checkCircle"
   | "chevronDown"
+  | "circlesThreePlus"
   | "clock"
   | "colorFilter"
   | "close"
@@ -225,6 +227,7 @@ const iconMap: Record<IconName, PhosphorIcon> = {
   check: CheckIcon,
   checkCircle: CheckCircleIcon,
   chevronDown: CaretDownIcon,
+  circlesThreePlus: CirclesThreePlusIcon,
   clock: ClockIcon,
   colorFilter: PaletteIcon,
   close: XCircleIcon,

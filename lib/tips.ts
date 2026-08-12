@@ -6,6 +6,16 @@ export type TipSection = {
   icon: IconName;
   title: string;
   focus: string;
+  /**
+   * The chapter's own hue, drawn from `habitColorOptions` so the guides sit in
+   * the same palette as the habits they are about.
+   *
+   * Five chapters read in order, and one colour repeated five times made the
+   * list look like five copies of a card rather than five places to go. Held on
+   * the section rather than picked by index at the call site, so the chapter
+   * and its colour travel together — the detail screen wears it too.
+   */
+  accent: string;
   tips: Tip[];
 };
 
@@ -20,6 +30,7 @@ export type TipSection = {
 export const TIP_SECTIONS: TipSection[] = [
   {
     slug: "how-habits-work",
+    accent: "#1D74E4",
     icon: "refresh",
     title: "How habits work",
     focus: "The loop running quietly behind every routine",
@@ -48,6 +59,7 @@ export const TIP_SECTIONS: TipSection[] = [
   },
   {
     slug: "start-small",
+    accent: "#17A38F",
     icon: "tree",
     title: "Start tiny, then win big",
     focus: "Winning the first, almost-effortless reps",
@@ -76,6 +88,7 @@ export const TIP_SECTIONS: TipSection[] = [
   },
   {
     slug: "make-it-stick",
+    accent: "#F9941E",
     icon: "calendar",
     title: "Make it stick",
     focus: "Consistency, cues, and a friendlier environment",
@@ -104,6 +117,7 @@ export const TIP_SECTIONS: TipSection[] = [
   },
   {
     slug: "willpower-and-setbacks",
+    accent: "#FC7A5E",
     icon: "zap",
     title: "Willpower & setbacks",
     focus: "Discipline, recovery, and knowing yourself",
@@ -132,6 +146,7 @@ export const TIP_SECTIONS: TipSection[] = [
   },
   {
     slug: "make-it-who-you-are",
+    accent: "#5A4B9C",
     icon: "award",
     title: "Make it who you are",
     focus: "Identity, systems, and lasting mastery",

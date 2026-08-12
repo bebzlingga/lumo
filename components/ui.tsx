@@ -54,7 +54,8 @@ export function Screen({
   scrollEventThrottle,
   resetScrollOnFocus = true,
   gestureHandlers,
-  stickyHeader
+  stickyHeader,
+  pinHeader = true
 }: {
   children: ReactNode;
   scroll?: boolean;
@@ -97,6 +98,15 @@ export function Screen({
    * the whole screen behind both.
    */
   stickyHeader?: ReactNode;
+  /**
+   * Whether a `ScreenHeader` written as this screen's first child is pinned.
+   *
+   * True everywhere by default — a page bar that scrolls away takes the way out
+   * of the screen with it, and every screen in the app wants the same answer to
+   * that. Pass `false` for the rare page whose header is meant to travel with
+   * the content.
+   */
+  pinHeader?: boolean;
 }) {
   const { palette, isDark } = useLumo();
   // Overscroll/bounce past the content should match the gradient's tail (or the flat override).
@@ -111,6 +121,27 @@ export function Screen({
    */
   const innerScrollRef = React.useRef<ScrollView>(null);
   const scrollRef = scrollRefProp ?? innerScrollRef;
+
+  /**
+   * The page bar, lifted out of the scroller.
+   *
+   * Screens write `<ScreenHeader />` as their first child and get a pinned bar
+   * without saying so — one standard, and no 27 call sites to keep in step. The
+   * header is recognised by a flag on the component (`isPageHeader`) rather than
+   * by importing it, since `ScreenHeader` imports from this file.
+   *
+   * Only the FIRST child, and only when scrolling: a header further down is
+   * doing something else, and on a non-scrolling screen it is already fixed.
+   * An explicit `stickyHeader` always wins.
+   */
+  const childList = React.Children.toArray(children);
+  const leadHeader =
+    pinHeader && scroll && !stickyHeader && React.isValidElement(childList[0]) &&
+    (childList[0].type as { isPageHeader?: boolean })?.isPageHeader === true
+      ? childList[0]
+      : null;
+  const pinned = stickyHeader ?? leadHeader;
+  const body = leadHeader ? childList.slice(1) : children;
 
   /**
    * A tab screen stays mounted once visited, so its ScrollView keeps whatever
@@ -171,7 +202,7 @@ export function Screen({
       ) : null}
       {backgroundVariant ? <LumoBackground variant={backgroundVariant} intensity={backgroundIntensity} /> : null}
       {backgroundNode}
-      {stickyHeader ? <View style={styles.stickyHeader}>{stickyHeader}</View> : null}
+      {pinned ? <View style={styles.stickyHeader}>{pinned}</View> : null}
       {scroll ? (
         <ScrollView
           ref={scrollRef}
@@ -179,13 +210,13 @@ export function Screen({
           keyboardDismissMode="interactive"
           automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.screenContent, contentStyle]}
+          contentContainerStyle={[styles.screenContent, leadHeader ? styles.screenContentPinned : null, contentStyle]}
           refreshControl={refreshControl}
           scrollEnabled={scrollEnabled}
           onScroll={handleScroll}
           scrollEventThrottle={scrollEventThrottle ?? 16}
         >
-          {children}
+          {body}
         </ScrollView>
       ) : (
         <Animated.View style={[styles.screenContent, styles.flex, contentStyle]} {...gestureHandlers}>
@@ -598,7 +629,7 @@ export function ChoiceChip({
       accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
-      className={className ?? "min-h-[48px] items-center justify-center rounded-[16px] px-4"}
+      className={className ?? "min-h-[48px] items-center justify-center rounded-[20px] px-4"}
       style={({ pressed }) => [
         {
           backgroundColor: selected ? palette.greenSoft : palette.surface,
@@ -637,7 +668,7 @@ export function ChipGroup({
           label={option.label}
           selected={option.value === value}
           onPress={() => onChange(option.value)}
-          className={isGrid ? "min-h-[48px] items-center justify-center rounded-[16px] px-3" : undefined}
+          className={isGrid ? "min-h-[48px] items-center justify-center rounded-[20px] px-3" : undefined}
           style={isGrid ? [styles.chipGridItem, options.length % 2 === 1 && index === options.length - 1 ? styles.chipGridItemFull : null] : undefined}
         />
       ))}
@@ -691,6 +722,12 @@ const styles = StyleSheet.create({
   stickyHeader: {
     paddingHorizontal: layout.screenPaddingX,
     paddingTop: spacing.lg
+  },
+  // With the bar pinned it has already spent the screen's top padding, and the
+  // header carries its own bottom margin — a second helping here left the first
+  // card sitting well down the page.
+  screenContentPinned: {
+    paddingTop: 0
   },
   screenContent: {
     paddingHorizontal: layout.screenPaddingX,

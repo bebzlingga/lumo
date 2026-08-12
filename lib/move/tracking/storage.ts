@@ -181,6 +181,9 @@ export function normalizeActivity(value: unknown): ActivityTrackingState | null 
     lastAccuracyM: null,
     segments: normalizeSegments(raw.segments),
     rawPoints: Array.isArray(raw.rawPoints) ? raw.rawPoints.filter(isPoint) : [],
+    companions: Array.isArray(raw.companions)
+      ? raw.companions.filter((entry): entry is string => typeof entry === "string" && entry.length > 0)
+      : undefined,
     manuallyPaused: raw.manuallyPaused === true,
     autoPauseEnabled: raw.autoPauseEnabled !== false
   };

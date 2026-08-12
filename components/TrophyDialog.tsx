@@ -1,7 +1,7 @@
 import React from "react";
 import { AwardDialog } from "@/components/AwardDialog";
 import { TrophyImage } from "@/components/TrophyImage";
-import { groupChallengeTierMeta, type GroupTrophy, type GroupTrophyMetric } from "@/constants/groupChallenges";
+import { TROPHY_MIN_MEMBERS, groupChallengeTierMeta, type GroupTrophy, type GroupTrophyMetric } from "@/constants/groupChallenges";
 
 /**
  * What each metric is counting, so a locked trophy's chip reads as a sentence
@@ -25,14 +25,31 @@ export function TrophyDialog({
   trophy,
   earned,
   current,
+  members,
   onClose
 }: {
   trophy: GroupTrophy | null;
   earned: boolean;
   /** The group's live value for this trophy's metric. */
   current: number;
+  /**
+   * How many people are in the group. Required rather than optional: without it
+   * a shelf held back by `TROPHY_MIN_MEMBERS` shows a full bar on a locked
+   * trophy, and a caller would have no reason to notice.
+   */
+  members: number;
   onClose: () => void;
 }) {
+  /**
+   * A trophy the group cannot reach at all yet, because it is one person.
+   *
+   * The fraction is the wrong thing to show here — a solo group with 20 of the
+   * 14 completions would read "14 / 14" under a locked award, which looks like a
+   * bug rather than like a rule. The `members` trophies are exempt: their own
+   * target is above the floor, so counting towards it says the same thing.
+   */
+  const heldForMembers = trophy !== null && !earned && trophy.metric !== "members" && members < TROPHY_MIN_MEMBERS;
+
   return (
     <AwardDialog
       content={
@@ -44,7 +61,9 @@ export function TrophyDialog({
               description: trophy.description,
               earned,
               accent: groupChallengeTierMeta[trophy.tier].accent,
-              lockLabel: `${Math.min(current, trophy.target)} / ${trophy.target} ${METRIC_UNIT[trophy.metric]}`,
+              lockLabel: heldForMembers
+                ? `Needs ${TROPHY_MIN_MEMBERS}+ members`
+                : `${Math.min(current, trophy.target)} / ${trophy.target} ${METRIC_UNIT[trophy.metric]}`,
               renderArt: (size) => <TrophyImage id={trophy.id} earned={earned} size={size} />
             }
           : null

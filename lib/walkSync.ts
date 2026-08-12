@@ -1,4 +1,4 @@
-import type { WalkPoint, WalkRecord } from "@/lib/walk";
+import type { ActivityFacts, WalkPoint, WalkRecord } from "@/lib/walk";
 
 /**
  * The walk sync queue's decisions — what to send, when to retry, what a walk
@@ -154,29 +154,18 @@ export function routeBatches(route: WalkPoint[], size = BATCH_SIZE): WalkPoint[]
   return batches;
 }
 
-/**
- * Everything the tracker knows that a `WalkRecord` has no field for.
- *
- * Passed alongside rather than folded into the record, because the record is
- * the app's own shape — history lists, habit ticking, the route drawing — and
- * none of them care about paused time or an integrity verdict. This is the
- * server's extra, and it is optional: a walk recorded before the tracker
- * existed simply has none of it.
- */
-export type ActivityFacts = {
-  type?: "walk" | "run";
-  elapsedMs?: number;
-  pausedMs?: number;
-  averagePaceMsPerKm?: number | null;
-  averageSpeedMs?: number | null;
-  caloriesEstimate?: number | null;
-  segmentCount?: number;
-  integrityOk?: boolean;
-  integrityReason?: string | null;
-};
+export type { ActivityFacts } from "@/lib/walk";
 
-/** The row a record becomes. `now` stamps `updated_at`; the module reads no clock. */
-export function walkRow(record: WalkRecord, userId: string, now: number, facts: ActivityFacts = {}) {
+/**
+ * The row a record becomes. `now` stamps `updated_at`; the module reads no clock.
+ *
+ * Facts come off the record by default — `toWalkRecordFromActivity` puts them
+ * there at the finish — and can still be passed explicitly, which is what the
+ * tests do. Every field has a defined fallback, so a walk from before the
+ * tracker existed uploads correctly rather than with nulls where the server
+ * expects numbers.
+ */
+export function walkRow(record: WalkRecord, userId: string, now: number, facts: ActivityFacts = record.facts ?? {}) {
   return {
     id: record.id,
     user_id: userId,

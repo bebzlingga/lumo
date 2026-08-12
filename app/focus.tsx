@@ -10,8 +10,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { StatusBar } from "expo-status-bar";
 import { AppText, LumoInput, Screen } from "@/components/ui";
 import { FOCUS_ACTIVITIES, activityAccent, focusActivity } from "@/constants/focusActivities";
-import { END_SOUND_IDS, END_SOUNDS, SOUNDS_READY, endSoundLabel, soundLabel, soundsForTheme } from "@/constants/sounds";
-import { CTA_FILL, fontFamilies, getPalette, habitAccent, layout, radius, spacing } from "@/constants/theme";
+import { CTA_FILL, fontFamilies, getPalette, habitAccent, layout, radius, spacing, tileRadius } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha, contrastRatio, readableOn, shadeWithBlack } from "@/lib/color";
 import { toDateKey } from "@/lib/date";
@@ -35,9 +34,7 @@ import {
   removeTask,
   resumeSession,
   setActivity,
-  setBackgroundSound,
   setDuration,
-  setEndSound,
   setTaskDone,
   startSession,
   formatTotal,
@@ -100,7 +97,6 @@ const FOCUS_TIPS = [
   }
 ] as const;
 
-type Picker = "background" | "end" | null;
 
 /**
  * What Focus is for, and how to get more out of it.
@@ -319,7 +315,6 @@ export default function FocusScreen() {
   const [draft, setDraft] = React.useState("");
   const [now, setNow] = React.useState(() => Date.now());
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const [picker, setPicker] = React.useState<Picker>(null);
   const [showInfo, setShowInfo] = React.useState(false);
   const [showHistory, setShowHistory] = React.useState(false);
   /** True while the dial is being swept — locks the page so it cannot scroll. */
@@ -956,7 +951,6 @@ export default function FocusScreen() {
   }
 
   // ---- Setup ------------------------------------------------------------
-  const backgroundOptions = soundsForTheme(themeId);
   const finishedTasks = doneCount(state);
 
   return (
@@ -993,85 +987,7 @@ export default function FocusScreen() {
       </View>
 
 
-      {/* Both sound choices on one card, split down the middle — they are the
-          same kind of decision made twice, and two separate cards would imply
-          otherwise. */}
-      {SOUNDS_READY ? (
-        <View style={[styles.soundCard, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Background sound: ${soundLabel(state.backgroundSoundId) ?? "None"}`}
-            onPress={() => setPicker(picker === "background" ? null : "background")}
-            style={({ pressed }) => [styles.soundHalf, { opacity: pressed ? 0.7 : 1 }]}
-          >
-            <Icon name="moon" size={18} color={accent} weight="bulk" />
-            <View style={styles.soundText}>
-              <AppText variant="caption" color={palette.subtle} numberOfLines={1}>
-                Background sound
-              </AppText>
-              <AppText variant="bodySmall" color={palette.ink} numberOfLines={1} style={styles.soundValue}>
-                {soundLabel(state.backgroundSoundId) ?? "None"}
-              </AppText>
-            </View>
-          </Pressable>
-          <View style={[styles.soundDivider, { backgroundColor: palette.hairline }]} />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Focus end sound: ${endSoundLabel(state.endSoundId) ?? "None"}`}
-            onPress={() => setPicker(picker === "end" ? null : "end")}
-            style={({ pressed }) => [styles.soundHalf, { opacity: pressed ? 0.7 : 1 }]}
-          >
-            <Icon name="notifications" size={18} color={accent} weight="bulk" />
-            <View style={styles.soundText}>
-              <AppText variant="caption" color={palette.subtle} numberOfLines={1}>
-                Focus end sound
-              </AppText>
-              <AppText variant="bodySmall" color={palette.ink} numberOfLines={1} style={styles.soundValue}>
-                {endSoundLabel(state.endSoundId) ?? "None"}
-              </AppText>
-            </View>
-          </Pressable>
-        </View>
-      ) : null}
 
-      {picker ? (
-        <View style={styles.chips}>
-          {(picker === "background"
-            ? [{ id: null as string | null, label: "None" }, ...backgroundOptions]
-            : [{ id: null as string | null, label: "None" }, ...END_SOUND_IDS.map((id) => ({ id, label: END_SOUNDS[id].label }))]
-          ).map((option) => {
-            const current = picker === "background" ? state.backgroundSoundId : state.endSoundId;
-            const selected = current === option.id;
-
-            return (
-              <Pressable
-                key={option.id ?? "none"}
-                accessibilityRole="radio"
-                accessibilityState={{ selected }}
-                accessibilityLabel={option.label}
-                onPress={() => {
-                  setState((currentState) =>
-                    picker === "background" ? setBackgroundSound(currentState, option.id) : setEndSound(currentState, option.id)
-                  );
-                  setPicker(null);
-                }}
-                style={({ pressed }) => [
-                  styles.chip,
-                  {
-                    backgroundColor: selected ? accentSoft : palette.surface,
-                    borderColor: selected ? accent : palette.hairline,
-                    opacity: pressed ? 0.75 : 1
-                  }
-                ]}
-              >
-                <AppText variant="caption" color={selected ? accent : palette.body} numberOfLines={1}>
-                  {option.label}
-                </AppText>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
 
       <Pressable
         accessibilityRole="button"
@@ -1330,7 +1246,7 @@ const styles = StyleSheet.create({
   historyIcon: {
     width: 34,
     height: 34,
-    borderRadius: radius.lg,
+    borderRadius: tileRadius(34),
     alignItems: "center",
     justifyContent: "center"
   },
@@ -1520,40 +1436,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.lexendSemiBold,
     textTransform: "uppercase",
     letterSpacing: 1.2
-  },
-  soundCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: spacing.md,
-    borderRadius: radius.card,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2
-  },
-  soundHalf: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    padding: spacing.md
-  },
-  soundText: {
-    flex: 1,
-    minWidth: 0
-  },
-  soundValue: {
-    fontFamily: fontFamilies.lexendSemiBold
-  },
-  soundDivider: {
-    width: StyleSheet.hairlineWidth,
-    alignSelf: "stretch",
-    marginVertical: spacing.sm
-  },
-  chips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.xs
   },
   // One scrolling row rather than a wrap, always — not only past some count.
   // Wrapping meant the section's height depended on how many habits were

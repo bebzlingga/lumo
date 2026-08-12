@@ -222,6 +222,10 @@ export default function BadgesScreen() {
         trophy={selectedTrophy}
         earned={selectedTrophy ? trophyEarned(selectedTrophy, groupMetrics) : false}
         current={selectedTrophy ? groupMetrics[selectedTrophy.metric] : 0}
+        // The biggest group this person is in, matching how the rest of these
+        // metrics are taken — so the card explains the member floor only when
+        // every group they belong to is a group of one.
+        members={groupMetrics.members}
         onClose={() => setSelectedTrophy(null)}
       />
     </Screen>
