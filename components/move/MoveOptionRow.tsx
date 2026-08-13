@@ -104,7 +104,12 @@ export function MoveOptionRow({
         { opacity: pressed && !selected ? 0.7 : 1 }
       ]}
     >
-      {leading ?? (icon ? <Icon name={icon} size={22} color={selected ? palette.greenDark : palette.subtle} weight="bulk" /> : null)}
+      {/* 20, not 22. The glyph is a label's mark here, not the row's subject — the
+          title and its subtitle are — and at 22 it sat level with the 20pt radio at
+          the other end, which made the row read as two controls with words between
+          them. `bulk`'s duotone strokes also carry a size heavier than a bold glyph
+          of the same number. */}
+      {leading ?? (icon ? <Icon name={icon} size={20} color={selected ? palette.greenDark : palette.subtle} weight="bulk" /> : null)}
 
       <View style={styles.text}>
         <AppText variant="bodySmall" color={palette.ink} numberOfLines={1} style={styles.title}>

@@ -4,6 +4,7 @@ import Svg, { Circle } from "react-native-svg";
 import { Avatar } from "@/components/Avatar";
 import { Icon, type IconName } from "@/components/Icon";
 import { MoveBadge } from "@/components/move/MoveBadge";
+import { PlusBadge } from "@/components/PlusBadge";
 import { Pressable } from "@/components/Pressable";
 import { AppText } from "@/components/ui";
 import { MOVE_ACCENT } from "@/constants/tools";
@@ -122,10 +123,24 @@ export function MilestoneCard({
   const earnedAt = familyEarnedAt(achievements, family);
   // Only the milestone the active challenge is actually working toward.
   const running = active && active.variant.milestoneId === family.id ? active : null;
+  /**
+   * A rung you are RUNNING is never shut, whatever the ladder says.
+   *
+   * This is the invitee's case. The ladder unlocks in order off your own badges, and
+   * somebody invited onto a friend's 25K may not have earned the 10K — so the card
+   * for the challenge they are actually walking came up locked, greyed out, saying
+   * "earn the 10K badge first", and could not even be opened to see how it was
+   * going. The invitation is a legitimate way onto a rung, and the challenge in
+   * progress outranks the ladder that would not have offered it.
+   *
+   * `locked` is still what the caller computed; this only decides what the card
+   * DOES with it.
+   */
+  const shut = locked && !running;
 
   // A challenge under way outranks everything else: what is happening now is
   // more use than what has been banked, and the bar underneath repeats it.
-  const summary = locked
+  const summary = shut
     ? `Earn the ${previousFamily(family)?.title ?? "previous"} badge first`
     : running
     ? `${formatDistance(running.currentM)} of ${formatDistance(running.targetM)}`
@@ -136,9 +151,9 @@ export function MilestoneCard({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ disabled: locked }}
-      accessibilityLabel={`${family.title}. ${locked ? summary : `${summary}. ${earned ? "Earned" : "Not yet earned"}`}`}
-      disabled={locked}
+      accessibilityState={{ disabled: shut }}
+      accessibilityLabel={`${family.title}. ${shut ? summary : `${summary}. ${earned ? "Earned" : "Not yet earned"}`}`}
+      disabled={shut}
       onPress={onPress}
       style={({ pressed }) => [
         styles.card,
@@ -153,7 +168,7 @@ export function MilestoneCard({
       <View style={styles.cardHead}>
         {/* Dimmed rather than hidden: a locked rung is a real thing further up
             the ladder, and seeing it is the point of listing it. */}
-        <View style={locked ? styles.cardLocked : null}>
+        <View style={shut ? styles.cardLocked : null}>
           <MoveBadge
             progress={{
               milestone: { id: family.id, title: family.title, description: "", target: family.distanceM, metric: "distance", tier: "bronze" },
@@ -167,7 +182,7 @@ export function MilestoneCard({
           />
         </View>
 
-        <View style={[styles.cardText, locked ? styles.cardLocked : null]}>
+        <View style={[styles.cardText, shut ? styles.cardLocked : null]}>
           <View style={styles.cardTitleRow}>
             <AppText variant="bodySmall" color={palette.ink} numberOfLines={1} style={styles.cardTitle}>
               {family.title}
@@ -185,16 +200,15 @@ export function MilestoneCard({
             ) : null}
 
             {/* Gold, and never red: a rung that needs a subscription is an
-                offer, not a fault. Shown on every Pro rung whether or not the
-                reader has paid — hiding it from subscribers would leave them
-                unable to see what they are getting. */}
-            {family.pro ? (
-              <View style={[styles.activeChip, { backgroundColor: alpha(palette.accent, "26") }]}>
-                <AppText variant="caption" color={readableOn(palette.accent, palette.card, 4.5)} style={styles.activeChipLabel}>
-                  PRO
-                </AppText>
-              </View>
-            ) : null}
+                offer, not a fault. Shown on every Plus rung whether or not the
+                reader has subscribed — hiding it from subscribers would leave
+                them unable to see what they are getting.
+
+                The shared badge, not a chip of its own: this is the same mark
+                Move's start screen puts on company, and two hand-built gold
+                pills would drift the first time one was tuned. (`family.pro`
+                keeps its name — see components/PlusBadge.tsx.) */}
+            {family.pro ? <PlusBadge /> : null}
           </View>
           <AppText
             variant="caption"

@@ -16,16 +16,23 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent
 } from "react-native"
+/**
+ * Aliased, because this file already has React Native's own `Animated` — the
+ * hold-to-undo ring and the backdrop's scroll fade both run on it, and neither
+ * has any reason to move. Reanimated is here for ONE thing: the layout
+ * animations, which RN's Animated has no equivalent for.
+ */
+import Reanimated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { SegmentedControl } from "@/components/controls";
 import { GroupBackdrop, useGroupBackdropSubjectBottom } from "@/components/GroupBackdrop";
+import { HeaderTabs, type HeaderTabOption } from "@/components/HeaderTabs";
 import { Icon, type IconName } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { HoldProgressRing } from "@/components/HoldProgressRing";
 import { HOLD_REVEAL_DELAY_MS, SegmentedRing, UNDO_HOLD_DURATION_MS } from "@/components/QuickDoneWidgets";
 import { EmptyState } from "@/components/states";
-import { AppText, Screen } from "@/components/ui";
-import { control, fontFamilies, habitAccent, habitColorOption, layout, radius, spacing } from "@/constants/theme";
+import { AppText, Card, Screen } from "@/components/ui";
+import { control, fontFamilies, habitAccent, habitColorOption, layout, radius, spacing, tileRadius } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { Avatar } from "@/components/Avatar";
 import { FireIcon } from "@/components/FireIcon";
@@ -51,23 +58,33 @@ import { Pressable } from "@/components/Pressable"
  * the code, which gets uppercased, filtered to the ID alphabet, and dashed. */
 const LUMO_ID_PREFIX = "LUMO-";
 
-/** The inset both list cards on this screen use — `HabitCard`'s, so the friend
- *  rows and the group cards line up with each other and with the habit list.
- *  Named because the group card's activity chip row bleeds against it and has
- *  to cancel exactly this, not the screen gutter. */
-const LIST_CARD_PADDING = spacing.md;
-
 /**
- * How much of the backdrop's picnic the tab row may sit over, as a fraction of
- * the gap between the page bar and the foot of the scene.
+ * How much of the backdrop's picnic the first card may sit over, as a fraction
+ * of the gap between the page bar and the foot of the scene.
  *
- * 0 clears the scene completely, which puts the tabs a third of the way down the
- * screen; 1 starts them straight under the bar and runs the pills across the
- * three of them. This lands the row on the blanket's front corner — the
- * picnic's own foreground, clear of the characters — so the page reads as
- * sitting IN FRONT of the scene rather than beginning after it.
+ * 0 clears the scene completely, which starts the card a third of the way down
+ * the screen; 1 tucks it straight under the bar and across the three of them.
+ * This lands its top edge on the blanket's front corner — the picnic's own
+ * foreground, clear of the characters — so the page reads as sitting IN FRONT of
+ * the scene rather than beginning after it.
  */
 const SCENE_OVERLAP = 0.15;
+
+/**
+ * How a finished habit leaves the first card.
+ *
+ * A row here does not just get a tick — it is removed, and a list that reorders
+ * itself the instant you touch it reads as a glitch rather than as progress. So
+ * the row fades where it stood, and the rows under it slide up into the gap it
+ * leaves.
+ *
+ * The shift runs a little longer than the fade so the movement is still going
+ * when the row has gone; matched exactly, the list snapped shut on an empty space
+ * at the end. Both stay under a beat — this happens on every check-in, and an
+ * animation you notice twice is one you resent by the tenth time.
+ */
+const ROW_EXIT_MS = 200;
+const LIST_SHIFT_MS = 260;
 
 function maskLumoId(text: string) {
   let value = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -95,8 +112,20 @@ const FORCE_EMPTY_STATE = false;
 const FRIENDS_COMING_SOON = false;
 
 /**
- * TEMPORARY — opens Friends without a subscription, so the Move team routes can
- * be walked end to end while testing. Set to false to put the paywall back.
+ * Opens Friends without a subscription, for walking the social routes end to end
+ * while testing.
+ *
+ * **MUST BE FALSE IN EVERY BUILD THAT SHIPS.** Left on, the whole ₱49 tier is
+ * free to anyone who opens the tab: this page, the groups behind it, and the Move
+ * team routes that check the same entitlement. It is the one flag in the app whose
+ * wrong value is a revenue bug rather than a cosmetic one, which is why it says
+ * so here rather than in a commit message.
+ *
+ * Note what it does NOT open: the database holds its own gate. Creating a group,
+ * starting a Plus challenge and joining one all check `has_active_subscription()`
+ * server-side, so with this on, an unsubscribed test account reaches every screen
+ * and is still refused by the writes. Testing the Move invite flow end to end
+ * needs a real subscription (or sandbox purchase) on both accounts.
  */
 const BYPASS_FRIENDS_PAYWALL = true;
 
@@ -107,41 +136,26 @@ const features: { icon: IconName; title: string; body: string }[] = [
   { icon: "trophy", title: "Friendly streaks", body: "Compare streaks and keep each other going." }
 ];
 
-type FriendsTab = "habits" | "goals" | "friends";
-
 /**
- * Two controls rather than one, following the Habits screen's split filters.
+ * HOME'S SHAPE, WITH ONE SWITCH — what the page is made of, and why.
  *
- * Habits is a different KIND of view from the two beside it: Groups and
- * Friends each list a set of people you are connected to, while Habits lists
- * work you owe them today. Sat in one run of three it read as a third
- * directory; set apart, it reads as the day's view of the other two.
+ * This screen used to be a Habits / Groups / Friends switcher, which put the work
+ * you owed your groups today behind the same control as two directories you open
+ * once a week. Home solves that by stacking: what you have to DO in the first
+ * card, then the things you go and look at below it.
+ *
+ * So the day's group habits are always the first card, and the switch that
+ * remains — up in the page bar, where Move keeps its own — only chooses what the
+ * SECOND card lists. Two directories of people, one at a time, under no heading:
+ * the pill above is the heading.
  */
-const HABITS_TAB: { label: string; value: FriendsTab }[] = [{ label: "Habits", value: "habits" }];
+type SocialTab = "groups" | "friends";
 
-const SOCIAL_TABS: { label: string; value: FriendsTab }[] = [
-  { label: "Groups", value: "goals" },
-  { label: "Friends", value: "friends" }
+const SOCIAL_TABS: HeaderTabOption<SocialTab>[] = [
+  { value: "groups", label: "Groups" },
+  { value: "friends", label: "Friends" }
 ];
 
-const TAB_TITLE: Record<FriendsTab, string> = {
-  // "Group Habits", not "Habits": there is a Habits tab in the bottom bar for
-  // the user's own, and a page bar reading the same word over a different list
-  // is how you end up thinking you are looking at that one.
-  habits: "Group Habits",
-  goals: "Groups",
-  friends: "Friends"
-};
-
-/**
- * Every group habit due today, gathered into one card per group.
- *
- * The Groups tab answers "what are my groups"; this answers "what do I owe
- * them today", which otherwise meant opening each group in turn to find out.
- * Rows are read-only on purpose — checking in belongs on the group page, where
- * the rest of that group's context is, and a second place to complete the same
- * habit is a second place for the two to disagree.
- */
 /**
  * One group activity, with the home list's hold-to-undo built in.
  *
@@ -158,6 +172,8 @@ function GroupHabitRow({
   habit,
   count,
   done,
+  membersDone,
+  memberCount,
   divided,
   busy,
   onLog,
@@ -166,6 +182,9 @@ function GroupHabitRow({
   habit: GroupHabit;
   count: number;
   done: boolean;
+  /** How many of the group have finished this one today. */
+  membersDone: number;
+  memberCount: number;
   divided: boolean;
   busy: boolean;
   onLog: () => void;
@@ -214,30 +233,38 @@ function GroupHabitRow({
       onLongPress={() => (canUndo ? onUndo() : undefined)}
       onPressIn={() => (canUndo ? startHold() : undefined)}
       onPressOut={endHold}
-      // No rule above the first row — the heading sits outside the card, so the
-      // card's own edge is the separator there.
+      // No rule above the first row of a band — its group's name is directly
+      // above it, and a rule between the two would cut the name off the list it
+      // heads. The rule that matters is the one BETWEEN bands, which the band
+      // itself draws.
       style={({ pressed }) => [
         styles.habitRow,
         divided ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: alpha(palette.hairline, "80") } : null,
         { opacity: busy ? 0.5 : pressed ? 0.7 : 1 }
       ]}
     >
-      {/* The glyph alone, in the habit's own colour — no tinted tile behind
-          it. These rows sit under a heading rather than being the whole card,
-          so a bubble on every one of them made the list heavier than the group
-          list it sits beside. */}
-      <View style={styles.habitIcon}>
+      {/* Home's icon treatment, at this list's scale: a rounded tile of the
+          habit's colour at a soft tint, carrying a saturated glyph. It was a bare
+          glyph on the canvas, which left the left edge of the list unanchored —
+          the rows read as text with a mark beside it rather than as the same kind
+          of row home's habits are. Rounded square, not a disc, so it reads as a
+          tile against the round check target at the other end. */}
+      <View style={[styles.habitIcon, { backgroundColor: alpha(accent, isDark ? "2E" : "24") }]}>
         <Icon name={habit.icon} size={17} color={accent} weight="bulk" />
       </View>
       <View style={styles.habitText}>
         <AppText variant="titleSmall" color={palette.ink} numberOfLines={1} style={styles.habitName}>
           {habit.name}
         </AppText>
-        {target > 1 ? (
-          <AppText variant="caption" color={palette.muted} numberOfLines={1} style={styles.habitMeta}>
-            {Math.min(count, target)}/{target} today
-          </AppText>
-        ) : null}
+        {/* The name, then who else has done it — the second line home gives to
+            a habit's own schedule goes to the GROUP here, because that is the
+            fact this list exists to carry. A multi-count habit puts its own
+            tally in front of it: without that, tapping a row changed a ring and
+            nothing else on the screen said why. */}
+        <AppText variant="caption" color={palette.muted} numberOfLines={1} style={styles.habitMeta}>
+          {target > 1 ? `${Math.min(count, target)}/${target} today · ` : ""}
+          {membersDone} of {memberCount} {memberCount === 1 ? "member" : "members"} completed
+        </AppText>
       </View>
       {/* The ring winds around whatever this slot is showing — the check or the
           segmented ring — and sits on the control the hold acts on. */}
@@ -268,166 +295,198 @@ function GroupHabitRow({
   );
 }
 
-function GroupHabitsCard({
+/**
+ * One group's OUTSTANDING habits for today, as a band inside the page's first
+ * card.
+ *
+ * A section rather than a card of its own: every group's work for today belongs
+ * to one list, and a card per group turned three groups into three panels to
+ * scroll past before the page even reached the groups themselves. The group's
+ * NAME is what does the grouping, and it is the only part of the band that
+ * navigates — the rows below check in where they are.
+ *
+ * What it lists is decided by the page, not here: `pending` arrives already
+ * stripped of anything finished, so the parent can drop a whole band the moment
+ * its last habit is ticked and still number the rules correctly.
+ */
+function GroupHabitsSection({
   group,
+  pending,
+  doneCount,
+  dueCount,
   myLumoId,
   busyHabitId,
+  divided,
   onOpen,
   onToggle,
   onUndo
 }: {
   group: Group;
+  /** Scheduled today and not yet finished — see `todayGroups` on the screen. */
+  pending: GroupHabit[];
+  doneCount: number;
+  dueCount: number;
   myLumoId: string;
   /** Habit currently mid-write, so its row can hold still instead of double-firing. */
   busyHabitId: string | null;
+  /** A rule above, for every band but the first under the card's heading. */
+  divided: boolean;
   onOpen: () => void;
   onToggle: (habit: GroupHabit) => void;
   onUndo: (habit: GroupHabit) => void;
 }) {
-  const { palette, isDark } = useLumo();
+  const { palette } = useLumo();
   const [headerPressed, setHeaderPressed] = React.useState(false);
   const avatarSvg = React.useMemo(() => buildGroupAvatarSvg(group.avatarSeed ?? group.id), [group.avatarSeed, group.id]);
-  const todayHabits = React.useMemo(() => scheduledGroupHabitsOn(group.habits, toDateKey()), [group.habits]);
   const me = group.members.find((member) => member.profile.lumoId === myLumoId);
-  const doneIds = me?.completedTodayHabitIds ?? [];
-  const doneCount = todayHabits.filter((habit) => doneIds.includes(habit.id)).length;
-
-  if (!todayHabits.length) {
-    return null;
-  }
 
   return (
-    <View style={styles.habitsGroup}>
-      {/* The group's name sits on the canvas, not in the card — it names the
-          card rather than being the first row of it. It is also the only part
-          of the block that navigates: the rows below check in where they are. */}
+    // The band fades and closes up when its last habit is ticked — see
+    // ROW_EXIT/LIST_SHIFT. `layout` on the band is what lets the bands below it
+    // slide up into the space rather than jumping.
+    <Reanimated.View
+      exiting={FadeOut.duration(ROW_EXIT_MS)}
+      layout={LinearTransition.duration(LIST_SHIFT_MS)}
+      style={[
+        styles.habitsGroup,
+        divided
+          ? [styles.habitsGroupDivided, { borderTopColor: palette.hairline }]
+          : null
+      ]}
+    >
+      {/* A quiet label, not a heading: the card above it is already titled, and
+          the habit names below are the things to read. So the group's name takes
+          the same 12pt semibold `caption` as its own count, both in `subtle` — a
+          14pt bold name here was competing with the rows it was introducing. */}
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Open ${group.name}, ${doneCount} of ${todayHabits.length} done today`}
+        accessibilityLabel={`Open ${group.name}, ${doneCount} of ${dueCount} done today`}
         onPress={onOpen}
         onPressIn={() => setHeaderPressed(true)}
         onPressOut={() => setHeaderPressed(false)}
         style={[styles.habitsHeader, { opacity: headerPressed ? 0.7 : 1 }]}
       >
         <View style={[styles.habitsAvatar, { backgroundColor: alpha(palette.greenDark, "10") }]}>
-          <Avatar svg={avatarSvg} size={26} />
+          <Avatar svg={avatarSvg} size={20} />
         </View>
-        <AppText color={palette.ink} numberOfLines={1} style={styles.habitsGroupName}>
+        <AppText variant="caption" color={palette.subtle} numberOfLines={1} style={styles.habitsGroupName}>
           {group.name}
         </AppText>
-        <AppText variant="caption" color={palette.subtle} numberOfLines={1} style={styles.habitsCount}>
-          {doneCount}/{todayHabits.length} done
+        {/* Counts the day, not the rows below it — the finished ones have left
+            the list, and without this the band would go quiet about them.
+
+            A step lighter than the name it sits beside: `muted`, the same colour
+            the members line under each habit takes. The name is what you scan
+            for; the tally is there when you look for it. */}
+        <AppText variant="caption" color={palette.muted} numberOfLines={1} style={styles.habitsCount}>
+          {doneCount}/{dueCount} done
         </AppText>
       </Pressable>
 
-      <View style={[styles.habitsCard, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
-        {todayHabits.map((habit, index) => {
-          const target = habit.goal.type === "multiple" ? habit.goal.count : 1;
-          const count = me?.todayCountByHabit?.[habit.id] ?? 0;
+      {pending.map((habit, index) => {
+        const target = habit.goal.type === "multiple" ? habit.goal.count : 1;
+        const count = me?.todayCountByHabit?.[habit.id] ?? 0;
 
-          return (
+        return (
+          // The wrapper carries the animation, not the row: the row's own style is
+          // a function of its pressed state (see `GroupHabitRow`), and Reanimated
+          // cannot drive layout on a style it does not own. One per habit, keyed on
+          // the habit, so a finished one fades where it stood and the rows under it
+          // close the gap.
+          <Reanimated.View
+            key={habit.id}
+            exiting={FadeOut.duration(ROW_EXIT_MS)}
+            layout={LinearTransition.duration(LIST_SHIFT_MS)}
+          >
             <GroupHabitRow
-              key={habit.id}
               habit={habit}
               count={count}
-              done={doneIds.includes(habit.id) || count >= target}
+              done={false}
+              membersDone={group.members.filter((member) => member.completedTodayHabitIds.includes(habit.id)).length}
+              memberCount={group.members.length}
               divided={index > 0}
               busy={busyHabitId === habit.id}
               onLog={() => onToggle(habit)}
               onUndo={() => onUndo(habit)}
             />
-          );
-        })}
-      </View>
-    </View>
+          </Reanimated.View>
+        );
+      })}
+    </Reanimated.View>
   );
 }
 
-function GroupCard({ group, onPress }: { group: Group; onPress: () => void }) {
-  const { palette, isDark } = useLumo();
-  const [pressed, setPressed] = React.useState(false);
+/**
+ * One group, as a row in the switching card at the foot of the page.
+ *
+ * It was a card of its own — a header plus a scrolling row of activity chips —
+ * which made a column of groups a column of panels, and put the chips' scroller
+ * inside a press target that then argued with it over every drag. As a row it
+ * matches the friend rows it shares the card with, and the chips are on the
+ * group's own page, one tap away, where they are not competing for gestures.
+ */
+function GroupRow({
+  group,
+  first,
+  last,
+  onPress
+}: {
+  group: Group;
+  /** Carries the rule above and the padding at the card's edges — see `listRow`. */
+  first: boolean;
+  last: boolean;
+  onPress: () => void;
+}) {
+  const { palette } = useLumo();
   const groupAvatarSvg = React.useMemo(() => buildGroupAvatarSvg(group.avatarSeed ?? group.id), [group.avatarSeed, group.id]);
 
   return (
-    /**
-     * The card is a plain View, and only its HEADER is pressable.
-     *
-     * It used to be one Pressable wrapping everything, which put the activity
-     * chips' horizontal ScrollView inside a press target spanning the whole
-     * card — the two then argued over every drag, and the row would not scroll
-     * reliably. Splitting them gives the scroller its gestures back. The cost
-     * is that dragging across the chips no longer opens the group, which is
-     * the right way round: that area's job is to scroll.
-     */
-    <View style={[styles.groupCard, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Open group ${group.name}`}
-        onPress={onPress}
-        onPressIn={() => setPressed(true)}
-        onPressOut={() => setPressed(false)}
-        style={[styles.groupHeader, { opacity: pressed ? 0.7 : 1 }]}
-      >
-        <Avatar svg={groupAvatarSvg} size={40} />
-        <View style={styles.groupHeaderText}>
-          <AppText variant="titleSmall" color={palette.ink} numberOfLines={1} style={styles.groupName}>
-            {group.name}
-          </AppText>
-          <AppText variant="caption" color={palette.subtle} numberOfLines={1} style={styles.groupMeta}>
-            {group.progress} {group.progress === 1 ? "completion" : "completions"} · {group.members.length}{" "}
-            {group.members.length === 1 ? "member" : "members"}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Open group ${group.name}`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.listRow,
+        first ? styles.listRowFirst : { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.hairline },
+        last ? styles.listRowLast : null,
+        { opacity: pressed ? 0.7 : 1 }
+      ]}
+    >
+      <Avatar svg={groupAvatarSvg} size={42} />
+      <View style={styles.friendText}>
+        <AppText variant="titleSmall" color={palette.ink} numberOfLines={1} style={styles.friendName}>
+          {group.name}
+        </AppText>
+        <AppText variant="caption" color={palette.subtle} numberOfLines={1} style={styles.groupMeta}>
+          {group.progress} {group.progress === 1 ? "completion" : "completions"} · {group.members.length}{" "}
+          {group.members.length === 1 ? "member" : "members"}
+        </AppText>
+      </View>
+      {group.streak >= 3 ? (
+        <View style={[styles.groupStreakBadge, { backgroundColor: palette.glowSoft }]}>
+          <FireIcon size={12} />
+          <AppText variant="caption" color={palette.ink} style={styles.groupStreakText}>
+            {group.streak}d
           </AppText>
         </View>
-        {group.streak >= 3 ? (
-          <View style={[styles.groupStreakBadge, { backgroundColor: palette.glowSoft }]}>
-            <FireIcon size={12} />
-            <AppText variant="caption" color={palette.ink} style={styles.groupStreakText}>
-              {group.streak}d
+      ) : null}
+      <View style={styles.groupAvatars}>
+        {group.members.slice(0, 2).map((member, index) => (
+          <View key={member.profile.lumoId} style={[styles.groupAvatar, { borderColor: palette.card, marginLeft: index ? -10 : 0 }]}>
+            {/* The wrapper stays here, unlike the group's own avatar — its ring
+                in the card colour is what separates overlapping faces. */}
+            <Avatar config={member.profile.avatar ?? defaultAvatar()} size={24} />
+          </View>
+        ))}
+        {group.members.length > 2 ? (
+          <View style={[styles.groupAvatar, { backgroundColor: alpha(palette.greenDark, "14"), borderColor: palette.card, marginLeft: -10 }]}>
+            <AppText variant="caption" color={palette.greenDark} style={styles.groupAvatarMore}>
+              +{group.members.length - 2}
             </AppText>
           </View>
         ) : null}
-        <View style={styles.groupAvatars}>
-          {group.members.slice(0, 2).map((member, index) => (
-            <View key={member.profile.lumoId} style={[styles.groupAvatar, { borderColor: palette.card, marginLeft: index ? -10 : 0 }]}>
-              {/* The wrapper stays here, unlike the group's own avatar — its
-                  ring in the card colour is what separates overlapping faces. */}
-              <Avatar config={member.profile.avatar ?? defaultAvatar()} size={24} />
-            </View>
-          ))}
-          {group.members.length > 2 ? (
-            <View style={[styles.groupAvatar, { backgroundColor: alpha(palette.greenDark, "14"), borderColor: palette.card, marginLeft: -10 }]}>
-              <AppText variant="caption" color={palette.greenDark} style={styles.groupAvatarMore}>
-                +{group.members.length - 2}
-              </AppText>
-            </View>
-          ) : null}
-        </View>
-      </Pressable>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        // Only scrolls when there is somewhere to scroll to — a short row that
-        // rubber-bands under the finger reads as broken.
-        alwaysBounceHorizontal={false}
-        style={styles.groupHabitsScroll}
-        contentContainerStyle={styles.groupHabits}
-      >
-        {group.habits.map((habit) => {
-          // Chip tinted with the activity's own color (theme green fallback).
-          const accent = habitAccent(habit.color, isDark) ?? palette.greenDark;
-
-          return (
-            <View key={habit.id} style={[styles.groupHabitChip, { backgroundColor: alpha(accent, "14") }]}>
-              <Icon name={habit.icon} size={13} color={accent} weight="bulk" />
-              <AppText variant="caption" color={accent} numberOfLines={1}>
-                {habit.name}
-              </AppText>
-            </View>
-          );
-        })}
-      </ScrollView>
-    </View>
+      </View>
+    </Pressable>
   );
 }
 
@@ -493,55 +552,81 @@ function InviteRow({
   );
 }
 
-// Initial-load placeholders sized to match the real rows/cards.
-function FriendsSkeleton() {
-  const { palette, isDark } = useLumo();
+/**
+ * Initial-load placeholder for the switching card's rows.
+ *
+ * One shape for both lists, because a group row and a friend row ARE the same
+ * shape — a 42pt avatar beside two lines, plus something small on the right (the
+ * stacked member faces on a group, the remove button on a friend). Bare rows, no
+ * card: the card is the page's, and this stands in for its contents.
+ *
+ * Three rows, and the name widths vary between them. A column of identical bars
+ * reads as a rendering artefact; uneven ones read as a list that has not arrived.
+ */
+function PeopleRowsSkeleton() {
+  const { palette } = useLumo();
+  const NAME_WIDTHS = [132, 104, 148];
 
   return (
-    <View style={[styles.friendsCard, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
+    <View>
       {[0, 1, 2].map((index) => (
         <View
           key={index}
-          style={[styles.friendRow, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.hairline }]}
+          style={[
+            styles.listRow,
+            index === 0 ? styles.listRowFirst : { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.hairline },
+            index === 2 ? styles.listRowLast : null
+          ]}
         >
-          <Skeleton width={42} height={42} round />
+          <Skeleton tone="light" width={42} height={42} round />
           <View style={styles.friendText}>
-            <Skeleton width={132} height={14} />
-            <Skeleton width={96} height={11} />
+            <Skeleton tone="light" width={NAME_WIDTHS[index]} height={14} />
+            <Skeleton tone="light" width={88} height={12} style={styles.skeletonMeta} />
           </View>
+          <Skeleton tone="light" width={28} height={28} round />
         </View>
       ))}
     </View>
   );
 }
 
-function GroupCardSkeleton() {
-  const { palette, isDark } = useLumo();
+/**
+ * The first card's placeholder: a group's label, then two habit rows.
+ *
+ * Built from the same styles the real band uses — `habitsGroup`, `habitsHeader`,
+ * `habitRow` — so the blocks land exactly where the content will and the card
+ * does not resize when the data arrives. What each block stands in for:
+ * the 20pt group avatar and its name, the count on the right, then per row the
+ * 34pt icon tile, the habit name, the members line under it, and the check.
+ */
+function GroupHabitsSkeleton() {
+  const { palette } = useLumo();
 
   return (
-    <View style={[styles.groupCard, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
-      {/* Header: group avatar, name + meta column, overlapping member faces. */}
-      <View style={styles.groupHeader}>
-        <Skeleton width={40} height={40} round />
-        <View style={styles.skeletonLines}>
-          <Skeleton width="50%" height={14} />
-          <Skeleton width="40%" height={10} />
+    <View style={styles.habitsGroup}>
+      <View style={styles.habitsHeader}>
+        <Skeleton tone="light" width={20} height={20} round />
+        <View style={styles.habitsGroupName}>
+          <Skeleton tone="light" width={104} height={12} />
         </View>
-        <View style={styles.groupAvatars}>
-          {[0, 1].map((index) => (
-            <View key={index} style={[styles.groupAvatar, { borderColor: palette.card, marginLeft: index ? -10 : 0 }]}>
-              <Skeleton width={24} height={24} round />
-            </View>
-          ))}
+        <Skeleton tone="light" width={52} height={12} />
+      </View>
+      {[0, 1].map((index) => (
+        <View
+          key={index}
+          style={[styles.habitRow, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: alpha(palette.hairline, "80") }]}
+        >
+          {/* The tile itself, not a circle inside it — the row's icon is a rounded
+              square of the habit's colour, and a small disc in a 34pt slot read as
+              a bullet rather than as the tile it is standing in for. */}
+          <Skeleton tone="light" width={34} height={34} style={styles.habitIcon} />
+          <View style={styles.habitText}>
+            <Skeleton tone="light" width={index ? 132 : 168} height={14} />
+            <Skeleton tone="light" width={116} height={12} style={styles.skeletonMeta} />
+          </View>
+          <Skeleton tone="light" width={22} height={22} round />
         </View>
-      </View>
-      {/* Activity chips. Bare, not in the bleeding scroller — the real row's
-          negative margin and matching inset cancel out to the same edge. */}
-      <View style={styles.skeletonChips}>
-        <Skeleton width={84} height={24} round />
-        <Skeleton width={104} height={24} round />
-        <Skeleton width={72} height={24} round />
-      </View>
+      ))}
     </View>
   );
 }
@@ -549,12 +634,11 @@ function GroupCardSkeleton() {
 export default function FriendsScreen() {
   const router = useRouter();
   const { palette, isDark, isPro, lumoIdSuffix } = useLumo();
-  // Habits, not Groups: the tab you open this screen for day to day is what
-  // you still owe today, and the other two are where you go to change the
-  // arrangement rather than to act on it.
-  const [activeTab, setActiveTab] = React.useState<FriendsTab>("habits");
   const [inviteVisible, setInviteVisible] = React.useState(false);
   const [invitesVisible, setInvitesVisible] = React.useState(false);
+  // Groups first: it is the list you act on, and Friends is where you go to add
+  // somebody rather than to check on them.
+  const [socialTab, setSocialTab] = React.useState<SocialTab>("groups");
   const [sendPressed, setSendPressed] = React.useState(false);
   const [sendingInvite, setSendingInvite] = React.useState(false);
   const [inviteId, setInviteId] = React.useState(LUMO_ID_PREFIX);
@@ -568,16 +652,56 @@ export default function FriendsScreen() {
   // First fetch shows skeletons; later focus refreshes update in place.
   const [initialLoading, setInitialLoading] = React.useState(true);
   const syncOffline = friendsService.status() === "offline";
-  const myGroups = groups.filter((group) => group.ownedByMe);
-  const invitedGroups = groups.filter((group) => !group.ownedByMe);
   const myLumoId = formatLumoId(lumoIdSuffix);
-  // Only groups with something due today — a group whose activities are all
-  // scheduled for other days has nothing to say on this tab, and listing it
-  // with an empty card would read as a bug.
-  const groupsWithHabitsToday = React.useMemo(
-    () => groups.filter((group) => scheduledGroupHabitsOn(group.habits, toDateKey()).length > 0),
+  // Yours first, then the ones you were invited into — one list, since who
+  // created a group is not how anybody looks for it.
+  const allGroups = React.useMemo(
+    () => [...groups.filter((group) => group.ownedByMe), ...groups.filter((group) => !group.ownedByMe)],
     [groups]
   );
+  /**
+   * Today, per group: what was scheduled, what is still outstanding, and how much
+   * of it is done.
+   *
+   * Resolved HERE rather than inside each band, for two reasons. The card's
+   * heading counts every group at once, the way home's does. And a finished habit
+   * leaves the list — so the page has to know which groups still have something
+   * pending before it renders them, or a group that has been fully cleared would
+   * take a divider with it and leave a rule hanging under the heading.
+   *
+   * Groups with nothing scheduled today are dropped outright; they have nothing
+   * to say in this card, and a band with no rows reads as a bug.
+   */
+  const todayGroups = React.useMemo(() => {
+    const dateKey = toDateKey();
+
+    return groups
+      .map((group) => {
+        const scheduled = scheduledGroupHabitsOn(group.habits, dateKey);
+        const me = group.members.find((member) => member.profile.lumoId === myLumoId);
+        const doneIds = me?.completedTodayHabitIds ?? [];
+        const pending = scheduled.filter((habit) => {
+          // A "multiple" habit is finished only once its count reaches the
+          // target, so a half-done one stays on the list — which is also what
+          // keeps hold-to-undo reachable while there is something to undo.
+          const target = habit.goal.type === "multiple" ? habit.goal.count : 1;
+          const count = me?.todayCountByHabit?.[habit.id] ?? 0;
+
+          return !doneIds.includes(habit.id) && count < target;
+        });
+
+        return { group, due: scheduled.length, done: scheduled.length - pending.length, pending };
+      })
+      .filter((entry) => entry.due > 0);
+  }, [groups, myLumoId]);
+  /** The bands the card actually draws — the cleared groups have dropped out. */
+  const pendingGroups = todayGroups.filter((entry) => entry.pending.length > 0);
+  /** What the directory card's heading counts, whichever list the pill is on. */
+  const directoryCount = socialTab === "groups" ? allGroups.length : friends.length;
+  const habitsDueToday = todayGroups.reduce((sum, entry) => sum + entry.due, 0);
+  const habitsDoneToday = todayGroups.reduce((sum, entry) => sum + entry.done, 0);
+  /** The day cleared: something was due, and none of it is left. Worth a sparkle. */
+  const allHabitsDone = habitsDueToday > 0 && pendingGroups.length === 0;
 
   const [refreshing, setRefreshing] = React.useState(false);
   /** The group habit currently mid-write, so its row cannot be fired twice. */
@@ -634,9 +758,9 @@ export default function FriendsScreen() {
   const inviteCount = friendInvites.length + groupInvites.length;
 
   /**
-   * Check-in straight from the Habits tab, rather than sending the reader into
-   * the group to do it. Same write the group page makes — `syncCompletion` with
-   * the day's running count — so the two screens cannot drift apart on what a
+   * Check-in straight from this page, rather than sending the reader into the
+   * group to do it. Same write the group page makes — `syncCompletion` with the
+   * day's running count — so the two screens cannot drift apart on what a
    * check-in means.
    *
    * `busyHabitId` holds the row still for the round trip. Without it a double
@@ -666,6 +790,47 @@ export default function FriendsScreen() {
     }
 
     setBusyHabitId(null);
+  }
+
+  /**
+   * Checking in ASKS FIRST on this page, unlike home's list.
+   *
+   * Two things make a tap here worth a question. The row leaves the list on the
+   * last rep, so a mis-tap does not just flip a tick — it takes the habit off the
+   * page, and the undo that would put it back goes with it. And this is a shared
+   * habit: the number it moves is one the rest of the group can see.
+   *
+   * The dialog names the rep it is about to log, so a multi-count activity says
+   * which one of the day's targets this is rather than "check in?" three times
+   * over. Nothing is written until the confirm — `logGroupHabit` does the work.
+   */
+  function confirmLogGroupHabit(group: Group, habit: GroupHabit) {
+    const me = group.members.find((member) => member.profile.lumoId === myLumoId);
+
+    if (!me || busyHabitId) {
+      return;
+    }
+
+    const target = habit.goal.type === "multiple" ? habit.goal.count : 1;
+    const count = me.todayCountByHabit?.[habit.id] ?? 0;
+
+    if (count >= target) {
+      return;
+    }
+
+    const next = count + 1;
+    const finishes = next >= target;
+
+    Alert.alert(
+      "Check in?",
+      target > 1
+        ? `Log ${next} of ${target} for ${habit.name}.${finishes ? " That finishes it for today." : ""}`
+        : `Mark ${habit.name} as done today. Your group will see it.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Check in", onPress: () => void logGroupHabit(group, habit) }
+      ]
+    );
   }
 
   /**
@@ -769,21 +934,11 @@ export default function FriendsScreen() {
   }
 
   // Refresh on focus so a group created on the form screen (or an invite
-  // accepted on the profile screen) shows up on return.
-  /**
-   * Every arrival lands on Habits, not on whichever tab was left open.
-   *
-   * A tab screen stays mounted once visited, so without this the segment you
-   * last tapped is where you come back to — days later, from another tab, with
-   * no memory of having set it. Habits is the one worth reopening on: it is
-   * what you owe today, and the other two are where you go to change the
-   * arrangement rather than to act on it.
-   *
-   * Same reasoning as `Screen` resetting scroll position on focus.
-   */
+  // accepted on the profile screen) shows up on return. There is no tab to put
+  // back any more — `Screen` returns the page to the top, which lands on the
+  // day's habits, and everything else is one scroll below them.
   useFocusEffect(
     React.useCallback(() => {
-      setActiveTab("habits");
       loadData();
       // `Screen` puts the scroller back to the top on focus; this puts the
       // backdrop's fade back with it. Without it a tab left scrolled down comes
@@ -921,21 +1076,21 @@ export default function FriendsScreen() {
       }
       // Written as `stickyHeader` rather than as the first child — which `Screen`
       // would pin by itself — only so the bar can be wrapped and measured, which
-      // is what the tab row drops from.
+      // is what the first card drops from.
       stickyHeader={
         <View onLayout={handleHeaderLayout}>
-          {/* The app's page header, same as Habits and Profile: outlined 38pt
-              button, centred serif title. This was the last tab still running its
-              own — a left-aligned Lexend-Black 34 headline over a filled green
-              circle, which made Friends look like a different app from the tab
-              beside it. */}
+          {/* The app's page header with the Move screen's pill in its centre slot
+              instead of a title. The word "Friends" up there was naming the tab
+              you had already tapped to get here, while the switch that actually
+              matters — which list the card at the foot of the page is showing —
+              had nowhere to live. `hitSlop` is what brings the shrunk track back
+              to a 44pt target; see HeaderTabs. */}
           <ScreenHeader
-            title={TAB_TITLE[activeTab]}
-            // Invitations are an inbox, not a peer of Groups and Friends — they
+            centerContent={<HeaderTabs options={SOCIAL_TABS} value={socialTab} onChange={setSocialTab} hitSlop={8} />}
+            // Invitations are an inbox, not a peer of the lists below — they
             // arrive unbidden and empty out as you deal with them. As a tab they
             // sat there reading "0" most of the time; on the bar they are silent
-            // until something is actually waiting, and the count is visible from
-            // either tab rather than only once you have gone looking.
+            // until something is actually waiting.
             // 22, matching Profile: these two carry `bulk` glyphs, whose lighter
             // duotone strokes read a size smaller than the bold ones every other
             // header uses at 20.
@@ -947,173 +1102,213 @@ export default function FriendsScreen() {
               badge: inviteCount,
               onPress: () => setInvitesVisible(true)
             }}
-            rightAction={{
-              // A bare bold + on Groups, exactly as the Habits header draws its
-              // add button — `elementPlus` is a plus inside a square, which read
-              // as a different control from the one doing the same job one tab
-              // over.
-              icon: activeTab === "friends" ? "userCircleAdd" : "plus",
-              // Habits come only from groups, so the Habits tab keeps the Groups
-              // tab's action rather than offering none.
-              label: activeTab === "friends" ? "Invite a friend" : "Create a group",
-              iconWeight: activeTab === "friends" ? "bulk" : "bold",
-              iconSize: activeTab === "friends" ? 22 : 20,
-              onPress: () => {
-                if (activeTab === "friends") {
-                  setInviteVisible(true);
-                } else {
-                  router.push("/group/new");
-                }
-              }
-            }}
+            // Whatever the tab you are standing on adds. Two buttons up here
+            // would mean one of them always acting on a list you cannot see, and
+            // the pill between them already says which list that is.
+            //
+            // A bare bold + for a group, exactly as the Habits header draws its
+            // add button — `elementPlus` is a plus inside a square, which read as
+            // a different control from the one doing the same job one tab over.
+            rightAction={
+              socialTab === "friends"
+                ? {
+                    icon: "userCircleAdd",
+                    label: "Invite a friend",
+                    iconWeight: "bulk",
+                    iconSize: 22,
+                    onPress: () => setInviteVisible(true)
+                  }
+                : {
+                    icon: "plus",
+                    label: "Create a group",
+                    iconWeight: "bold",
+                    iconSize: 20,
+                    onPress: () => router.push("/group/new")
+                  }
+            }
           />
         </View>
       }
     >
-      {/* Dropped past the picnic — `styles.tabRow`'s own 8pt, plus however much
-          of the scene there is to clear. */}
-      <View style={[styles.tabRow, { marginTop: spacing.xs + sceneDrop }]}>
-        <SegmentedControl options={HABITS_TAB} value={activeTab} onChange={setActiveTab} style={styles.tabHabits} />
-        <SegmentedControl options={SOCIAL_TABS} value={activeTab} onChange={setActiveTab} style={styles.tabSocial} />
-      </View>
+      {/* TODAY'S GROUP HABITS — the page's first card, and the only part of it
+          that is about right now.
 
-      {activeTab === "habits" ? (
-      <View style={styles.habitsSections}>
+          One card for all of them, the way home carries the day's own habits: the
+          heading counts the lot, and each group's name heads its own band inside.
+          A habit LEAVES this list the moment it is finished, so what is left is
+          always what is still owed — the heading's count is what keeps the ones
+          you have done from vanishing without trace. Dropped past the picnic on
+          the plate behind it. */}
+      <Card style={[styles.listCard, { marginTop: sceneDrop }]}>
+        <View style={styles.listHeader}>
+          <AppText color={palette.ink} numberOfLines={1} style={styles.listTitle}>
+            Group Habits
+          </AppText>
+          {habitsDueToday > 0 ? (
+            <AppText variant="caption" color={palette.subtle} numberOfLines={1} style={styles.listCount}>
+              <AppText variant="caption" color={palette.ink} style={styles.listCountValue}>
+                {habitsDoneToday}
+              </AppText>{" "}
+              of {habitsDueToday} done
+            </AppText>
+          ) : null}
+        </View>
+
         {initialLoading ? (
-          <GroupCardSkeleton />
-        ) : groupsWithHabitsToday.length ? (
-          groupsWithHabitsToday.map((group) => (
-            <GroupHabitsCard
-              key={group.id}
-              group={group}
+          <GroupHabitsSkeleton />
+        ) : pendingGroups.length ? (
+          pendingGroups.map((entry, index) => (
+            <GroupHabitsSection
+              key={entry.group.id}
+              group={entry.group}
+              pending={entry.pending}
+              doneCount={entry.done}
+              dueCount={entry.due}
               myLumoId={myLumoId}
               busyHabitId={busyHabitId}
-              onOpen={() => router.push(`/group/${group.id}`)}
-              onToggle={(habit) => logGroupHabit(group, habit)}
-              onUndo={(habit) => confirmUndoGroupHabit(group, habit)}
+              divided={index > 0}
+              onOpen={() => router.push(`/group/${entry.group.id}`)}
+              onToggle={(habit) => confirmLogGroupHabit(entry.group, habit)}
+              onUndo={(habit) => confirmUndoGroupHabit(entry.group, habit)}
             />
           ))
         ) : (
-          <View style={styles.emptyState}>
-            <EmptyState
-              icon="taskSquare"
-              title={groups.length ? "Nothing due today" : "No group habits yet"}
-              body={
-                groups.length
-                  ? "None of your groups have an activity scheduled for today — enjoy the breather."
-                  : "Join or create a group and its shared activities will gather here each day."
-              }
-            />
-          </View>
-        )}
-      </View>
-      ) : activeTab === "friends" ? (
-      <View style={styles.section}>
-        {initialLoading ? (
-          <FriendsSkeleton />
-        ) : friends.length ? (
-          <View style={[styles.friendsCard, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
-            {friends.map((friend, index) => (
-              <View
-                key={friend.profile.lumoId}
-                style={[
-                  styles.friendRow,
-                  index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.hairline }
-                ]}
-              >
-                {/* Circular, the way the avatar renders everywhere else. It was
-                    a square-clipped portrait inside a tinted disc, which sheared
-                    the bust off along a flat line — the art carries its own
-                    background, so clipping it round IS the disc. */}
-                <Avatar config={friend.profile.avatar ?? defaultAvatar()} size={42} />
-                <View style={styles.friendText}>
-                  <AppText variant="titleSmall" color={palette.ink} numberOfLines={1} style={styles.friendName}>
-                    {friend.profile.nickname || "Lumo user"}
-                  </AppText>
-                  <AppText variant="caption" color={palette.subtle} numberOfLines={1}>
-                    {friend.profile.lumoId}
-                  </AppText>
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${friend.profile.nickname || "friend"}`}
-                  hitSlop={8}
-                  onPress={() => handleUnfriend(friend)}
-                  style={({ pressed }) => [styles.friendRemove, { backgroundColor: alpha(palette.danger, "12"), opacity: pressed ? 0.7 : 1 }]}
-                >
-                  <Icon name="close" size={15} color={palette.danger} weight="bulk" />
-                </Pressable>
+          // Inside the card, and compact: this is the "nothing left" face of a
+          // list, not a dead end, so it takes the shape home's rest day does.
+          // Three states, not two — a cleared day has to read differently from a
+          // day that never had anything on it, or finishing the last habit looks
+          // like the list broke.
+          // Fades in as the last row fades out, so clearing the day is one motion
+          // rather than a blank card between the two.
+          <Reanimated.View entering={FadeIn.duration(LIST_SHIFT_MS)} style={styles.listRest}>
+            {/* Only on the cleared day. The other two states are the absence of
+                work rather than the end of it, and a sparkle over "nothing
+                scheduled" would be congratulating the calendar. */}
+            {allHabitsDone ? (
+              <View style={[styles.listRestIcon, { backgroundColor: alpha(palette.greenDark, isDark ? "26" : "14") }]}>
+                <Icon name="sparkle" size={20} color={palette.greenDark} weight="bulk" />
               </View>
-            ))}
-          </View>
-        ) : (
-          // On the canvas, not in a card — the same treatment Habits gives an
-          // empty filter. A card around an empty state draws a box around
-          // nothing.
-          <View style={styles.emptyState}>
-            <EmptyState
-              icon="friends"
-              title={syncOffline ? "Friends are syncing soon" : "No friends yet"}
-              body={
-                syncOffline
-                  ? "Friend connections sync in an upcoming update. Share your Lumo ID or QR now so friends are ready to add you."
-                  : "Share your Lumo ID and start cheering each other on."
-              }
-            />
-          </View>
+            ) : null}
+            <AppText variant="titleSmall" color={palette.ink} style={styles.listRestTitle}>
+              {allHabitsDone ? "All done today" : groups.length ? "Nothing due today" : "No group habits yet"}
+            </AppText>
+            {/* `muted` on the cleared day, `subtle` on the other two: this line is
+                a note that the work is behind you and can recede, where the others
+                are telling somebody what to do next. */}
+            <AppText variant="bodySmall" color={allHabitsDone ? palette.muted : palette.subtle} style={styles.listRestBody}>
+              {allHabitsDone
+                ? `Every one of today's ${habitsDueToday === 1 ? "activities" : `${habitsDueToday} activities`} is checked off. Your groups can see it.`
+                : groups.length
+                  ? "None of your groups have an activity scheduled for today — enjoy the breather."
+                  : "Join or create a group and its shared activities will gather here each day."}
+            </AppText>
+          </Reanimated.View>
         )}
-      </View>
-      ) : (
-      // Owned and joined groups are one list to the reader, so the seam between
-      // the two sections takes the same 8pt the cards inside them do. It was
-      // inheriting the screen's 24pt stack gap, which read as a section break
-      // with no heading to explain it.
-      <View style={styles.groupSections}>
-        {/* Hidden entirely when there are no owned groups — the invited
-            section below always shows and carries the tab's empty state. */}
-        {initialLoading || myGroups.length ? (
-          <View style={styles.groupList}>
-            {initialLoading ? (
-              <GroupCardSkeleton />
-            ) : (
-              myGroups.map((group) => (
-                <GroupCard key={group.id} group={group} onPress={() => router.push(`/group/${group.id}`)} />
-              ))
-            )}
-          </View>
-        ) : null}
+      </Card>
 
-        {/* Invited/joined groups. The empty state only shows when the user has
-            NO groups at all — once any owned or joined group exists, this
-            section is hidden rather than showing an empty "joined" card. */}
-        {initialLoading || invitedGroups.length || !myGroups.length ? (
-        <View style={styles.groupList}>
-          {initialLoading ? (
-            <GroupCardSkeleton />
-          ) : invitedGroups.length ? (
-            invitedGroups.map((group) => <GroupCard key={group.id} group={group} onPress={() => router.push(`/group/${group.id}`)} />)
+      {/* THE DIRECTORY — one card, and the pill in the page bar chooses which
+          list is in it.
+
+          It carries a heading of its own, matching the habits card above: the
+          pill names what you SWITCHED to, up at the top of the screen, and by the
+          time you have scrolled to the card it is off-screen. Two headings that
+          say the same word are worth less than a card that says what it holds. */}
+      <Card style={[styles.listCard, styles.directoryCard]}>
+        <View style={[styles.listHeader, styles.directoryHeader]}>
+          <AppText color={palette.ink} numberOfLines={1} style={styles.listTitle}>
+            {socialTab === "groups" ? "Groups" : "Friends"}
+          </AppText>
+          {/* The count alone, with no unit after it — "3 groups" beside a heading
+              reading "Groups" is the same word twice. Hidden while the list is
+              empty, where the state below says it in a sentence.
+
+              Held back in `muted`, like the tally beside each group's name in the
+              card above: the heading is what you read, and the number is there
+              when you look for it. Nothing here is a figure worth a bold value
+              the way "2 of 7 done" is — it is the length of the list under it. */}
+          {directoryCount > 0 ? (
+            <AppText variant="caption" color={palette.muted} numberOfLines={1} style={styles.listCount}>
+              {directoryCount}
+            </AppText>
+          ) : null}
+        </View>
+
+        {initialLoading ? (
+          <PeopleRowsSkeleton />
+        ) : socialTab === "groups" ? (
+          allGroups.length ? (
+            allGroups.map((group, index) => (
+              <GroupRow
+                key={group.id}
+                group={group}
+                first={index === 0}
+                last={index === allGroups.length - 1}
+                onPress={() => router.push(`/group/${group.id}`)}
+              />
+            ))
           ) : (
-            // Was a bare icon over a line of grey text in a card — the only
-            // empty state in the app not using the shared component, so it had
-            // no mascot, no heading, and no way out of the state it described.
-            <View style={styles.emptyState}>
+            <View style={styles.listRest}>
+              <AppText variant="titleSmall" color={palette.ink} style={styles.listRestTitle}>
+                No groups yet
+              </AppText>
               {/* No CTA — the header's + is the way to create one, and a button
                   here would be a second front door to the same thing. */}
-              <EmptyState
-                icon="elementPlus"
-                title="No groups yet"
-                body="Tap + to create one with friends — every member's check-ins add up to the same goal."
-              />
+              <AppText variant="bodySmall" color={palette.subtle} style={styles.listRestBody}>
+                Tap + to create one with friends — every member's check-ins add up to the same goal.
+              </AppText>
             </View>
-          )}
-        </View>
-        ) : null}
-      </View>
-      )}
+          )
+        ) : friends.length ? (
+          friends.map((friend, index) => (
+            <View
+              key={friend.profile.lumoId}
+              style={[
+                styles.listRow,
+                index === 0 ? styles.listRowFirst : { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.hairline },
+                index === friends.length - 1 ? styles.listRowLast : null
+              ]}
+            >
+              {/* Circular, the way the avatar renders everywhere else. It was a
+                  square-clipped portrait inside a tinted disc, which sheared the
+                  bust off along a flat line — the art carries its own background,
+                  so clipping it round IS the disc. */}
+              <Avatar config={friend.profile.avatar ?? defaultAvatar()} size={42} />
+              <View style={styles.friendText}>
+                <AppText variant="titleSmall" color={palette.ink} numberOfLines={1} style={styles.friendName}>
+                  {friend.profile.nickname || "Lumo user"}
+                </AppText>
+                <AppText variant="caption" color={palette.subtle} numberOfLines={1}>
+                  {friend.profile.lumoId}
+                </AppText>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Remove ${friend.profile.nickname || "friend"}`}
+                hitSlop={8}
+                onPress={() => handleUnfriend(friend)}
+                style={({ pressed }) => [styles.friendRemove, { backgroundColor: alpha(palette.danger, "12"), opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Icon name="close" size={15} color={palette.danger} weight="bulk" />
+              </Pressable>
+            </View>
+          ))
+        ) : (
+          <View style={styles.listRest}>
+            <AppText variant="titleSmall" color={palette.ink} style={styles.listRestTitle}>
+              {syncOffline ? "Friends are syncing soon" : "No friends yet"}
+            </AppText>
+            <AppText variant="bodySmall" color={palette.subtle} style={styles.listRestBody}>
+              {syncOffline
+                ? "Friend connections sync in an upcoming update. Share your Lumo ID or QR now so friends are ready to add you."
+                : "Share your Lumo ID and start cheering each other on."}
+            </AppText>
+          </View>
+        )}
+      </Card>
 
-      {/* The invitations inbox. A sheet rather than a third tab: you open it,
-          clear it, and leave — and this way the count on the bar is readable
-          from both tabs instead of only from the one you are standing on. */}
+      {/* The invitations inbox. A sheet rather than a section of its own: you
+          open it, clear it, and leave, and most days there is nothing in it —
+          which as a block on the page would be a heading over an empty list. */}
       <Modal visible={invitesVisible} transparent animationType="fade" onRequestClose={() => setInvitesVisible(false)}>
         <View style={styles.inviteOverlay}>
           <Pressable style={StyleSheet.absoluteFillObject} accessibilityLabel="Close" onPress={() => setInvitesVisible(false)} />
@@ -1160,10 +1355,14 @@ export default function FriendsScreen() {
               </ScrollView>
             ) : (
               // `quiet` — an empty inbox is the ordinary state here, not
-              // something the user has to go and fix.
+              // something the user has to go and fix. `compact` and no art
+              // because this one stands in a small sheet rather than on a page:
+              // the glyph was the same add-a-friend mark as the header button
+              // that opens this, drawn at 30pt over two lines of copy.
               <EmptyState
                 quiet
-                icon="userCircleAdd"
+                compact
+                art={false}
                 title="No invitations"
                 body="Group and friend invites land here. Share your Lumo ID so people can find you."
               />
@@ -1231,7 +1430,10 @@ const styles = StyleSheet.create({
     // the zero is stated here instead.
     paddingTop: 0,
     paddingBottom: layout.tabScreenBottomPadding,
-    gap: spacing.lg
+    // 8 between the two cards, which is home's own CONTENT_GAP. At the screen
+    // default of 24 they read as two unrelated panels; this close, they read as
+    // one page — today's work, then who it is with.
+    gap: spacing.xs
   },
   unpinnedContent: {
     paddingTop: spacing.lg
@@ -1375,12 +1577,6 @@ const styles = StyleSheet.create({
     // No gap either — the rows are separated by rules now, not by air.
     paddingBottom: spacing.xxs
   },
-  // On the canvas rather than in a card, matching the Habits screen: a card
-  // drawn around an empty state is a box around nothing.
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: spacing.xl
-  },
   // The inset lives on the row, not on the sheet, so the hairline between rows
   // runs the sheet's full width while the content stays lined up with the
   // heading above it.
@@ -1409,61 +1605,191 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   /**
-   * Two gaps, and the ratio between them is what does the grouping: the space
-   * inside a block stays half the space between two of them, so the heading
-   * reads as belonging to the card under it rather than floating between two.
-   * Both moved up together for that reason — at 16 inside a 24 outer the two
-   * were close enough that the grouping stopped reading.
+   * Both of this page's cards, on home's habits-card padding exactly.
+   *
+   * 20 horizontally rather than the 16 these lists used to carry, and the same
+   * uneven vertical inset: the rows bring their own 12 at the foot, so 12 here
+   * lands on 24 under the last one against the 16 above the heading. The
+   * asymmetry is deliberate — a flush bottom edge makes the last row look
+   * clipped against the card boundary. Taken off the card rather than off that
+   * row, because zeroing one row's padding puts its avatar off-centre against
+   * every other row's.
    */
-  habitsSections: {
-    gap: spacing.xl
+  listCard: {
+    paddingHorizontal: spacing.ml,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm
   },
-  habitsGroup: {
-    gap: spacing.md
-  },
-  // One card per group on the Habits tab. Rows run edge to edge inside it, so
-  // the card only insets horizontally and the rows carry their own height.
   /**
-   * LIST_CARD_PADDING, so this lines up with the friend rows and group cards
-   * on the same screen rather than with the roomier home habits card. These
-   * rows carry no icon tile, so the tighter inset is what keeps the list light
-   * — at 20 the card read as padded around a row that had nothing in it.
+   * The bottom of the directory card only.
+   *
+   * Its top is `listCard`'s 16, the same as the habits card's — both cards now
+   * open on a heading, so they open on the same inset. The FOOT is the one that
+   * differs: this card's last row gave up its own padding (see `listRowLast`),
+   * where the habits card's last habit row still brings 12 of its own. 20 here
+   * covers that 12 and leaves the last avatar sitting in the same air the rows
+   * above it have between them.
    */
-  habitsCard: {
-    borderRadius: radius.card,
-    paddingHorizontal: LIST_CARD_PADDING,
-    paddingVertical: spacing.xxs,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2
+  directoryCard: {
+    paddingBottom: spacing.ml
   },
-  // Inset by the card's own padding so the name lines up with the habit names
-  // under it rather than with the card's edge.
+  // The air under this card's heading, which the habits card gets from its first
+  // band's own padding instead — the rows here start flush, having given theirs up
+  // at the card's edges, so the heading carries it. 12 against that band's 8,
+  // because the band spends another 8 on its group-name row before anything is
+  // read; see `habitsGroup`.
+  directoryHeader: {
+    marginBottom: spacing.sm
+  },
+  // The card's own heading: what it holds, and how much of it is done. A step
+  // under the app's section headings — it sits INSIDE the card it names rather
+  // than above a group of them, so at the full step it outweighed the habit
+  // names underneath it. Home's habits card is built the same way.
+  listHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    minHeight: 28
+  },
+  listTitle: {
+    flexShrink: 1,
+    fontFamily: fontFamilies.lexendBold,
+    fontSize: 14,
+    lineHeight: 19
+  },
+  listCount: {
+    flexShrink: 0,
+    fontFamily: fontFamilies.lexendMedium
+  },
+  listCountValue: {
+    fontFamily: fontFamilies.lexendBold
+  },
+  // One group's band inside that card: its name, then its rows. The rule is what
+  // separates two groups; the rows inside carry their own lighter ones.
+  //
+  // On the FIRST band this padding is the gap under the card's heading — the
+  // divided ones below override it with their own.
+  //
+  // 8, where the directory card's heading takes 12: the band opens on its own
+  // group-name row, which brings a further 8 of its own, so the heading is
+  // already 16 clear of anything you read. The directory card's rows start flush,
+  // and need the whole gap from the heading.
+  habitsGroup: {
+    paddingTop: spacing.xs
+  },
+  /**
+   * The seam between two groups, and the air either side of it.
+   *
+   * `marginTop` falls OUTSIDE the border and `paddingTop` inside, so these are the
+   * two halves of that air and they are deliberately the SAME number — the rule
+   * sits centred between the last habit above it and the group name below.
+   *
+   * They have to be stated separately to come out even: at 12/16 the rule rode up
+   * against the habit above it. The two rows flanking it each spend a further 8 of
+   * their own (`habitRow` and `habitsHeader` share that inset), so equal here IS
+   * equal on screen — 20 of air on each side of the seam at this setting.
+   */
+  habitsGroupDivided: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth
+  },
   habitsHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
-    paddingHorizontal: LIST_CARD_PADDING
+    paddingVertical: spacing.xs
   },
+  // An empty list, stated inside the card that would have held it — home's rest
+  // day, reused by both cards here. The mascot-and-heading `EmptyState` is for a
+  // whole screen with nothing on it; inside a card it draws a box around a
+  // drawing of nothing.
+  listRest: {
+    alignItems: "center",
+    gap: spacing.xxs,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md
+  },
+  // The celebration mark, and only for the cleared day. A tinted disc rather than
+  // a bare glyph, so it reads as a small award and not as another row's icon that
+  // has lost its row.
+  listRestIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.xxs
+  },
+  // A point off `titleSmall` and `bodySmall`, with the leading brought down to
+  // match — an in-card state is a note about a list, not a screen of its own, and
+  // at the full steps it was setting the largest type in either card.
+  listRestTitle: {
+    fontFamily: fontFamilies.lexendSemiBold,
+    fontSize: 15,
+    lineHeight: 20
+  },
+  listRestBody: {
+    textAlign: "center",
+    fontSize: 13,
+    lineHeight: 18,
+    maxWidth: 280
+  },
+  // The shared row of the second card: a 42pt avatar, two lines, and whatever
+  // that list puts on the right. Groups and friends use the SAME row — they are
+  // two directories of the same kind of thing, and rows that differed by a few
+  // points read as a rendering fault when the pill swaps them.
+  listRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.sm
+  },
+  /**
+   * The rows at the card's own edges give their outer padding up.
+   *
+   * The card already insets 16 at the top and 12 at the foot; a row carrying its
+   * own 12 on top of that put 28 above the first avatar and 24 under the last,
+   * against the 24 BETWEEN two rows — so the list read as loose at the ends and
+   * tight in the middle. Only the outer half goes: each row still keeps the
+   * padding on its inward side, which is what holds every avatar centred against
+   * every other one.
+   */
+  // The second line of a skeleton row. `friendText`/`habitText` set a 1pt gap for
+  // real type, whose own leading does the rest of the work; two bare blocks that
+  // close together read as one thick bar.
+  skeletonMeta: {
+    marginTop: 3
+  },
+  listRowFirst: {
+    paddingTop: 0
+  },
+  listRowLast: {
+    paddingBottom: 0
+  },
+  // Small enough to read as a mark beside a label rather than as a portrait: the
+  // habits' own icon tiles are the left edge of this list, and a 26pt group face
+  // above them was the largest thing in the card.
   habitsAvatar: {
-    width: 26,
-    height: 26,
+    width: 20,
+    height: 20,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden"
   },
+  // Both on `caption` as it comes — 12pt semibold, no weight of their own. The
+  // size is what holds this row back from the habit names below it (at the
+  // regular weight the pair went soft enough to read as a footnote to the rows
+  // rather than as the label above them); the two COLOURS then separate the name
+  // from its tally, `subtle` against `muted`.
   habitsGroupName: {
     flex: 1,
-    minWidth: 0,
-    fontFamily: fontFamilies.lexendBold,
-    fontSize: 14,
-    lineHeight: 19
+    minWidth: 0
   },
   habitsCount: {
-    flexShrink: 0,
-    fontFamily: fontFamilies.lexendSemiBold
+    flexShrink: 0
   },
   // Shorter than the home card's rows, which is right for what these carry:
   // a bare glyph and a name, no icon tile and usually no second line.
@@ -1474,8 +1800,12 @@ const styles = StyleSheet.create({
     minHeight: 52,
     paddingVertical: spacing.xs
   },
+  // 34, not home's 46: these rows are shorter, and a tile that size would stand
+  // taller than the two lines beside it.
   habitIcon: {
-    width: 24,
+    width: 34,
+    height: 34,
+    borderRadius: tileRadius(34),
     alignItems: "center",
     justifyContent: "center"
   },
@@ -1511,70 +1841,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center"
   },
-  // Two controls, not one — see the note on HABITS_TAB. Laid out exactly as
-  // the Habits screen lays out its own split filters.
-  //
-  // The negative margin pulls up against the header's own marginBottom, which
-  // the screen's 24pt stack gap already covers; carrying both put 40pt above
-  // the tabs.
-  tabRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    /**
-     * 8 on top of the header's own 16pt margin, for the same 24 Habits leaves
-     * under its bar.
-     *
-     * This used to be -16, cancelling that margin: with the header inside the
-     * scroller the page's 24pt stack gap landed under it as well, and the two
-     * together were too much. Pinned, the stack gap is gone and the negative
-     * margin left the tabs touching the bar.
-     */
-    marginTop: spacing.xs,
-    // Takes the gap below up to the same 32 the sections use between blocks, so
-    // the tabs sit in the page's own rhythm rather than a tighter one.
-    marginBottom: spacing.xs
-  },
-  tabHabits: {
-    flexShrink: 0,
-    // `segment` is flex:1 (flexBasis:0), so in a single-option control with no
-    // width the pill would collapse to its padding. Give it an explicit floor.
-    minWidth: 88
-  },
-  tabSocial: {
-    flex: 1
-  },
-  section: {
-    gap: spacing.sm
-  },
-  // Tighter than `section`: group cards are tall, and at 12pt apart a column of
-  // them read as separate blocks rather than as one list.
-  groupList: {
-    gap: spacing.xs
-  },
-  // The seam between owned and joined groups — the same 8pt, so the two
-  // sections read as one continuous list.
-  groupSections: {
-    gap: spacing.xs
-  },
-  // Friend rows — the group card's inset, not spacing.lg. At 24 the friend rows
-  // sat 8pt further in than the group cards one tab over, so the two lists on
-  // this screen did not share a left edge.
-  friendsCard: {
-    borderRadius: radius.card,
-    paddingHorizontal: LIST_CARD_PADDING,
-    paddingVertical: spacing.xs,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2
-  },
-  friendRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: spacing.sm
-  },
   friendText: {
     flex: 1,
     minWidth: 0,
@@ -1592,48 +1858,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20
   },
-  skeletonLines: {
-    flex: 1,
-    gap: 6
-  },
-  // The chip row's own gap, matching `groupHabits`. No marginTop — the card's
-  // gap already owns the space above it.
-  skeletonChips: {
-    flexDirection: "row",
-    gap: spacing.xxs
-  },
-  // One gap between the header and the chip row, set here. It used to be this
-  // gap PLUS a marginTop on the scroller, which is two numbers describing one
-  // piece of space — and the skeleton only ever copied one of them.
-  groupCard: {
-    // The card's only two children are the header and the activity chips, so
-    // this gap is entirely the space above the chips — they were sitting close
-    // enough to the member faces above them to read as part of that row.
-    gap: spacing.md,
-    borderRadius: radius.card,
-    // Roomier than LIST_CARD_PADDING, which the flatter friend rows use. This
-    // card carries three tiers — avatar and name, a streak badge and stacked
-    // faces, then the activity chips — and at the list inset they were packed
-    // against its edges.
-    padding: spacing.ml,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2
-  },
-  groupHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm
-  },
-  groupHeaderText: {
-    flex: 1,
-    minWidth: 0,
-    gap: 1
-  },
-  groupName: {
-    fontFamily: fontFamilies.lexendBold
-  },
   groupStreakBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -1644,24 +1868,6 @@ const styles = StyleSheet.create({
   },
   groupStreakText: {
     fontFamily: fontFamilies.lexendSemiBold
-  },
-  groupHabitsScroll: {
-    // Escapes groupCard's padding, NOT the screen gutter — must track it.
-    marginHorizontal: -spacing.ml
-  },
-  groupHabits: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xxs,
-    paddingHorizontal: spacing.ml
-  },
-  groupHabitChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xxs,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 4
   },
   groupAvatars: {
     flexDirection: "row",

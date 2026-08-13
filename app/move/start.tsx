@@ -6,6 +6,7 @@ import { Icon } from "@/components/Icon";
 import { MoveSummaryCard, useMoveAccent } from "@/components/move/ChallengeUI";
 import { MoveFriendPicker } from "@/components/move/MoveFriendPicker";
 import { MoveOptionGroup, MoveOptionRow } from "@/components/move/MoveOptionRow";
+import { PlusBadge } from "@/components/PlusBadge";
 import { Pressable } from "@/components/Pressable";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Button, Screen } from "@/components/ui";
@@ -13,7 +14,11 @@ import { fontFamilies, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { useMove } from "@/context/MoveContext";
 import { friendsService, type Friendship } from "@/lib/friends";
+import { challengeClient } from "@/lib/move/challengeClient";
 import { findFamily } from "@/lib/move/challengeDefs";
+import { formatDistance } from "@/lib/move/movement";
+import { moveSocialUnlocked } from "@/lib/move/gating";
+import { clearWalkSession, saveWalkSession } from "@/lib/move/walkSession";
 
 /**
  * Setting out on an ordinary move.
@@ -23,42 +28,96 @@ import { findFamily } from "@/lib/move/challengeDefs";
  * though there is no target and no badge at the end of it. Somebody who has
  * started a challenge already knows how this page works.
  *
- * ## What "bring friends" does, and what it does not
+ * ## What "bring friends" does
  *
- * It records who you set out with, and their names travel with the activity to
- * the live screen and the summary. It does **not** notify them: an ad-hoc
- * "come and walk with me" has nowhere to be delivered — `nudgeMember` is scoped
- * to a group, and a plain move has no row on the server for anybody to join.
- * The copy is careful not to imply otherwise, and wiring a real invite is a
- * server change rather than a screen one.
+ * It records who you set out with, their names travel with the activity to the
+ * live screen and the summary, and — from `start` below — each of them is TOLD.
+ *
+ * What it still does not do is give them something to join. A plain move is one
+ * person's recording; there is no shared row, no target and no roster, so the
+ * message is a statement rather than a question ("Naj set out with you") and
+ * there is nothing to accept. A challenge is the thing that can be joined, and it
+ * has its own invitation with two buttons on it — see `app/move/[milestone].tsx`
+ * and `move_challenge_invites`.
+ *
+ * ## AND IT NEEDS PLUS
+ *
+ * Company is the shared half of Move, so it sits behind the ₱49 monthly the same
+ * way groups do. The row stays in the list wearing a `PlusBadge` rather than
+ * disappearing — a feature you cannot see is one you cannot decide about — and
+ * tapping it goes to the paywall instead of selecting.
+ *
+ * The answer comes from `moveSocialUnlocked`, not from `isPlus` directly, so the
+ * testing bypass is one flag rather than one per screen — see `lib/move/gating.ts`.
  */
 
-type Route = "alone" | "friends";
+/**
+ * How this move is being taken on.
+ *
+ * `challenge` only exists while one is running, and it is not a third KIND of
+ * walk — every walk feeds the active challenge whether or not it is chosen here
+ * (the tracker counts distance, not intent). What it changes is what this walk is
+ * FOR: pick it and the page stops describing an open-ended stroll and starts
+ * describing the target, what is left of it, and how long there is.
+ */
+type Route = "alone" | "friends" | "challenge";
 
 export default function MoveStartScreen() {
   const router = useRouter();
-  const { palette, isDark } = useLumo();
+  const { palette, isDark, isPlus } = useLumo();
   const accent = useMoveAccent();
   const move = useMove();
 
-  const [route, setRoute] = React.useState<Route>("alone");
+  const [pickedRoute, setPickedRoute] = React.useState<Route>("alone");
+  /**
+   * Whether the reader has actually chosen, as opposed to inheriting a default.
+   *
+   * Needed because the default depends on something that arrives LATE: Move's state
+   * hydrates from storage after this screen mounts, so a challenge that is running
+   * is not yet known on the first render. Seeding `useState` from it would land on
+   * "alone" and stay there. Reading the default instead of storing it means the
+   * challenge takes the selection the moment it is known — and stops taking it the
+   * moment a row is tapped.
+   */
+  const [routeTouched, setRouteTouched] = React.useState(false);
   /** Null while loading, so an empty list is not mistaken for "no friends". */
   const [friends, setFriends] = React.useState<Friendship[] | null>(null);
   const [picked, setPicked] = React.useState<string[]>([]);
   const [pickerOpen, setPickerOpen] = React.useState(false);
+  /**
+   * Friends who cannot come along, and why, keyed by profile id.
+   *
+   * Empty means everyone is free — the lookup fails open, so an offline picker
+   * offers the whole list rather than locking it. Read once with the friend list
+   * rather than on every open: somebody who set out in the last thirty seconds is
+   * an edge this screen does not need to chase, and the invite itself is still the
+   * real check.
+   */
+  const [unavailable, setUnavailable] = React.useState<Map<string, string>>(new Map());
 
   React.useEffect(() => {
     let active = true;
 
     friendsService
       .listFriends()
-      .then((list) => {
+      .then(async (list) => {
         // Accepted only — somebody who has not accepted a friend request is not
         // somebody to take a walk with.
         const accepted = list.filter((entry) => entry.status === "accepted" && entry.profile.id);
 
+        if (!active) {
+          return;
+        }
+
+        setFriends(accepted);
+
+        // Availability, straight after the list: who is mid-walk or on a
+        // challenge. The challenge screen asks the same question of the same
+        // helper, so the two pickers cannot disagree about who is free.
+        const blocked = await challengeClient.unavailableFriends(accepted.map((entry) => entry.profile.id as string));
+
         if (active) {
-          setFriends(accepted);
+          setUnavailable(blocked);
         }
       })
       .catch(() => {
@@ -72,10 +131,35 @@ export default function MoveStartScreen() {
     };
   }, []);
 
+  /**
+   * The one place the two conditions meet: this move has company only if the
+   * route says so AND the subscription is live.
+   *
+   * Read everywhere below rather than `route` itself, so a lapsed subscription
+   * cannot leave a roster on screen — or a list of names on the walk — from a
+   * choice made while it was still paid for.
+   */
+  const canBringFriends = moveSocialUnlocked(isPlus);
+  /**
+   * The route in force: what was picked, or the challenge if one is running.
+   *
+   * Everything below reads THIS rather than `pickedRoute` — the first option in the
+   * list has to be the selected one, and a screen where the top row is highlighted
+   * by a default nobody stored is exactly the case that goes wrong when the default
+   * is only applied at mount.
+   */
+  const route: Route = routeTouched ? pickedRoute : move.progress ? "challenge" : "alone";
+
+  function chooseRoute(next: Route) {
+    setRouteTouched(true);
+    setPickedRoute(next);
+  }
+
+  const withFriends = canBringFriends && route === "friends";
   const pickedFriends = (friends ?? []).filter((entry) => picked.includes(entry.profile.id as string));
   const names = pickedFriends.map((entry) => entry.profile.nickname || entry.profile.lumoId);
   // Setting out alone is always allowed; bringing people needs at least one.
-  const ready = route === "alone" || picked.length > 0;
+  const ready = !withFriends || picked.length > 0;
 
   /**
    * What this move is, in the same shape the challenge screen uses.
@@ -86,10 +170,36 @@ export default function MoveStartScreen() {
    * lifetime total, and toward a challenge if one is running.
    */
   const challengeFamily = move.progress ? findFamily(move.progress.variant.milestoneId) : undefined;
+  /**
+   * On the challenge route the first two rows describe the CHALLENGE.
+   *
+   * Same five labels either way, because the card is answering the same five
+   * questions — it is the answers that change. "No target" and "until you finish
+   * it" are true of a stroll and false of a rung with 3.4 km and four days left on
+   * it, and a summary that said them anyway would be the one part of the page not
+   * to have noticed which route was chosen.
+   */
+  const onChallenge = route === "challenge" && move.progress !== null;
   const summaryRows = [
-    { icon: "walk" as const, label: "Goal", value: "No target — go as far as you like" },
-    { icon: "calendar" as const, label: "Length", value: "Until you finish it" },
-    { icon: "friends" as const, label: "Company", value: route === "alone" ? "On your own" : names.length > 0 ? names.join(", ") : "Nobody picked yet" },
+    {
+      icon: "walk" as const,
+      label: "Goal",
+      value:
+        onChallenge && move.progress
+          ? `${formatDistance(move.progress.targetM)} — ${formatDistance(move.progress.remainingM)} to go`
+          : "No target — go as far as you like"
+    },
+    {
+      icon: "calendar" as const,
+      label: "Length",
+      value:
+        onChallenge && move.progress
+          ? move.progress.daysLeft === null
+            ? "No deadline on this one"
+            : `${move.progress.daysLeft} ${move.progress.daysLeft === 1 ? "day" : "days"} left`
+          : "Until you finish it"
+    },
+    { icon: "friends" as const, label: "Company", value: !withFriends ? "On your own" : names.length > 0 ? names.join(", ") : "Nobody picked yet" },
     { icon: "sun" as const, label: "Starts", value: "As soon as you tap" },
     {
       icon: "target" as const,
@@ -104,13 +214,47 @@ export default function MoveStartScreen() {
     }
 
     /**
+     * Opens a shared session, asks the friends onto it, and does not wait.
+     *
+     * Not awaited on purpose: this is the tap that starts a recording, and a
+     * round trip nobody is waiting for must never hold up the one thing the
+     * button is for. If it fails — offline, or a friendship that has since ended —
+     * the walk goes ahead as a solo recording with their names still on it, which
+     * is what this screen did before sessions existed.
+     *
+     * The id is stored rather than passed as a route param: the walk outlives this
+     * screen and can be recovered after a crash, and a param would be gone by then
+     * — see `lib/move/walkSession.ts`.
+     */
+    if (withFriends && picked.length > 0) {
+      void (async () => {
+        const sessionId = await challengeClient.startWalkTogether(picked, "walk");
+
+        if (sessionId) {
+          await saveWalkSession({ sessionId, owner: true });
+        }
+      })().catch(() => undefined);
+    } else {
+      /**
+       * Going alone means alone, even with a friend's walk ticked on the Move tab.
+       *
+       * The tick stores a session, and the track screen publishes to whatever is
+       * stored — so without this, somebody who ticked Naj's walk and then came here
+       * and chose "Go it alone" would still have their kilometres landing on Naj's
+       * screen. Choosing the solo route is the clearest statement of intent there
+       * is, and it wins over an earlier tick.
+       */
+      void clearWalkSession().catch(() => undefined);
+    }
+
+    /**
      * `replace`, not `push`: a recording in progress is not somewhere you
      * navigate to, and leaving this page on the stack would let somebody back
      * out of a live walk into the screen that started it.
      */
     router.replace({
       pathname: "/move/track",
-      params: route === "friends" && names.length > 0 ? { with: names.join(", ") } : {}
+      params: withFriends && names.length > 0 ? { with: names.join(", ") } : {}
     });
   }
 
@@ -124,25 +268,58 @@ export default function MoveStartScreen() {
         </AppText>
 
         <MoveOptionGroup>
+          {/* FIRST, and selected by default, whenever a challenge is running.
+              
+              It is what somebody with a rung in progress almost always means by
+              "go for a walk" — the two rows under it are the ordinary strolls, and
+              burying the challenge beneath them made the page open on the least
+              likely answer. Anyone who did mean a plain walk taps one of those, and
+              the challenge still counts their distance either way. */}
+          {challengeFamily && move.progress ? (
+            <MoveOptionRow
+              icon="target"
+              title={`Complete ${challengeFamily.title}`}
+              subtitle={
+                move.progress.remainingM > 0
+                  ? `${formatDistance(move.progress.remainingM)} to go${
+                      move.progress.daysLeft === null ? "" : ` · ${move.progress.daysLeft} ${move.progress.daysLeft === 1 ? "day" : "days"} left`
+                    }`
+                  : "Target reached — walk it home"
+              }
+              selected={route === "challenge"}
+              onPress={() => chooseRoute("challenge")}
+            />
+          ) : null}
+
           <MoveOptionRow
             icon="walk"
             title="Go it alone"
             subtitle="Just you, your route and the time it takes."
             selected={route === "alone"}
-            onPress={() => setRoute("alone")}
+            onPress={() => chooseRoute("alone")}
           />
+          {/* Pressable even when locked, and routed to the paywall rather than
+              refusing silently: `disabled` would dim the row and swallow the tap,
+              which tells somebody they cannot have this without telling them how
+              to. The badge replaces the radio, so the row cannot look chosen. */}
           <MoveOptionRow
             icon="friends"
             title="Bring friends"
-            subtitle="Note who is with you. Their names ride along with this one."
-            selected={route === "friends"}
-            onPress={() => setRoute("friends")}
+            subtitle={
+              canBringFriends
+                ? "Note who is with you. Their names ride along with this one."
+                : "Comes with Plus, along with friends and groups."
+            }
+            selected={withFriends}
+            onPress={() => (canBringFriends ? chooseRoute("friends") : router.push("/friends"))}
+            trailing={canBringFriends ? undefined : <PlusBadge />}
             last
           />
+
         </MoveOptionGroup>
       </View>
 
-      {route === "friends" ? (
+      {withFriends ? (
         <View style={styles.section}>
           <View style={styles.sectionHead}>
             <AppText variant="bodySmall" color={palette.ink} style={styles.sectionTitle}>
@@ -159,7 +336,7 @@ export default function MoveStartScreen() {
             <View style={[styles.friendsCard, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
               <Icon name="friends" size={22} color={palette.subtle} weight="bulk" />
               <AppText variant="caption" color={palette.subtle} style={styles.friendsEmptyBody}>
-                Lumo will remember who you went with. They are not sent anything — this is your record of the walk.
+                Lumo remembers who you went with, and lets them know you set out together.
               </AppText>
               <Button label="Add Friends" icon="userCircleAdd" variant="ghost" onPress={() => setPickerOpen(true)} />
             </View>
@@ -227,6 +404,7 @@ export default function MoveStartScreen() {
         visible={pickerOpen}
         friends={friends}
         picked={picked}
+        unavailable={unavailable}
         onClose={() => setPickerOpen(false)}
         onDone={(next) => {
           setPicked(next);

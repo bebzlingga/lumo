@@ -8,7 +8,8 @@ import { useMoveAccent } from "@/components/move/ChallengeUI";
 import { Pressable } from "@/components/Pressable";
 import { EmptyState } from "@/components/states";
 import { AppText, Button, LumoInput } from "@/components/ui";
-import { radius, spacing } from "@/constants/theme";
+import { fontFamilies, radius, spacing } from "@/constants/theme";
+import { alpha, readableOn } from "@/lib/color";
 import { useLumo } from "@/context/LumoContext";
 import type { Friendship } from "@/lib/friends";
 
@@ -131,14 +132,32 @@ export function MoveFriendPicker({
                       last={index === searchable.length - 1}
                       leading={<Avatar config={friend.profile.avatar} size={44} />}
                       trailing={
-                        <View
-                          style={[
-                            styles.check,
-                            isPicked ? { backgroundColor: palette.greenDark, borderColor: palette.greenDark } : { borderColor: palette.hairline }
-                          ]}
-                        >
-                          {isPicked ? <Icon name="check" size={11} color={palette.white} weight="bold" /> : null}
-                        </View>
+                        blocked ? (
+                          // A badge instead of the tick circle. An empty ring on a
+                          // dimmed row reads as "not picked yet", which invites a
+                          // tap that does nothing — the word is what says the row
+                          // is not a choice at all. The reason sits under the name
+                          // as the subtitle.
+                          <View style={[styles.unavailable, { backgroundColor: alpha(palette.danger, "1A") }]}>
+                            {/* `readableOn` against the sheet, not the raw token:
+                                the danger red clears 4.5:1 on the canvas but this
+                                is 9pt bold on a tint of itself, and the label has
+                                to be readable at a glance or the badge is just a
+                                red smudge. */}
+                            <AppText variant="caption" color={readableOn(palette.danger, palette.card, 4.5)} style={styles.unavailableLabel}>
+                              NOT AVAILABLE
+                            </AppText>
+                          </View>
+                        ) : (
+                          <View
+                            style={[
+                              styles.check,
+                              isPicked ? { backgroundColor: palette.greenDark, borderColor: palette.greenDark } : { borderColor: palette.hairline }
+                            ]}
+                          >
+                            {isPicked ? <Icon name="check" size={11} color={palette.white} weight="bold" /> : null}
+                          </View>
+                        )
                       }
                     />
                   );
@@ -196,5 +215,21 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: radius.pill,
     borderWidth: 2
+  },
+  // Red — the app's `danger`, at a wash. It is the one colour in Lumo that means
+  // "this row cannot be used", which is exactly what the badge says, and it has to
+  // carry that from across the sheet: the row's dimming and its subtitle are both
+  // read after the fact that stopped you. Sized like `PlusBadge`, so the two read
+  // as the same kind of mark — one a price, this a state — in different colours.
+  unavailable: {
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 3
+  },
+  unavailableLabel: {
+    fontFamily: fontFamilies.lexendBold,
+    fontSize: 9,
+    lineHeight: 12,
+    letterSpacing: 0.6
   }
 });

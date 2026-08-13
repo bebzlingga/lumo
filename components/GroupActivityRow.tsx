@@ -462,13 +462,22 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center"
   },
-  // A rounded square, not a disc. The radius has to be read against the size:
-  // `radius.sm` is 6, which was a soft corner on the ~17pt square these used to
-  // flex to and is exactly half of the fixed 12 they are now — a full circle.
-  // 4 on 12 is the proportion the collapsed strip's box keeps at 3 on 10.
+  /**
+   * A rounded square, not a disc — and a literal 4 rather than a token, because
+   * every token is wrong at this size.
+   *
+   * The radius has to be read against the side: `radius.xs` is 6, which is a soft
+   * corner on the ~17pt square these used to flex to and exactly HALF of the
+   * fixed 12 they are now — which is to say a circle. It has been drawing discs
+   * while this comment claimed otherwise.
+   *
+   * 4 on 12 is the proportion the collapsed strip's box keeps at 3 on 10, so the
+   * fortnight above and the per-member grid below it are the same shape at two
+   * sizes.
+   */
   weekDot: {
     width: GRID_DOT_SIZE,
     height: GRID_DOT_SIZE,
-    borderRadius: radius.xs
+    borderRadius: 4
   }
 });

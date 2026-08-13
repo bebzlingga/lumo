@@ -330,44 +330,52 @@ export default function NewGroupScreen() {
       {editId ? null : (
       <FormSection heading="Invite friends" hint="Members check in on the group's activities and everyone's progress adds up.">
         {friends.length ? (
-          friends.map((friendship, index) => {
-            const selected = selectedFriends.has(friendship.profile.lumoId);
+          // Wrapped, like the activities list above it. As direct children of the
+          // section these rows each collected its 16pt child gap, which landed
+          // between the row and the hairline BELOW it — so every separator sat 28
+          // under one name and 12 over the next, and the list drifted apart down
+          // the page. One child means the gap is spent once, around the list, and
+          // the rows sit flush with their rules between them.
+          <View>
+            {friends.map((friendship, index) => {
+              const selected = selectedFriends.has(friendship.profile.lumoId);
 
-            return (
-              <Pressable
-                key={friendship.profile.lumoId}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                accessibilityLabel={`${friendship.profile.nickname || friendship.profile.lumoId}${selected ? ", selected" : ""}`}
-                onPress={() => toggleFriend(friendship.profile.lumoId)}
-                style={[
-                  styles.friendRow,
-                  index === 0 && styles.listRowFirst,
-                  index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.hairline },
-                  index === friends.length - 1 && styles.listRowLast
-                ]}
-              >
-                <View style={[styles.friendAvatar, { backgroundColor: alpha(palette.greenDark, "10") }]}>
-                  <Avatar config={friendship.profile.avatar ?? defaultAvatar()} size={34} />
-                </View>
-                <View style={styles.friendText}>
-                  <AppText variant="titleSmall" color={palette.ink} numberOfLines={1} style={styles.friendName}>
-                    {friendship.profile.nickname || "Lumo user"}
-                  </AppText>
-                  <AppText variant="caption" color={palette.subtle} numberOfLines={1}>
-                    {friendship.profile.lumoId}
-                  </AppText>
-                </View>
-                <Icon
-                  name={selected ? "checkCircle" : "plusCircle"}
-                  size={22}
-                  color={selected ? palette.greenDark : palette.muted}
-                  weight="bulk"
-                  style={selected ? undefined : styles.friendAddIcon}
-                />
-              </Pressable>
-            );
-          })
+              return (
+                <Pressable
+                  key={friendship.profile.lumoId}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`${friendship.profile.nickname || friendship.profile.lumoId}${selected ? ", selected" : ""}`}
+                  onPress={() => toggleFriend(friendship.profile.lumoId)}
+                  style={[
+                    styles.friendRow,
+                    index === 0 && styles.listRowFirst,
+                    index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.hairline },
+                    index === friends.length - 1 && styles.listRowLast
+                  ]}
+                >
+                  <View style={[styles.friendAvatar, { backgroundColor: alpha(palette.greenDark, "10") }]}>
+                    <Avatar config={friendship.profile.avatar ?? defaultAvatar()} size={34} />
+                  </View>
+                  <View style={styles.friendText}>
+                    <AppText variant="titleSmall" color={palette.ink} numberOfLines={1} style={styles.friendName}>
+                      {friendship.profile.nickname || "Lumo user"}
+                    </AppText>
+                    <AppText variant="caption" color={palette.subtle} numberOfLines={1}>
+                      {friendship.profile.lumoId}
+                    </AppText>
+                  </View>
+                  <Icon
+                    name={selected ? "checkCircle" : "plusCircle"}
+                    size={22}
+                    color={selected ? palette.greenDark : palette.muted}
+                    weight="bulk"
+                    style={selected ? undefined : styles.friendAddIcon}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
         ) : (
           <AppText variant="caption" color={palette.subtle} style={styles.hint}>
             No friends yet — share your Lumo ID from your profile, then invite friends here.

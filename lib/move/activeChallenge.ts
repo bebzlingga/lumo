@@ -167,7 +167,21 @@ export function challengeEndsAt(variant: MoveChallengeVariant, startedAt: string
  * A domain answer rather than a boolean, so the screen can say WHY. An opaque
  * refusal is the thing that makes a rule feel like a bug.
  */
-export type StartRefusal = "MOVE_CHALLENGE_ALREADY_ACTIVE" | "MOVE_CHALLENGE_UNKNOWN_VARIANT" | "MOVE_CHALLENGE_NEEDS_FRIENDS";
+export type StartRefusal =
+	| "MOVE_CHALLENGE_ALREADY_ACTIVE"
+	| "MOVE_CHALLENGE_UNKNOWN_VARIANT"
+	| "MOVE_CHALLENGE_NEEDS_FRIENDS"
+	/**
+	 * The server would not add this device to a challenge it was invited to.
+	 *
+	 * Its own case rather than reusing ALREADY_ACTIVE, because there are two
+	 * causes and neither is knowable from here: the invitee may have picked up a
+	 * challenge elsewhere since the invite arrived, or the rung needs Plus and
+	 * this account does not have it (the participation policy checks that, not
+	 * the client). Naming the wrong one would send somebody to cancel a challenge
+	 * they do not have.
+	 */
+	| "MOVE_CHALLENGE_JOIN_REFUSED";
 
 export function canStartChallenge(input: {
   active: ActiveMoveChallenge | null;
@@ -196,7 +210,9 @@ export function canStartChallenge(input: {
 export const START_REFUSAL_COPY: Record<StartRefusal, string> = {
   MOVE_CHALLENGE_ALREADY_ACTIVE: "You already have an active challenge. Finish or leave it to start another.",
   MOVE_CHALLENGE_UNKNOWN_VARIANT: "That challenge is no longer available.",
-  MOVE_CHALLENGE_NEEDS_FRIENDS: "Invite enough friends to start this one."
+  MOVE_CHALLENGE_NEEDS_FRIENDS: "Invite enough friends to start this one.",
+  MOVE_CHALLENGE_JOIN_REFUSED:
+    "Lumo could not add you to this one. Check you have no other challenge running, and that you have Lumo Plus if this challenge needs it."
 };
 
 /**

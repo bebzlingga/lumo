@@ -7,6 +7,7 @@ import { ChallengeHeadline, ChallengeSummary, TeamContributions, useMoveAccent, 
 import { MoveBadge } from "@/components/move/MoveBadge";
 import { MoveFriendPicker } from "@/components/move/MoveFriendPicker";
 import { MoveOptionGroup, MoveOptionRow } from "@/components/move/MoveOptionRow";
+import { PlusBadge } from "@/components/PlusBadge";
 import { Pressable } from "@/components/Pressable";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Button, Screen } from "@/components/ui";
@@ -19,6 +20,7 @@ import { challengeClient } from "@/lib/move/challengeClient";
 import { pauseState, START_REFUSAL_COPY, type TeamGoal } from "@/lib/move/activeChallenge";
 import { familyProgress, hasMilestone, hasVariant, isFamilyLocked, previousFamily } from "@/lib/move/achievements";
 import { describeUnlockRule, findFamily } from "@/lib/move/challengeDefs";
+import { moveSocialUnlocked } from "@/lib/move/gating";
 import { formatDistance } from "@/lib/move/movement";
 
 /**
@@ -32,7 +34,7 @@ import { formatDistance } from "@/lib/move/movement";
 export default function MilestoneScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ milestone: string }>();
-  const { palette, isDark, isPro } = useLumo();
+  const { palette, isDark, isPlus } = useLumo();
   const accent = useMoveAccent();
   const move = useMove();
 
@@ -47,10 +49,12 @@ export default function MilestoneScreen() {
   /**
    * Friends already on a challenge.
    *
-   * A set, so ABSENT means available — an offline lookup returns empty and fails
-   * open rather than blocking someone from inviting a free friend.
+   * A map of id → reason, so ABSENT means available — an offline lookup returns
+   * empty and fails open rather than blocking someone from inviting a free
+   * friend. The reason is what the picker prints under the name: "on a challenge"
+   * and "out on a move right now" are different facts.
    */
-  const [busy, setBusy] = React.useState<Set<string>>(new Set());
+  const [busy, setBusy] = React.useState<Map<string, string>>(new Map());
   const [pickerOpen, setPickerOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -69,7 +73,9 @@ export default function MilestoneScreen() {
 
         setFriends(accepted);
 
-        const taken = await challengeClient.busyFriends(accepted.map((entry) => entry.profile.id as string));
+        // `unavailableFriends`, not `busyFriends`: the same question with the
+        // ad-hoc walkers included. The start screen asks the identical helper.
+        const taken = await challengeClient.unavailableFriends(accepted.map((entry) => entry.profile.id as string));
 
         if (active) {
           setBusy(taken);
@@ -112,13 +118,14 @@ export default function MilestoneScreen() {
   // rule is stated here too rather than only being enforced in the list.
   const locked = isFamilyLocked(move.achievements, family);
   /**
-   * A Pro rung, and the reader has not paid.
+   * A Plus rung, and the reader has not subscribed.
    *
    * Checked here as well as on the list, because the badges screens push
    * straight to a milestone — a rule enforced only where you usually enter from
-   * is not a rule.
+   * is not a rule. `family.pro` and the `is_pro` column behind it keep their old
+   * names; the product is called Plus (see components/PlusBadge.tsx).
    */
-  const needsPro = family.pro && !isPro;
+  const needsPlus = family.pro && !isPlus;
   // The amber is a wash, so the label is darkened until it clears the card it
   // sits on rather than taking the raw token.
   const pauseInk = readableOn(palette.chartPartial, palette.card, 4.5);
@@ -207,23 +214,23 @@ export default function MilestoneScreen() {
         </AppText>
       </View>
 
-      {needsPro ? (
+      {needsPlus ? (
         <View style={[styles.blocked, { backgroundColor: alpha(palette.accent, "1F") }]}>
           <AppText variant="bodySmall" color={palette.ink} style={styles.blockedTitle}>
-            A Lumo Pro challenge
+            A Lumo Plus challenge
           </AppText>
           <AppText variant="caption" color={palette.body} style={styles.blockedBody}>
-            {family.title} and everything above it come with Lumo Pro. The first three rungs are free and stay free — including the
-            badges you have already earned.
+            {family.title} and everything above it come with Lumo Plus, the ₱49 monthly. The first three rungs are free and stay
+            free — including the badges you have already earned.
           </AppText>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="See Lumo Pro"
+            accessibilityLabel="See Lumo Plus"
             onPress={() => router.push("/friends")}
             style={({ pressed }) => [styles.blockedButton, { borderColor: readableOn(palette.accent, palette.canvas, 3), opacity: pressed ? 0.7 : 1 }]}
           >
             <AppText variant="bodySmall" color={readableOn(palette.accent, palette.canvas, 4.5)}>
-              See Lumo Pro
+              See Lumo Plus
             </AppText>
           </Pressable>
         </View>
@@ -322,16 +329,41 @@ export default function MilestoneScreen() {
         <MoveOptionGroup>
           {family.variants.map((variant, index) => {
             const done = hasVariant(move.achievements, variant.id);
+            /**
+             * A TEAM route needs Plus, even on a free rung.
+             *
+             * The rung's own gate is about the distance; this is about the
+             * company. Inviting people is the shared half of Move and sits behind
+             * the ₱49 monthly wherever it appears — the same call the start
+             * screen makes about "bring friends", and the same call the database
+             * makes when it refuses to write a roster (see the participation
+             * policy in supabase/schema.sql).
+             *
+             * Still listed, still tappable, and the tap goes to the paywall: a
+             * route nobody can see is a route nobody can decide about.
+             *
+             * Asked through `moveSocialUnlocked` rather than `isPlus`, so the
+             * testing bypass covers this route and the start screen's company
+             * option together — see `lib/move/gating.ts`. The RUNG gate above
+             * (`needsPlus`) is a different question and is not bypassed.
+             */
+            const teamNeedsPlus = variant.kind === "team" && !moveSocialUnlocked(isPlus);
 
             return (
               <MoveOptionRow
                 key={variant.id}
                 icon={variant.kind === "team" ? "friends" : variant.durationDays === null ? "walk" : "calendar"}
                 title={variant.title}
-                subtitle={done ? "Done" : variant.description}
-                selected={selected === variant.id}
-                onPress={() => setSelected(variant.id)}
-                trailing={done ? <Icon name="checkCircle" size={20} color={palette.greenDark} weight="bulk" /> : undefined}
+                subtitle={teamNeedsPlus ? "Walking it together comes with Plus." : done ? "Done" : variant.description}
+                selected={!teamNeedsPlus && selected === variant.id}
+                onPress={() => (teamNeedsPlus ? router.push("/friends") : setSelected(variant.id))}
+                trailing={
+                  teamNeedsPlus ? (
+                    <PlusBadge />
+                  ) : done ? (
+                    <Icon name="checkCircle" size={20} color={palette.greenDark} weight="bulk" />
+                  ) : undefined
+                }
                 last={index === family.variants.length - 1}
               />
             );
@@ -341,7 +373,7 @@ export default function MilestoneScreen() {
       )}
 
       {/* The rule, stated where it applies, with the way out beside it. */}
-      {running || locked || needsPro ? null : blocked ? (
+      {running || locked || needsPlus ? null : blocked ? (
         <View style={[styles.blocked, { backgroundColor: accent.soft }]}>
           <AppText variant="bodySmall" color={palette.ink} style={styles.blockedTitle}>
             Active challenge in progress
@@ -407,11 +439,11 @@ export default function MilestoneScreen() {
               </View>
 
               {/* Said before anybody is picked, because it is about THEM: a
-                  friend without Pro cannot join a Pro challenge, and the
+                  friend without Plus cannot join a Plus challenge, and the
                   refusal would otherwise arrive after the invite went out. */}
               {family.pro ? (
                 <AppText variant="caption" color={palette.subtle} style={styles.proNote}>
-                  Friends need Lumo Pro to join a {family.title} challenge.
+                  Friends need Lumo Plus to join a {family.title} challenge.
                 </AppText>
               ) : null}
 
@@ -509,7 +541,7 @@ export default function MilestoneScreen() {
         // One challenge at a time applies to them too, so an invite would be
         // refused on arrival. Saying so in the list beats letting it fail later
         // for a reason nobody could see.
-        unavailable={new Map([...busy].map((id) => [id, "Already on a challenge"]))}
+        unavailable={busy}
         onClose={() => setPickerOpen(false)}
         onDone={(next) => {
           setPicked(next);

@@ -765,3 +765,343 @@ create policy "own participation"
       or has_active_subscription()
     )
   );
+-- ---------------------------------------------------------------------------
+-- MOVE CHALLENGE INVITES
+--
+-- Until this table, "bring friends" wrote nothing anybody else could see: the
+-- owner picked a roster, `move_challenges` recorded the challenge, and the
+-- friends were never told. `create` even took a `friendIds` list and dropped it.
+-- The invited person had no way to learn a challenge existed — the SELECT policy
+-- on `move_challenges` admits owners and participants only, and you cannot
+-- become a participant without knowing the id.
+--
+-- So: one row per person invited, and it is the row that carries the news.
+--
+-- WHY A ROW RATHER THAN A NOTIFICATION
+-- A notification is a message about a state; this IS the state. It survives the
+-- app being closed, it can be declined, and a second device sees the same
+-- pending invite rather than a push that was already dismissed elsewhere. The
+-- primary key is `(challenge_id, invitee)`, so inviting the same friend twice
+-- updates one row instead of stacking duplicates in their list.
+-- ---------------------------------------------------------------------------
+create table if not exists move_challenge_invites (
+  challenge_id uuid not null references move_challenges(id) on delete cascade,
+  invitee uuid not null references profiles(id) on delete cascade,
+  inviter uuid not null references profiles(id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'declined')),
+  created_at timestamptz not null default now(),
+  responded_at timestamptz,
+  primary key (challenge_id, invitee)
+);
+
+alter table move_challenge_invites enable row level security;
+
+create index if not exists move_challenge_invites_invitee_idx
+  on move_challenge_invites (invitee, status);
+
+-- Both sides of an invite can see it: the invitee to answer, the inviter to know
+-- whether they did. Nobody else — an invite names two people and is nobody
+-- else's business.
+create policy "read own move invites"
+  on move_challenge_invites for select to authenticated
+  using (invitee = auth.uid() or inviter = auth.uid());
+
+/**
+ * Only the challenge's OWNER may invite, and only a friend.
+ *
+ * Three conditions, and each one closes a hole a patched client would otherwise
+ * walk through: `inviter = auth.uid()` stops an invite being sent in somebody
+ * else's name, `is_friend_of` stops a stranger's Move tab filling with invites
+ * from an id they have never met, and the `exists` on ownership stops anyone
+ * recruiting for a challenge that is not theirs.
+ */
+create policy "owner invites friends to move challenge"
+  on move_challenge_invites for insert to authenticated
+  with check (
+    inviter = auth.uid()
+    and is_friend_of(invitee)
+    and exists (select 1 from move_challenges c where c.id = challenge_id and c.owner = auth.uid())
+  );
+
+-- The invitee answers their own invite, and nothing else about it. Accepting is
+-- still subject to the participation policy above — the subscription check lives
+-- there, so a Plus challenge cannot be joined by writing 'accepted' here.
+create policy "invitee answers move invite"
+  on move_challenge_invites for update to authenticated
+  using (invitee = auth.uid()) with check (invitee = auth.uid());
+
+-- Withdrawing one is the inviter's to do.
+create policy "inviter withdraws move invite"
+  on move_challenge_invites for delete to authenticated
+  using (inviter = auth.uid());
+
+/**
+ * And the invitee has to be able to READ the challenge they were invited to.
+ *
+ * Without this the card in their Move tab could name the inviter and nothing
+ * else — no distance, no deadline, no team goal — because the SELECT policy
+ * admitted owners and participants only, and an invitee is neither until they
+ * accept. Replaced rather than added to, so there is one policy to read when
+ * asking who can see a challenge.
+ */
+drop policy if exists "participants read challenge" on move_challenges;
+
+create policy "participants and invitees read challenge"
+  on move_challenges for select to authenticated
+  using (
+    owner = auth.uid()
+    or exists (select 1 from move_challenge_participants p where p.challenge_id = id and p.member = auth.uid())
+    or exists (select 1 from move_challenge_invites i where i.challenge_id = id and i.invitee = auth.uid())
+  );
+
+-- Live, like friend requests and group invites: an invite that arrives while the
+-- app is open should not wait for the next focus refresh.
+alter publication supabase_realtime add table move_challenge_invites;
+
+-- ---------------------------------------------------------------------------
+-- SETTING OUT WITH SOMEBODY (an ordinary move, not a challenge)
+--
+-- `move_challenge_invites` above is for a challenge: a thing with a target, a
+-- deadline and a roster you JOIN. This is the other half of "bring friends" —
+-- somebody heading out for a walk now, noting who is with them.
+--
+-- There is nothing to accept, and that is the whole design. A plain move has no
+-- shared record to join: it is one person's recording, and the companions are
+-- names on it (see `app/move/start.tsx`). So this table carries no status and no
+-- response — it exists to be INSERTED, which is what tells the friend, and read
+-- once by the person told.
+--
+-- WHY A ROW AT ALL, THEN, RATHER THAN A PUSH
+-- The push comes FROM the row: the same Database Webhook the other invites use
+-- delivers it while the app is closed, and the realtime channel delivers it while
+-- the app is open. A client that sent notifications directly would need
+-- credentials no client should hold.
+-- ---------------------------------------------------------------------------
+create table if not exists move_walk_invites (
+  id uuid primary key default gen_random_uuid(),
+  sender uuid not null references profiles(id) on delete cascade,
+  recipient uuid not null references profiles(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+alter table move_walk_invites enable row level security;
+
+create index if not exists move_walk_invites_recipient_idx
+  on move_walk_invites (recipient, created_at desc);
+
+-- Sender or recipient, nobody else.
+create policy "read own walk invites"
+  on move_walk_invites for select to authenticated
+  using (recipient = auth.uid() or sender = auth.uid());
+
+/**
+ * Only to a friend, and only in your own name.
+ *
+ * `is_friend_of` is what keeps this from being a channel for messaging
+ * strangers: the row's only effect is a notification on somebody's phone, so
+ * without that check an id would be enough to buzz anybody at will. Note it does
+ * NOT check a subscription — the company gate is on the inviter's screen and on
+ * the challenge tables; being TOLD that a friend went for a walk is not a paid
+ * feature.
+ */
+create policy "invite a friend on a walk"
+  on move_walk_invites for insert to authenticated
+  with check (sender = auth.uid() and is_friend_of(recipient));
+
+-- Live while the app is open, like every other social row.
+alter publication supabase_realtime add table move_walk_invites;
+
+-- ---------------------------------------------------------------------------
+-- WHO IS OUT RIGHT NOW
+--
+-- `move_active_challenge` already answers "is this friend on a challenge" — its
+-- existence is the busy flag the invite list reads. It says nothing about an
+-- ORDINARY move, though: a plain walk has no challenge row, so somebody halfway
+-- round a 5k appeared perfectly free to invite.
+--
+-- This is that missing half. One row per person while they are recording, gone
+-- when they finish.
+--
+-- WHY A TIMESTAMP AND NO END COLUMN
+-- The row is deleted when the walk ends, and a killed app cannot delete anything
+-- — so `started_at` is what makes a leaked row harmless: readers ignore anything
+-- older than a few hours rather than trusting a row to be cleaned up. A "still
+-- walking since Tuesday" flag would block invites forever.
+--
+-- WHAT IT DOES NOT CARRY
+-- No distance, no route, no position — availability is the whole point of it. A
+-- friend learns THAT you are out, which is what they need to decide whether to
+-- ask you along, and nothing else.
+-- ---------------------------------------------------------------------------
+create table if not exists move_presence (
+  user_id uuid primary key references profiles(id) on delete cascade,
+  -- "walk" | "run". Free text rather than a check: the app's own vocabulary may
+  -- grow, and a wrong value here is a wrong WORD in a subtitle, not a wrong rule.
+  activity_type text not null default 'walk',
+  started_at timestamptz not null default now()
+);
+
+alter table move_presence enable row level security;
+
+-- Same reach as the active-challenge flag: yourself and your friends, nobody
+-- else. This is a fact about where somebody is in their day.
+create policy "read own and friends move presence"
+  on move_presence for select to authenticated
+  using (user_id = auth.uid() or is_friend_of(user_id));
+
+create policy "write own move presence"
+  on move_presence for all to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- ---------------------------------------------------------------------------
+-- MOVING TOGETHER (the joinable half of an ordinary move)
+--
+-- `move_walk_invites` above told a friend you had set out. That was all it could
+-- do: there was nothing on the server for them to join, so the invite had no
+-- Accept and the two walks stayed strangers.
+--
+-- This is the missing thing to join. A session is the lightest possible shared
+-- record: who opened it, when, and one row per person on it carrying the metres
+-- they have covered since. No route, no fixes, no times — the same restraint
+-- `move_challenge_participants` keeps, and for the same reason (see the note at
+-- the top of `lib/move/challengeClient.ts`).
+--
+-- WHY NOT REUSE THE CHALLENGE TABLES
+-- A challenge has a variant, a target, a deadline and a badge at the end of it.
+-- An ordinary move has none of those, and giving it a fake variant so it could
+-- borrow the machinery would put a made-up rung in the ladder that drives the
+-- badges, the journey screen and the trophy shelf. Two small tables cost less
+-- than one lie in the config.
+-- ---------------------------------------------------------------------------
+create table if not exists move_walk_sessions (
+  id uuid primary key default gen_random_uuid(),
+  owner uuid not null references profiles(id) on delete cascade,
+  activity_type text not null default 'walk',
+  started_at timestamptz not null default now(),
+  -- Stamped when the owner finishes. Sessions are not deleted: a joiner's device
+  -- may still be publishing its last distance, and a row that vanishes underneath
+  -- it turns a finished walk into an error.
+  ended_at timestamptz
+);
+
+alter table move_walk_sessions enable row level security;
+
+create table if not exists move_walk_participants (
+  session_id uuid not null references move_walk_sessions(id) on delete cascade,
+  member uuid not null references profiles(id) on delete cascade,
+  -- Metres this member has covered on THIS walk, upserted as it runs. One row per
+  -- member, so a device publishing every ten seconds writes the same row rather
+  -- than adding to it.
+  distance_m double precision not null default 0 check (distance_m >= 0),
+  joined_at timestamptz not null default now(),
+  left_at timestamptz,
+  updated_at timestamptz not null default now(),
+  primary key (session_id, member)
+);
+
+alter table move_walk_participants enable row level security;
+
+-- An invite now points AT a session, and carries an answer.
+--
+-- Added rather than rebuilt: the table is already live, and a notification-only
+-- invite sent before this migration stays readable — `session_id` is null on it,
+-- which the app reads as "nothing to join", exactly what that row meant.
+alter table move_walk_invites
+  add column if not exists session_id uuid references move_walk_sessions(id) on delete cascade;
+
+alter table move_walk_invites
+  add column if not exists status text not null default 'pending'
+  check (status in ('pending', 'accepted', 'declined'));
+
+alter table move_walk_invites
+  add column if not exists responded_at timestamptz;
+
+-- The invitee answers their own invite. Accepting also writes a participant row,
+-- which is governed separately below — so a status of 'accepted' on its own puts
+-- nobody on a walk.
+create policy "recipient answers walk invite"
+  on move_walk_invites for update to authenticated
+  using (recipient = auth.uid()) with check (recipient = auth.uid());
+
+-- A session is visible to its owner, to everyone on it, and to anyone holding an
+-- invite to it — the last one is what lets a card describe the walk before it has
+-- been joined.
+create policy "read sessions you are part of"
+  on move_walk_sessions for select to authenticated
+  using (
+    owner = auth.uid()
+    or exists (select 1 from move_walk_participants p where p.session_id = id and p.member = auth.uid())
+    or exists (select 1 from move_walk_invites i where i.session_id = id and i.recipient = auth.uid())
+  );
+
+/**
+ * Opening one is not gated by a subscription, and closing it is the owner's.
+ *
+ * No `has_active_subscription()` here, unlike `move_challenges`: this is an
+ * ordinary walk. The paid feature is the INVITING — which happens through
+ * `move_walk_invites`, whose insert policy is where the company gate belongs —
+ * and a session with nobody else on it is just a walk somebody recorded.
+ */
+create policy "own walk sessions"
+  on move_walk_sessions for insert to authenticated
+  with check (owner = auth.uid());
+
+create policy "owner updates walk session"
+  on move_walk_sessions for update to authenticated
+  using (owner = auth.uid()) with check (owner = auth.uid());
+
+-- Everyone on a session sees everyone else on it. This is the read that makes
+-- "you are both out" true on both phones.
+create policy "participants read each other on a walk"
+  on move_walk_participants for select to authenticated
+  using (exists (select 1 from move_walk_participants mine where mine.session_id = session_id and mine.member = auth.uid()));
+
+/**
+ * You may only write your OWN row, and only onto a session you were asked to.
+ *
+ * The second half is what stops a patched client walking into a stranger's
+ * session with an id: an insert has to be either your own session or one you hold
+ * an invite to. Note it does not check the invite's STATUS — accepting is exactly
+ * the act of writing this row, so requiring 'accepted' first would be a rule that
+ * has to be satisfied before it can be satisfied.
+ */
+create policy "write own walk participation"
+  on move_walk_participants for all to authenticated
+  using (member = auth.uid())
+  with check (
+    member = auth.uid()
+    and (
+      exists (select 1 from move_walk_sessions s where s.id = session_id and s.owner = auth.uid())
+      or exists (select 1 from move_walk_invites i where i.session_id = session_id and i.recipient = auth.uid())
+    )
+  );
+
+create index if not exists move_walk_participants_session_idx
+  on move_walk_participants (session_id);
+
+-- Live: a joiner's distance should land on the other phone as it is covered, not
+-- when somebody happens to reopen the tab.
+alter publication supabase_realtime add table move_walk_participants;
+
+
+-- ---------------------------------------------------------------------------
+-- A FINISHED WALK HIDES ITS INVITATIONS. IT DOES NOT DELETE THEM.
+--
+-- `listWalkInvites` already drops any invite whose session has an `ended_at`, so
+-- nothing more is needed to take a finished walk off somebody's Move tab. What was
+-- needed is for them to hear about it: the stamp lands on `move_walk_sessions`,
+-- which was not published, so an invitee only found out by reopening the tab.
+--
+-- WHY NOT DELETE THE ROWS
+-- They are the record. Who asked whom, when, and whether they came — that is the
+-- history of walking together, and a table that tidies itself cannot answer a
+-- single question about last month. Hiding is a read-time concern; deleting is
+-- forever, and the two are not interchangeable.
+--
+-- NO FILTER ON THE SUBSCRIPTION
+-- A session row has no `recipient` column to filter on. It does not need one: RLS
+-- applies to realtime too, and the session policy admits only its owner, its
+-- participants and the people invited to it — which is exactly the set of devices
+-- that should hear it end.
+-- ---------------------------------------------------------------------------
+alter publication supabase_realtime add table move_walk_sessions;

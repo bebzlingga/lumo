@@ -1,12 +1,18 @@
 // Supabase Edge Function: sends an Expo push notification when a friend
-// request / group invite / cheer / nudge row is inserted.
+// request / group invite / cheer / nudge / Move-challenge invite row is
+// inserted.
 //
 // Deploy:
 //   supabase functions deploy send-push --no-verify-jwt
 //
-// Then create three Database Webhooks (Database → Webhooks), each on INSERT,
+// Then create four Database Webhooks (Database → Webhooks), each on INSERT,
 // pointing at this function's URL, for the tables:
-//   friendships, group_members, group_reactions
+//   friendships, group_members, group_reactions, move_challenge_invites,
+//   move_walk_invites
+//
+// The fourth is what makes a Move invitation arrive while the app is closed.
+// Without it the invite still lands — the row is the invitation, and the Move tab
+// picks it up on focus — but nobody is told until they next open Lumo.
 //
 // Env: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected automatically.
 
@@ -26,6 +32,15 @@ async function nickname(userId: string): Promise<string> {
 async function groupName(groupId: string): Promise<string> {
   const rows = await rest(`groups?id=eq.${groupId}&select=name`);
   return rows?.[0]?.name || "a group";
+}
+
+// A Move challenge's title lives in the APP, not the database — the ladder is
+// client-side config, so the row only carries "10k-timed". This function has no
+// copy of that mapping and should not grow one: a second list of titles on the
+// server is a second thing to update when a rung is renamed. The push says which
+// friend and where to go; the card in the app names the challenge.
+async function moveInviterName(inviter: string): Promise<string> {
+  return nickname(inviter);
 }
 
 async function tokensFor(userId: string): Promise<string[]> {
@@ -74,6 +89,25 @@ Deno.serve(async (req) => {
     recipientId = record.member;
     title = "Group invitation";
     body = `You've been invited to ${await groupName(record.group_id)}.`;
+  } else if (table === "move_walk_invites") {
+    // An ordinary move happening right now. With a session id there is a Join
+    // waiting in the app; without one this is a row from before sessions existed,
+    // which was a statement rather than a question — so the two are worded
+    // differently and nobody opens the app looking for a button that is not there.
+    recipientId = record.recipient;
+    title = record.session_id ? "Coming along?" : "Out for a move";
+    body = record.session_id
+      ? `${await nickname(record.sender)} is out for a move — join them?`
+      : `${await nickname(record.sender)} set out for a move with you.`;
+    route = "/move";
+  } else if (table === "move_challenge_invites") {
+    if (record.status !== "pending") {
+      return ok();
+    }
+    recipientId = record.invitee;
+    title = "Move invitation";
+    body = `${await moveInviterName(record.inviter)} invited you to a Move challenge.`;
+    route = "/move";
   } else if (table === "group_reactions") {
     recipientId = record.recipient;
     const name = await nickname(record.sender);

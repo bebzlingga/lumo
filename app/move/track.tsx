@@ -21,6 +21,8 @@ import { useLumo } from "@/context/LumoContext";
 import { useMove } from "@/context/MoveContext";
 import { alpha, readableOn } from "@/lib/color";
 import { toDateKey } from "@/lib/date";
+import { challengeClient } from "@/lib/move/challengeClient";
+import { clearWalkSession, loadWalkSession } from "@/lib/move/walkSession";
 import { findFamily } from "@/lib/move/challengeDefs";
 import { checkIntegrity, toWalkPoints, toWalkRecordFromActivity } from "@/lib/move/tracking/bridge";
 import {
@@ -56,6 +58,14 @@ import { enqueueWalk } from "@/lib/walkSyncRunner";
 
 /** How long the map and the live card take to arrive. */
 const ENTER_MS = 320;
+
+/**
+ * How often a shared move publishes its distance and reads the other side's.
+ *
+ * Ten seconds. Two people watching each other's kilometres do not need it faster,
+ * and every step tighter multiplies both a write and a read across the whole walk.
+ */
+const WALK_SYNC_MS = 10_000;
 
 /**
  * There is no Walk/Run toggle, and there is no longer a note explaining why.
@@ -305,11 +315,114 @@ export default function MoveTrackScreen() {
     beginTracking();
   }, [state, recoveryChecked]);
 
+  /**
+   * Tells friends this account is out, and takes it back when the recording ends.
+   *
+   * Driven off the tracker's own status rather than the two buttons: a walk can be
+   * recovered after a crash, finished from the notification, or abandoned by
+   * leaving the screen, and only the status is true in all of those. Keyed on
+   * `active` alone — a pause is still being out on a move, and flickering the row
+   * on every autopause would be a lot of writes to say nothing.
+   */
+  const recordingNow = state !== null && state.status !== "finished";
+
+  React.useEffect(() => {
+    if (!recordingNow) {
+      return;
+    }
+
+    void challengeClient.beginPresence(state?.type === "run" ? "run" : "walk").catch(() => undefined);
+
+    return () => {
+      void challengeClient.endPresence().catch(() => undefined);
+    };
+  }, [recordingNow, state?.type]);
+
+  /**
+   * The shared session this walk belongs to, and what the other side is covering.
+   *
+   * Read from storage rather than a route param because the walk outlives the
+   * screen that started it — see `lib/move/walkSession.ts`. Null on a solo walk,
+   * which is most of them, and everything below it is then inert.
+   */
+  const [sessionId, setSessionId] = React.useState<string | null>(null);
+  const [peers, setPeers] = React.useState<{ userId: string; distanceM: number }[]>([]);
+
+  React.useEffect(() => {
+    let active = true;
+
+    loadWalkSession().then((stored) => {
+      if (active) {
+        setSessionId(stored?.sessionId ?? null);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  /**
+   * Publishes this device's distance and reads the others', on a timer.
+   *
+   * An interval rather than an effect on `distanceMeters`: that number moves with
+   * every accepted fix, which would be a write every few seconds and a write per
+   * peer read on top. Ten seconds is far inside what "watching each other run"
+   * needs and turns a walk's worth of writes into a few dozen.
+   *
+   * Publish-then-read on each tick, the same order `MoveContext` uses for a team
+   * challenge, so the pair of numbers on screen is never your stale one beside
+   * their fresh one.
+   */
+  React.useEffect(() => {
+    if (!sessionId || !recordingNow) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const tick = async () => {
+      const covered = controller.getState()?.distanceMeters ?? 0;
+
+      await challengeClient.publishWalkDistance(sessionId, covered);
+
+      const others = await challengeClient.fetchWalkPeers(sessionId);
+
+      if (!cancelled) {
+        setPeers(others);
+      }
+    };
+
+    const run = () => void tick().catch(() => undefined);
+
+    run();
+    const timer = setInterval(run, WALK_SYNC_MS);
+    // Live as well as timed: their metres land as they are covered, and the timer
+    // covers a socket that never connected or has gone quiet.
+    const unsubscribe = challengeClient.subscribeToWalkSession(sessionId, run);
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+      clearInterval(timer);
+    };
+  }, [sessionId, recordingNow]);
+
   async function handleFinish() {
     const finished = await controller.finish();
 
     if (!finished) {
       return;
+    }
+
+    // Free this account up in friends' invite lists, and step off the shared
+    // session if there was one. Fire-and-forget: the walk is over either way, and
+    // both rows are ignored once stale (see PRESENCE_STALE_MS).
+    void challengeClient.endPresence().catch(() => undefined);
+
+    if (sessionId) {
+      void challengeClient.leaveWalkTogether(sessionId).catch(() => undefined);
+      void clearWalkSession().catch(() => undefined);
     }
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
@@ -918,8 +1031,27 @@ export default function MoveTrackScreen() {
 
           {/* Who you set out with, when the start page was told. A quiet line
               rather than a row of faces: it is context for the walk, not one of
-              its figures. */}
-          {companions ? (
+              its figures.
+              
+              On a SHARED walk it stops being context and becomes a figure — their
+              distance beside yours is the whole point of going out together — so
+              the line carries what they have covered, refreshed every
+              WALK_SYNC_MS. */}
+          {peers.length > 0 ? (
+            <View style={[styles.challengeRow, { borderTopColor: alpha(palette.hairline, "CC") }]}>
+              <Icon name="friends" size={14} color={accent} weight="bulk" />
+              <AppText variant="caption" color={palette.ink} numberOfLines={1} style={styles.challengeName}>
+                {companions || "Together"}
+              </AppText>
+              {/* Their kilometres, in the same shape the challenge line above uses
+                  for its pair — one unit, at the end. Several peers are summed
+                  rather than listed: the card has one line of room, and "the others
+                  have done 3.1 km between them" is the fact anyway. */}
+              <AppText variant="caption" color={palette.muted} numberOfLines={1}>
+                {formatDistanceValue(peers.reduce((total, peer) => total + peer.distanceM, 0))} km
+              </AppText>
+            </View>
+          ) : companions ? (
             <View style={styles.companions}>
               <Icon name="friends" size={13} color={palette.muted} weight="bulk" />
               <AppText variant="caption" color={palette.muted} numberOfLines={1} style={styles.companionsLabel}>
@@ -1087,12 +1219,23 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     marginVertical: 2
   },
+  /**
+   * The one control on the completion screen, so it is sized like a button rather
+   * than like the header chrome.
+   *
+   * 44 with 10 of its own padding, up from a bare 38: it used to take
+   * `ScreenHeader`'s button height because it sat between two of them, but on this
+   * screen it stands alone under a saved activity and at 38 it read as chrome
+   * somebody had left behind. Vertical padding as well as a floor, so the pill
+   * grows with the text size rather than clipping it.
+   */
   shareAction: {
     flexDirection: "row",
     alignSelf: "center",
     alignItems: "center",
     gap: spacing.xs,
-    minHeight: 38,
+    minHeight: 44,
+    paddingVertical: spacing.xs + 2,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth

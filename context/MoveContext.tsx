@@ -2,6 +2,7 @@ import React from "react";
 import { AppState } from "react-native";
 import { addDays, toDateKey } from "@/lib/date";
 import { createId } from "@/lib/id";
+import { ensureSignedIn } from "@/lib/supabase";
 import { achievementFor, hasMilestone, nextFamily, routesToBadge, withAchievement, type MoveAchievement } from "@/lib/move/achievements";
 import {
   canStartChallenge,
@@ -15,7 +16,7 @@ import {
   type TeamGoal
 } from "@/lib/move/activeChallenge";
 import { trackMove } from "@/lib/move/analytics";
-import { challengeClient } from "@/lib/move/challengeClient";
+import { challengeClient, type MoveInvite } from "@/lib/move/challengeClient";
 import { findFamily, findVariant, type MoveMilestoneFamily } from "@/lib/move/challengeDefs";
 import { journeyPosition } from "@/lib/move/journey";
 import { displayedTotalDistance, mergeSummaries, movementStreak } from "@/lib/move/movement";
@@ -36,6 +37,15 @@ import type { MovementSummary } from "@/lib/move/types";
  *
  * Nothing in this file reads or writes a habit.
  */
+
+/**
+ * How often a team challenge re-reads the roster.
+ *
+ * 30 seconds. Nobody is watching a teammate's kilometres tick over second by
+ * second, and a challenge runs for days — this is about a number being right when
+ * somebody opens the tab, not a live feed.
+ */
+const TEAM_SYNC_MS = 30_000;
 
 /** The id used for the local user in a team roster, so a screen can tell "you" apart. */
 export const ME = "me";
@@ -112,6 +122,24 @@ type MoveContextValue = {
     /** How a team splits the distance. Ignored on a solo route. */
     teamGoal?: TeamGoal
   ) => { ok: true } | { ok: false; reason: StartRefusal };
+  /**
+   * Takes up a challenge somebody else invited you to.
+   *
+   * Separate from `startChallenge` because almost nothing is the same: the
+   * challenge already exists, its id and clock come from the server rather than
+   * from here, and there is no roster to validate — the owner built that. What
+   * IS shared is the single-active rule, which is why this returns the same
+   * refusal shape instead of a boolean.
+   *
+   * Async, unlike its sibling: the join has to be confirmed before the local
+   * state adopts it. `startChallenge` can be optimistic because a solo challenge
+   * needs nothing from the server; this one is somebody else's row, and claiming
+   * it locally when the write was refused would show a challenge the rest of the
+   * team cannot see.
+   */
+  acceptInvite: (invite: MoveInvite) => Promise<{ ok: true } | { ok: false; reason: StartRefusal }>;
+  /** Turns one down. The invite leaves the list either way. */
+  declineInvite: (invite: MoveInvite) => Promise<void>;
   /** Abandons the active challenge. Movement history is untouched. */
   leaveChallenge: () => void;
   /** Buys a day back on the deadline. Capped — see `pauseState`. */
@@ -288,6 +316,8 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
    * adding to it. Names are filled from the local roster, because the server
    * deliberately does not store them.
    */
+  const variantKind = progress?.variant.kind ?? null;
+
   React.useEffect(() => {
     const challenge = state.active;
 
@@ -297,7 +327,7 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
 
     let cancelled = false;
 
-    void (async () => {
+    const sync = async () => {
       await challengeClient.publishContribution(challenge.id, progress.currentM);
 
       const remote = await challengeClient.fetch(challenge.id);
@@ -307,6 +337,17 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
       }
 
       const names = new Map(challenge.participants.map((entry) => [entry.userId, entry.name]));
+      /**
+       * Which of the returned rows is this device.
+       *
+       * The server keys everyone by their real user id; the local roster keys the
+       * reader as `ME`, and every screen tells "you" apart by that constant. So
+       * the row that comes back for this account is renamed to it — without this
+       * step the reader's own row arrived as a stranger's, showing "A friend" with
+       * your own kilometres beside it, and on the invitee's side that was every
+       * row on the card.
+       */
+      const myUserId = await ensureSignedIn();
 
       setState((current) =>
         current.active && current.active.id === challenge.id
@@ -314,31 +355,70 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
               ...current,
               active: {
                 ...current.active,
-                participants: remote.participants.map((entry) => ({
-                  ...entry,
-                  name: entry.userId === ME ? "You" : (names.get(entry.userId) ?? entry.name)
-                }))
+                participants: remote.participants.map((entry) => {
+                  const mine = entry.userId === ME || (myUserId !== null && entry.userId === myUserId);
+
+                  return {
+                    ...entry,
+                    userId: mine ? ME : entry.userId,
+                    name: mine ? "You" : (names.get(entry.userId) ?? entry.name)
+                  };
+                })
               }
             }
           : current
       );
-    })().catch(() => {
-      /**
-       * A team sync that fails changes nothing here.
-       *
-       * Your own figure comes from the device's summaries and is already on
-       * screen; this only refreshes what the OTHERS have done, and a stale
-       * roster is a far better outcome than an error over a walk. Caught
-       * explicitly rather than left to float — every other network call in Move
-       * is guarded the same way, and an unhandled rejection here would surface
-       * as a red box in development for a condition that is entirely ordinary.
-       */
-    });
+    };
+
+    /**
+     * A team sync that fails changes nothing here.
+     *
+     * Your own figure comes from the device's summaries and is already on screen;
+     * this only refreshes what the OTHERS have done, and a stale roster is a far
+     * better outcome than an error over a walk. Caught explicitly rather than left
+     * to float — every other network call in Move is guarded the same way, and an
+     * unhandled rejection here would surface as a red box in development for a
+     * condition that is entirely ordinary.
+     */
+    const run = () => void sync().catch(() => undefined);
+
+    run();
+
+    /**
+     * AND AGAIN ON A TIMER, for a team challenge.
+     *
+     * The effect's own triggers are all about THIS device — a new challenge, a
+     * changed status, another kilometre of your own. None of them fire while you sit
+     * still, so a teammate's distance could sit frozen on screen for an entire
+     * afternoon while they were out walking: the one number a team challenge exists
+     * to show, and the only one nothing here was watching.
+     *
+     * Solo challenges get no timer. There is nobody else on them, and a poll every
+     * half minute to re-read your own row would be a battery cost for no fact.
+     */
+    const timer =
+      variantKind === "team" ? setInterval(run, TEAM_SYNC_MS) : null;
+
+    /**
+     * And live, alongside the timer rather than instead of it.
+     *
+     * The socket is what makes a teammate joining or a kilometre landing show up in
+     * a second or two; the timer is what covers the socket being asleep, dropped, or
+     * never established. Belt and braces on purpose — the failure mode of trusting
+     * only the socket is a number that silently stops moving, which is the one thing
+     * a shared challenge cannot afford.
+     */
+    const unsubscribe = variantKind === "team" ? challengeClient.subscribeToChallenge(challenge.id, run) : null;
 
     return () => {
       cancelled = true;
+      unsubscribe?.();
+
+      if (timer) {
+        clearInterval(timer);
+      }
     };
-  }, [isReady, state.active?.id, state.active?.status, progress?.currentM]);
+  }, [isReady, state.active?.id, state.active?.status, progress?.currentM, variantKind]);
 
   const next = React.useMemo(() => nextFamily(state.achievements), [state.achievements]);
   const journey = React.useMemo(() => journeyPosition(totalDistanceM), [totalDistanceM]);
@@ -498,11 +578,20 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
 
         const variant = check.variant;
         const startedAt = new Date().toISOString();
+        /**
+         * A local id to start with, swapped for the server's below.
+         *
+         * Held in a variable because the swap has to be able to find this exact
+         * challenge again — by the time `create` answers, the state may have moved
+         * on (a second start, a leave), and blindly writing the id in would attach
+         * it to whatever is there now.
+         */
+        const localId = createId();
 
         setState((latest) => ({
           ...latest,
           active: {
-            id: createId(),
+            id: localId,
             variantId,
             startedAt,
             endsAt: challengeEndsAt(variant, startedAt),
@@ -515,9 +604,21 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
           }
         }));
 
-        // Reserving the slot server-side is fire-and-forget: a solo challenge
-        // needs nothing from it, and a team one degrades to local-only rather
-        // than refusing to start because the network was down.
+        /**
+         * AND THEN TAKE THE SERVER'S ID, which is the whole point of the call.
+         *
+         * The result used to be discarded. The owner therefore walked around with a
+         * `createId()` uuid that existed on no server, and every call keyed on it
+         * silently did nothing: `publishContribution` wrote to a challenge that was
+         * not there, `fetch` came back null so the roster never arrived, and
+         * `complete` stamped nothing. The invitee's side worked — they take the id
+         * off the invitation — which is exactly why this showed up as "it is not
+         * reflecting on both devices" rather than as an error anywhere.
+         *
+         * Still optimistic: the local id starts the challenge immediately, and a
+         * failed or offline `create` leaves it in place so a solo challenge runs
+         * unaffected. The swap only ever narrows local truth toward the server's.
+         */
         void challengeClient
           .create({
             variant,
@@ -526,11 +627,72 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
             friendIds: participants.filter((entry) => entry.userId !== ME).map((entry) => entry.userId),
             teamGoal
           })
+          .then((created) => {
+            if (!created) {
+              return;
+            }
+
+            setState((current) =>
+              current.active && current.active.id === localId
+                ? { ...current, active: { ...current.active, id: created.id } }
+                : current
+            );
+          })
           .catch(() => undefined);
 
         trackMove("move_challenge_joined", { challengeId: variantId, milestoneId: variant.milestoneId });
 
         return { ok: true };
+      },
+      async acceptInvite(invite) {
+        const variant = findVariant(invite.variantId);
+
+        if (!variant) {
+          return { ok: false, reason: "MOVE_CHALLENGE_UNKNOWN_VARIANT" };
+        }
+
+        // The one rule an invitee can still break. Checked here rather than left
+        // to the database's duplicate key, so the answer is a sentence instead of
+        // a failed write.
+        if (stateRef.current.active && stateRef.current.active.status === "active") {
+          return { ok: false, reason: "MOVE_CHALLENGE_ALREADY_ACTIVE" };
+        }
+
+        if (!(await challengeClient.respondToInvite(invite.challengeId, true))) {
+          // Refused by the server, and it does not say which rule: the slot, or
+          // the subscription check on a Plus rung. `JOIN_REFUSED` exists to say
+          // both rather than guess one.
+          return { ok: false, reason: "MOVE_CHALLENGE_JOIN_REFUSED" };
+        }
+
+        setState((latest) => ({
+          ...latest,
+          active: {
+            // The SERVER's id, not a local one — this challenge already exists,
+            // and a fresh id here would publish contributions to a row nobody
+            // else is reading.
+            id: invite.challengeId,
+            variantId: invite.variantId,
+            startedAt: invite.startedAt,
+            endsAt: invite.endsAt,
+            status: "active",
+            completedAt: null,
+            // Filled in by the next sync, which reads the real roster off the
+            // server. Starting with just this device keeps the local shape valid
+            // in the meantime.
+            participants: [{ userId: ME, name: "You", contributionM: 0, leftAt: null }],
+            ownerId: invite.inviterId,
+            teamGoal: invite.teamGoal,
+            pausesUsed: 0
+          }
+        }));
+
+        trackMove("move_challenge_joined", { challengeId: invite.variantId, milestoneId: invite.milestoneId });
+
+        return { ok: true };
+      },
+      async declineInvite(invite) {
+        await challengeClient.respondToInvite(invite.challengeId, false);
       },
       pauseChallenge() {
         setState((latest) => (latest.active ? { ...latest, active: pauseChallenge(latest.active) } : latest));

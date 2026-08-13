@@ -125,9 +125,23 @@ type LumoContextValue = StoredState & {
   isDark: boolean;
   palette: LumoPalette;
   lastMessage: string;
-  // Freemium entitlements + gating. Two independent purchases: `isPro` buys
-  // the social features, `isUnlimited` lifts the habit/journal caps.
+  /**
+   * Freemium entitlements + gating. Two independent purchases, and the field
+   * names predate what they are CALLED to the reader:
+   *
+   *  - `isPro` / `isPlus` — the ₱49 monthly subscription, sold as **Plus**. Buys
+   *    the shared side of the app: friends, groups, the social half of Move.
+   *  - `isUnlimited` — the ₱149 one-off, sold as **Pro**. Lifts the habit and
+   *    journal caps for good.
+   *
+   * `isPlus` is the same value as `isPro`, exposed under the name the product
+   * actually has. The old name stays because it is a PERSISTED settings key (and
+   * a live database column, `move_challenges.is_pro`) — renaming either would be
+   * a migration on every device for a word. New code reads `isPlus`; screens say
+   * "Plus" and "Pro" per the products above. See `components/PlusBadge.tsx`.
+   */
   isPro: boolean;
+  isPlus: boolean;
   isUnlimited: boolean;
   habitLimit: number;
   ownedHabitCount: number;
@@ -828,12 +842,25 @@ export function LumoProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      /**
+       * Realtime FIRST, then the push token.
+       *
+       * The order matters more than it looks: `getExpoPushToken` prompts for
+       * permission and talks to Expo's servers, and anything that threw in there
+       * — no project id, a simulator, a refused prompt followed by a bad
+       * `savePushToken` — landed in the catch below and the subscription was never
+       * made. In-app banners then failed for a reason that had nothing to do with
+       * them, and silently.
+       *
+       * They are independent: realtime needs a signed-in user and nothing else,
+       * and push needs a token. Neither should be able to take the other down.
+       */
+      unsubscribe = subscribeToUserNotifications(userId);
+
       const token = await getExpoPushToken();
       if (token) {
         friendsService.savePushToken(token);
       }
-
-      unsubscribe = subscribeToUserNotifications(userId);
     })().catch(() => {
       // Push is a nicety: no token means no notifications, and the app is
       // otherwise unaffected. Caught rather than left to float — an unhandled
@@ -879,6 +906,9 @@ export function LumoProvider({ children }: { children: ReactNode }) {
       themeId,
       lastMessage,
       isPro,
+      // The same entitlement under the name the product is sold as — see the
+      // note on the context type.
+      isPlus: isPro,
       isUnlimited,
       habitLimit: FREE_HABIT_LIMIT,
       ownedHabitCount,

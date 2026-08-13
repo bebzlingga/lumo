@@ -399,6 +399,26 @@ class ActivityTrackerController {
    * elapsed only and opens a fresh segment.
    */
   async recover(): Promise<ActivityTrackingState | null> {
+    /**
+     * AN ACTIVITY ALREADY IN MEMORY IS NOT A LEFTOVER.
+     *
+     * This controller outlives every screen — that is the whole reason it exists
+     * outside React — so if `this.state` is set, this process never died and there
+     * is nothing to recover.
+     *
+     * Without this guard, walking with the app open and returning to the tracking
+     * screen re-entered recovery on the LIVE walk: `restoreActivity` closed the
+     * open segment, charged the "gap" to elapsed time and dropped GPS quality to
+     * unavailable, the screen asked "you have a walk in progress — discard or keep
+     * it?" about the walk being recorded at that moment, and answering put it back
+     * where it started. Every return to the screen asked again. The recording was
+     * never lost, but it could not be got out of, and it was being quietly damaged
+     * each time.
+     */
+    if (this.state) {
+      return null;
+    }
+
     const stored = await loadActivity();
 
     if (!stored || stored.status === "finished") {

@@ -850,7 +850,15 @@ export const friendsService = {
     });
 
     if (error) {
-      console.warn("[addGroupActivity] insert failed", error);
+      // Development only. The reason is returned to the caller below and shown to
+      // the user, so a release build has nothing to gain from a second copy in
+      // the console — and this one carried the raw Supabase error, which is more
+      // than a shipped log should be spilling.
+      if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.warn("[addGroupActivity] insert failed", error);
+      }
+
       // 42501 = RLS denial. Only the group owner may write group_habits, so a
       // member tapping Start gets rejected here.
       const isRlsDenial = error.code === "42501" || /row-level security/i.test(error.message ?? "");

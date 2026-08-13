@@ -289,6 +289,17 @@ export function SubscriptionGate({ product = "friends" }: { product?: PaywallPro
         </View>
       }
       onScroll={handleScroll}
+      /**
+       * The bar SCROLLS on this one, unlike every other screen.
+       *
+       * Pinned, it hung an empty strip over the backdrop plate — the bar carries
+       * no title here (see below), so all a fixed one contributes is a band of
+       * canvas across Lumo's head, and it stays there through the whole offer.
+       * Nothing on this page needs reaching twice either: the way out is at the
+       * top because that is where you start, and the button that matters is at
+       * the foot in its own right.
+       */
+      pinHeader={false}
     >
       {/* The app's page bar, so this looks like a screen of Lumo rather than a
           modal that arrived from somewhere else. The back button is dropped

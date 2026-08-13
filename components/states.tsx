@@ -23,6 +23,7 @@ function StateShell({
 	action,
 	secondaryAction,
 	quiet = false,
+	compact = false,
 }: {
 	children?: ReactNode
 	title: string
@@ -31,6 +32,15 @@ function StateShell({
 	secondaryAction?: Action
 	/** Recedes the whole block — for "nothing here yet" that isn't a problem. */
 	quiet?: boolean
+	/**
+	 * Steps the body copy down a point, for a state inside a sheet or a card
+	 * rather than on a page of its own — where the shell's own copy is the only
+	 * thing in a small frame, and 14 across three lines fills it.
+	 *
+	 * Separate from `quiet`, which is about colour: a state can be the ordinary
+	 * one AND on a full page, or urgent AND in a sheet.
+	 */
+	compact?: boolean
 }) {
 	const { palette, isDark } = useLumo()
 
@@ -41,7 +51,11 @@ function StateShell({
 				{title}
 			</AppText>
 			{body ? (
-				<AppText variant='bodySmall' color={quiet ? palette.muted : palette.subtle} style={styles.body}>
+				<AppText
+					variant='bodySmall'
+					color={quiet ? palette.muted : palette.subtle}
+					style={[styles.body, compact ? styles.bodyCompact : null]}
+				>
 					{body}
 				</AppText>
 			) : null}
@@ -92,6 +106,8 @@ export function EmptyState({
 	mood = 'happy',
 	icon,
 	quiet = false,
+	compact = false,
+	art = true,
 }: {
 	title: string
 	body?: string
@@ -102,6 +118,17 @@ export function EmptyState({
 	 * rather than something to fix — e.g. a Paused tab with nothing paused.
 	 */
 	quiet?: boolean
+	/** Steps the body copy down a point, for a state inside a sheet or a card. */
+	compact?: boolean
+	/**
+	 * Draw the icon (or the mascot) above the copy. Pass false for a state that
+	 * wants neither — a small frame where the art outweighs the two lines it sits
+	 * over, and where the glyph would be repeating a control already on screen.
+	 *
+	 * Note this is not the same as omitting `icon`, which falls back to the
+	 * mascot: that is a bigger piece of art, not none.
+	 */
+	art?: boolean
 }) {
 	const { palette } = useLumo()
 	/**
@@ -113,8 +140,8 @@ export function EmptyState({
 	const iconTone = quiet ? palette.muted : palette.subtle
 
 	return (
-		<StateShell title={title} body={body} quiet={quiet}>
-			{icon ? (
+		<StateShell title={title} body={body} quiet={quiet} compact={compact}>
+			{!art ? null : icon ? (
 				<View style={styles.iconCircle}>
 					<Icon name={icon} size={30} color={iconTone} weight='bulk' />
 				</View>
@@ -192,6 +219,12 @@ const styles = StyleSheet.create({
 		textAlign: 'center',
 		lineHeight: 20,
 		maxWidth: 280,
+	},
+	// One point off `bodySmall`, with the leading brought down to match — dropping
+	// the size alone leaves the lines further apart than the type is tall.
+	bodyCompact: {
+		fontSize: 13,
+		lineHeight: 18,
 	},
 	cta: {
 		alignSelf: 'stretch',

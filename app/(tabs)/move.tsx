@@ -1,10 +1,24 @@
+import * as Haptics from "expo-haptics";
 import { useFocusEffect, useRouter } from "expo-router";
 import React from "react";
-import { Animated, RefreshControl, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import {
+  Alert,
+  Animated,
+  AppState,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent
+} from "react-native";
 import { Icon, type IconName } from "@/components/Icon";
 import { ChallengeFacts, ChallengeHeadline, TeamContributions, useMoveAccent, useTeamMembers } from "@/components/move/ChallengeUI";
 import { Avatar } from "@/components/Avatar";
 import { MoveBadge } from "@/components/move/MoveBadge";
+import { MoveInviteCard } from "@/components/move/MoveInviteCard";
+import { WalkInviteCard } from "@/components/move/WalkInviteCard";
 import { MoveScopeTabs, type MoveScope } from "@/components/move/MoveScopeTabs";
 import { Pressable } from "@/components/Pressable";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -18,7 +32,10 @@ import { ME, useMove } from "@/context/MoveContext";
 import { addDays, formatRelativeDate, toDateKey } from "@/lib/date";
 import { hasMilestone } from "@/lib/move/achievements";
 import { trackMove } from "@/lib/move/analytics";
+import { START_REFUSAL_COPY } from "@/lib/move/activeChallenge";
+import { challengeClient, onMoveInvitesChanged, type MoveInvite, type WalkInvite } from "@/lib/move/challengeClient";
 import { MOVE_FAMILIES } from "@/lib/move/challengeDefs";
+import { clearWalkSession, loadWalkSession, saveWalkSession } from "@/lib/move/walkSession";
 import { formatKilometres, formatMinutes, formatSteps } from "@/lib/move/movement";
 import { MovePermissionCard } from "@/components/move/MoveCards";
 import { MovingMapPreview } from "@/components/move/MovingMapPreview";
@@ -28,6 +45,15 @@ import { useActivityTracker } from "@/lib/move/tracking/useActivityTracker";
 import { friendsService, type Friendship } from "@/lib/friends";
 import { loadWalkState } from "@/lib/walkStorage";
 import type { WalkRecord } from "@/lib/walk";
+
+/**
+ * How much of the neighbouring invitation shows past the centred one.
+ *
+ * 28 is enough to read as a card rather than a stripe, and little enough that the
+ * one in the middle is plainly the one being answered. It is the only thing that
+ * says a second invitation exists before anybody swipes.
+ */
+const INVITE_PEEK = 28;
 
 /** How much higher the empty state starts than an active challenge does. */
 const EMPTY_SCENE_LIFT = 28;
@@ -93,6 +119,49 @@ export default function MoveScreen() {
   /** Friends, for putting a face to each companion name. */
   const [friends, setFriends] = React.useState<Friendship[]>([]);
   /**
+   * Challenges friends have asked this account to join.
+   *
+   * Held here rather than in `MoveContext` because they are not part of Move's
+   * state — they are a question about it, they live only on the server, and
+   * nothing offline depends on them. The context owns the ANSWER (`acceptInvite`)
+   * because that changes the active challenge, which is state.
+   */
+  const [invites, setInvites] = React.useState<MoveInvite[]>([]);
+  /**
+   * And invitations to an ordinary move happening right now.
+   *
+   * A separate list from the challenge invites above, because they are separate
+   * things: one is a target over days, the other is "coming out for a walk?" and
+   * expires on its own as the walk ends. Both cards sit in the same place.
+   */
+  const [walkInvites, setWalkInvites] = React.useState<WalkInvite[]>([]);
+  /** The invite currently being answered, so its buttons can hold still. */
+  const [answering, setAnswering] = React.useState<string | null>(null);
+  /**
+   * A shared move this device has agreed to but not started yet.
+   *
+   * What turns "Move Now" into "Move with Naj". Read from storage rather than held
+   * only in state, so the promise survives the tab being closed, the app being
+   * backgrounded, and a relaunch — see `lib/move/walkSession.ts`.
+   */
+  const [joinedSession, setJoinedSession] = React.useState<{ sessionId: string | null; withName?: string } | null>(null);
+  /** Both kinds at once — the carousel shows them in one deck. */
+  const invitationCount = invites.length + walkInvites.length;
+  const { width: screenWidth } = useWindowDimensions();
+  /**
+   * The deck's geometry: one card centred, its neighbours peeking either side.
+   *
+   * `INVITE_PEEK` is how much of the next card shows. The card is the screen minus
+   * that sliver on BOTH sides, and the scroller is padded by exactly the same
+   * amount — which is what centres the first card instead of starting it at the
+   * gutter, and what leaves the previous one visible once you have swiped.
+   *
+   * The padding and the width are one calculation for that reason: they have to
+   * agree or every card lands off-centre by the difference.
+   */
+  const inviteCardWidth = Math.max(240, screenWidth - (INVITE_PEEK + spacing.xs) * 2);
+  const inviteSidePad = Math.max(0, (screenWidth - inviteCardWidth) / 2);
+  /**
    * A recording in progress, if there is one.
    *
    * Read straight from the tracker rather than through Move's own state: the
@@ -139,6 +208,17 @@ export default function MoveScreen() {
   }, [activity?.rawPoints]);
   const [dismissedConnect, setDismissedConnect] = React.useState(false);
   const [scope, setScope] = React.useState<MoveScope>("today");
+  /**
+   * Whether the carousel is on screen, and therefore whether the stacked cards at
+   * the top of the tab should stand down.
+   *
+   * The carousel sits inside the idle block — Today, nothing running — so on the
+   * Stats tab or mid-challenge it does not exist, and the invitations need
+   * somewhere else to be. One flag, read in both places, so the two can never both
+   * render and show every invitation twice.
+   */
+  const carouselShown = scope === "today" && !move.progress && invitationCount > 0;
+
 
   // No intro screen: Move opens on Move. The one thing onboarding did that
   // mattered — offering to connect health data — is `MovePermissionCard` below,
@@ -263,6 +343,41 @@ export default function MoveScreen() {
   }
 
   /**
+   * The invite list, reloaded from the server.
+   *
+   * A callback rather than inline in the focus effect, because three different
+   * things ask for it — focus, a live realtime event, and coming back to the
+   * foreground. Always replaces the whole list: an invite can be withdrawn by the
+   * inviter or answered on another device, and merging would keep a card alive
+   * that no longer has a row behind it.
+   */
+  const loadInvites = React.useCallback(async () => {
+    /**
+     * The two lists are loaded INDEPENDENTLY, not in one `Promise.all` under one
+     * catch.
+     *
+     * They were, and it coupled them: a walk-invite query against a database
+     * missing the sessions migration threw, and the throw blanked the challenge
+     * invites too — a card that had nothing wrong with it vanished because a
+     * different feature was half-deployed. Each list now fails on its own.
+     */
+    const [challenges, walks] = await Promise.all([
+      challengeClient.listInvites().catch(() => null),
+      challengeClient.listWalkInvites().catch(() => null)
+    ]);
+
+    // Null means the fetch failed, and the previous list is kept: an empty list
+    // would read as "no invitations", which is a different and wrong statement.
+    if (challenges) {
+      setInvites(challenges);
+    }
+
+    if (walks) {
+      setWalkInvites(walks);
+    }
+  }, []);
+
+  /**
    * Re-read on every visit, so a walk finished a moment ago has its row.
    *
    * On focus rather than on a dependency: this tab stays mounted, and a walk
@@ -288,11 +403,214 @@ export default function MoveScreen() {
         })
         .catch(() => undefined);
 
+      void loadInvites();
+
+      // The session survives this screen, so it is re-read on every visit rather
+      // than trusted from the last one: it may have been started, finished or gone
+      // stale on the track screen since.
+      loadWalkSession().then((stored) => {
+        if (active) {
+          setJoinedSession(stored ? { sessionId: stored.sessionId, withName: stored.withName } : null);
+        }
+      });
+
       return () => {
         active = false;
       };
-    }, [])
+    }, [loadInvites])
   );
+
+  /**
+   * And live, not only on focus.
+   *
+   * Three ways an invite arrives, and each needs its own trigger. `onFocus` above
+   * covers coming back to the tab. `onMoveInvitesChanged` covers one landing while
+   * you are ALREADY on this tab — realtime hears the row and rings it, and without
+   * this the card would wait for a focus that never comes. And the foreground
+   * check covers the phone having been asleep, where the realtime socket was gone
+   * and no event was ever delivered.
+   */
+  React.useEffect(() => {
+    const stopListening = onMoveInvitesChanged(() => void loadInvites());
+    const subscription = AppState.addEventListener("change", (status) => {
+      if (status === "active") {
+        void loadInvites();
+      }
+    });
+
+    return () => {
+      stopListening();
+      subscription.remove();
+    };
+  }, [loadInvites]);
+
+  /**
+   * Answering an invite.
+   *
+   * The row leaves the list either way, and on the way in it is dropped BEFORE
+   * the refusal can come back — accepting can still fail (someone else's slot
+   * rule, or the subscription check on a Plus rung), and that is what the alert
+   * is for. Leaving the card up under an alert would read as the tap not having
+   * landed.
+   */
+  /**
+   * Answering an invitation to walk together.
+   *
+   * Joining does two things, in this order: it takes the place on the session, and
+   * only then starts a recording. The other way round would put somebody on a
+   * tracked walk that nobody else can see — and the join is the part that can be
+   * refused.
+   *
+   * The session id is stored rather than passed to `/move/track`: the walk outlives
+   * the screen and can be recovered after a crash, when a route param is long gone
+   * (see `lib/move/walkSession.ts`).
+   */
+  /**
+   * Ticks an invitation, or unticks it.
+   *
+   * One handler for both directions, because the row is a checkbox and a checkbox
+   * has one action. Ticking takes the place on the walk and stores the session,
+   * which is what makes "Move Now" publish to it; unticking gives the place back
+   * and clears the session, so the same button goes out alone again.
+   *
+   * The card is never removed by either — an invitation is a standing offer until
+   * the friend's walk ends, and a row that vanished on the tick would leave nothing
+   * to untick.
+   */
+  async function toggleWalkInvite(invite: WalkInvite) {
+    if (answering) {
+      return;
+    }
+
+    setAnswering(invite.inviteId);
+
+    /**
+     * The tick lands NOW, and is taken back only if the server refuses.
+     *
+     * Selecting used to wait on up to two round trips — handing back the previous
+     * place, then taking this one — and on a slow connection a tap on the row did
+     * nothing at all for a second or more, which reads as a dead control rather than
+     * a slow one. The state a tap is about is a local one; the writes are how it is
+     * kept.
+     *
+     * `snapshot` is what the revert restores, so a failure cannot leave the deck
+     * showing a place this device does not hold.
+     */
+    const snapshot = walkInvites;
+    const nextAccepted = !invite.accepted;
+
+    setWalkInvites((current) =>
+      current.map((entry) => ({
+        ...entry,
+        // A radio across the deck: ticking one unticks the rest in the same pass.
+        accepted: entry.inviteId === invite.inviteId ? nextAccepted : nextAccepted ? false : entry.accepted
+      }))
+    );
+
+    try {
+      if (invite.accepted) {
+        await challengeClient.undoWalkInvite(invite);
+        await clearWalkSession();
+
+        setJoinedSession(null);
+
+        return;
+      }
+
+      /**
+       * ONE AT A TIME. Ticking this unticks whichever was ticked before.
+       *
+       * You can be on one walk, and there is one stored session — so two ticked rows
+       * would promise something the storage cannot keep, and the second tick would
+       * silently take the first one's place while both still showed a tick. The
+       * previous one is given back first, so the server agrees with the screen.
+       */
+      const previous = walkInvites.find((entry) => entry.accepted && entry.inviteId !== invite.inviteId);
+
+      if (previous) {
+        await challengeClient.undoWalkInvite(previous);
+      }
+
+      if (!(await challengeClient.respondToWalkInvite(invite, true))) {
+        // Put the deck back exactly as it was before the optimistic tick.
+        setWalkInvites(snapshot);
+        Alert.alert("Could not join", "That move may have finished. Pull to refresh and see.");
+
+        return;
+      }
+
+      const senderName = friends.find((entry) => entry.profile.id === invite.senderId)?.profile.nickname;
+
+      await saveWalkSession({ sessionId: invite.sessionId, owner: false, withName: senderName || "a friend" });
+
+      setJoinedSession({ sessionId: invite.sessionId, withName: senderName || "a friend" });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    } finally {
+      setAnswering(null);
+    }
+  }
+
+  /**
+   * Clears an invitation off the deck for good.
+   *
+   * A decline, not an untick: the row is marked declined so it does not come back on
+   * the next refresh. The difference matters — leaving an invitation unticked means
+   * "not right now" and it expires with their walk, where the cross means "I am not
+   * coming" and should be believed.
+   *
+   * If it was the ticked one, the session goes with it: the button must not still be
+   * armed for a walk that has just been turned down.
+   */
+  async function dismissWalkInvite(invite: WalkInvite) {
+    if (answering) {
+      return;
+    }
+
+    setAnswering(invite.inviteId);
+
+    try {
+      await challengeClient.respondToWalkInvite(invite, false);
+
+      if (invite.accepted) {
+        await clearWalkSession();
+        setJoinedSession(null);
+      }
+
+      setWalkInvites((current) => current.filter((entry) => entry.inviteId !== invite.inviteId));
+    } finally {
+      setAnswering(null);
+    }
+  }
+
+  async function answerInvite(invite: MoveInvite, accept: boolean) {
+    if (answering) {
+      return;
+    }
+
+    setAnswering(invite.challengeId);
+
+    try {
+      if (!accept) {
+        await move.declineInvite(invite);
+        setInvites((current) => current.filter((entry) => entry.challengeId !== invite.challengeId));
+
+        return;
+      }
+
+      const result = await move.acceptInvite(invite);
+
+      if (result.ok) {
+        setInvites((current) => current.filter((entry) => entry.challengeId !== invite.challengeId));
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+
+        return;
+      }
+
+      Alert.alert("Could not join", START_REFUSAL_COPY[result.reason]);
+    } finally {
+      setAnswering(null);
+    }
+  }
 
   async function handleConnect() {
     setConnecting(true);
@@ -366,6 +684,50 @@ export default function MoveScreen() {
         <MovePermissionCard onConnect={() => void handleConnect()} onDismiss={() => setDismissedConnect(true)} busy={connecting} />
       ) : null}
 
+      {/* Above the scope split, so an invitation is not hidden behind the tab you
+          happen not to be on — and above today's own numbers, because it is the
+          only thing on this screen with somebody else waiting on the other end.
+          The inviter's name and face come from the friend list: the server keeps
+          no copy of either. */}
+      {/* THE FALLBACK PLACEMENT, and only that.
+          
+          Invitations live in the carousel further down, where the benefits chips
+          would be — but that block only exists on the Today tab with nothing
+          running. So these stacked cards cover the cases the carousel cannot
+          reach: a challenge in progress, or the Stats tab. Rendering both at once
+          would show every invitation twice. */}
+      {carouselShown ? null : walkInvites.map((invite) => {
+        const sender = friends.find((entry) => entry.profile.id === invite.senderId);
+
+        return (
+          <WalkInviteCard
+            key={invite.inviteId}
+            invite={invite}
+            senderName={sender?.profile.nickname || sender?.profile.lumoId || "A friend"}
+            senderAvatar={sender?.profile.avatar}
+            busy={answering === invite.inviteId}
+            onToggle={() => void toggleWalkInvite(invite)}
+            onDismiss={() => void dismissWalkInvite(invite)}
+          />
+        );
+      })}
+
+      {carouselShown ? null : invites.map((invite) => {
+        const inviter = friends.find((entry) => entry.profile.id === invite.inviterId);
+
+        return (
+          <MoveInviteCard
+            key={invite.challengeId}
+            invite={invite}
+            inviterName={inviter?.profile.nickname || inviter?.profile.lumoId || "A friend"}
+            inviterAvatar={inviter?.profile.avatar}
+            busy={answering === invite.challengeId}
+            onJoin={() => void answerInvite(invite, true)}
+            onDecline={() => void answerInvite(invite, false)}
+          />
+        );
+      })}
+
       {!move.canRead ? (
         <EmptyState
           icon="info"
@@ -404,7 +766,28 @@ export default function MoveScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={moving ? "Back to your walk" : "Start moving"}
-                onPress={() => router.push(moving ? "/move/track" : "/move/start")}
+                /**
+                 * Three destinations, one button.
+                 *
+                 * Mid-walk it is the way back to the recording. With a friend's walk
+                 * ticked it starts one straight away, publishing to their session.
+                 * Otherwise it asks the start page who is coming.
+                 *
+                 * The middle case is here as well as on the idle button below
+                 * because an invitation can be ticked while a challenge is running —
+                 * the deck is on screen either way — and a Move Now that ignored the
+                 * tick would walk somebody through the start page to choose company
+                 * they had already chosen.
+                 */
+                onPress={() =>
+                  router.push(
+                    moving
+                      ? "/move/track"
+                      : joinedSession
+                        ? { pathname: "/move/track", params: joinedSession.withName ? { with: joinedSession.withName } : {} }
+                        : "/move/start"
+                  )
+                }
                 style={({ pressed }) => [styles.trackWalk, { backgroundColor: accent.primary, opacity: pressed ? 0.85 : 1 }]}
               >
                 <Icon name="walk" size={16} color={palette.white} weight="bulk" />
@@ -508,29 +891,124 @@ export default function MoveScreen() {
                 Every step supports your energy, mood, heart and sleep — and small walks turn into a routine that lasts.
               </AppText>
 
-              <View style={styles.benefits}>
-                {BENEFITS.map((benefit) => (
-                  <View key={benefit.label} style={[styles.benefit, { backgroundColor: accent.soft }]}>
-                    <Icon name={benefit.icon} size={14} color={accent.glyph} weight="bulk" />
-                    <AppText variant="caption" color={palette.body} numberOfLines={2} style={styles.benefitLabel}>
-                      {benefit.label}
+              {/* INVITATIONS TAKE THIS SPACE when there are any.
+                  
+                  The benefits chips are an argument for walking, and they are the
+                  right thing to show somebody with no reason to go out yet. A
+                  friend asking you along is a better reason than any of them, so
+                  when one is waiting it takes the same slot rather than stacking
+                  above the chips and pushing the button off the screen.
+
+                  A carousel rather than a column for the same reason: three
+                  invitations as three cards would bury "Move Now" under other
+                  people's plans. */}
+              {invitationCount > 0 ? (
+                <View style={styles.inviteCarousel}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    // Snapped to the card pitch, so a swipe lands on a card rather
+                    // than between two — and `fast` because a carousel that glides
+                    // past three cards feels like a scroll, not a deck.
+                    snapToInterval={inviteCardWidth + spacing.xs}
+                    decelerationRate="fast"
+                    disableIntervalMomentum
+                    style={styles.inviteCarouselScroll}
+                    // The side padding is computed, so it cannot live in the
+                    // stylesheet with the rest — it is half the space the card does
+                    // not fill, which is what puts a card in the middle of the
+                    // screen rather than against its edge.
+                    contentContainerStyle={[styles.inviteCarouselContent, { paddingHorizontal: inviteSidePad }]}
+                  >
+                    {walkInvites.map((invite) => {
+                      const sender = friends.find((entry) => entry.profile.id === invite.senderId);
+
+                      return (
+                        <View key={invite.inviteId} style={{ width: inviteCardWidth }}>
+                          <WalkInviteCard
+                            invite={invite}
+                            senderName={sender?.profile.nickname || sender?.profile.lumoId || "A friend"}
+                            senderAvatar={sender?.profile.avatar}
+                            busy={answering === invite.inviteId}
+                            onToggle={() => void toggleWalkInvite(invite)}
+                            onDismiss={() => void dismissWalkInvite(invite)}
+                          />
+                        </View>
+                      );
+                    })}
+                    {invites.map((invite) => {
+                      const inviter = friends.find((entry) => entry.profile.id === invite.inviterId);
+
+                      return (
+                        <View key={invite.challengeId} style={{ width: inviteCardWidth }}>
+                          <MoveInviteCard
+                            invite={invite}
+                            inviterName={inviter?.profile.nickname || inviter?.profile.lumoId || "A friend"}
+                            inviterAvatar={inviter?.profile.avatar}
+                            busy={answering === invite.challengeId}
+                            onJoin={() => void answerInvite(invite, true)}
+                            onDecline={() => void answerInvite(invite, false)}
+                          />
+                        </View>
+                      );
+                    })}
+                  </ScrollView>
+
+                  {/* Dots only past one card. A single dot under a single card is
+                      a control for a choice that does not exist. */}
+                  {invitationCount > 1 ? (
+                    <AppText variant="caption" color={palette.muted} style={styles.inviteCarouselHint}>
+                      {invitationCount} invitations · swipe
                     </AppText>
-                  </View>
-                ))}
-              </View>
+                  ) : null}
+                </View>
+              ) : (
+                <View style={styles.benefits}>
+                  {BENEFITS.map((benefit) => (
+                    <View key={benefit.label} style={[styles.benefit, { backgroundColor: accent.soft }]}>
+                      <Icon name={benefit.icon} size={14} color={accent.glyph} weight="bulk" />
+                      <AppText variant="caption" color={palette.body} numberOfLines={2} style={styles.benefitLabel}>
+                        {benefit.label}
+                      </AppText>
+                    </View>
+                  ))}
+                </View>
+              )}
 
               {/* One door — and while it is open, the door is the walk itself.
                   Offering "Move Now" during a recording would start a second
                   one; the tracker allows exactly one at a time, so the button
                   becomes the way back to the one already running. */}
+              {/* ONE BUTTON, always, and it always says the same thing.
+                  
+                  A ticked invitation does not replace it — somebody who ticked a
+                  friend's walk and then decided to go on their own should not have
+                  to hunt for the way to do that, and a button that renames itself
+                  under a ticked row reads as the row having taken it over.
+                  
+                  What changes is only where it goes. With a walk ticked, both
+                  questions the start page asks — alone or together, and with whom —
+                  are already answered, so it skips that page and begins, publishing
+                  to the session the tick put this device on. */}
               <View style={styles.inviteActions}>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Start moving"
-                  // Through the start page rather than straight into tracking:
-                  // going out alone and going out with somebody are two
-                  // different outings, and the button that decides is here.
-                  onPress={() => router.push("/move/start")}
+                  accessibilityLabel={joinedSession ? `Start moving with ${joinedSession.withName ?? "your friend"}` : "Start moving"}
+                  /**
+                   * The name travels as a route param, the session through storage.
+                   *
+                   * Two different lifetimes: the companion's name is only needed to
+                   * label THIS recording, which is what `with` does on the track
+                   * screen — the same param the start page passes. The session id has
+                   * to outlive the screen, so it is stored (see `walkSession.ts`).
+                   */
+                  onPress={() =>
+                    router.push(
+                      joinedSession
+                        ? { pathname: "/move/track", params: joinedSession.withName ? { with: joinedSession.withName } : {} }
+                        : "/move/start"
+                    )
+                  }
                   style={({ pressed }) => [styles.inviteAction, { backgroundColor: accent.primary, opacity: pressed ? 0.85 : 1 }]}
                 >
                   <Icon name="walk" size={16} color={palette.white} weight="bulk" />
@@ -838,6 +1316,35 @@ const styles = StyleSheet.create({
    * short final row, `space-between` would push those two to opposite edges of
    * the screen with a hole between them.
    */
+  inviteCarousel: {
+    gap: spacing.xs,
+    /**
+     * Air above the deck, on top of the block's own 8pt stack gap.
+     *
+     * The blurb it follows is centred prose and the deck is a control: at the bare
+     * gap the first invitation sat against the last line of copy and read as part of
+     * the same paragraph. This is the one break on the page between what it is
+     * saying and what it is asking.
+     */
+    marginTop: spacing.sm,
+    alignSelf: "stretch"
+  },
+  /**
+   * Escapes the screen's gutter so a card can be swiped in from the edge, and the
+   * content puts the gutter back — the same full-bleed trick the group roll call
+   * uses. Without it the deck would stop dead at the margin, which reads as a list
+   * that has ended rather than one that carries on.
+   */
+  inviteCarouselScroll: {
+    marginHorizontal: -layout.screenPaddingX
+  },
+  inviteCarouselContent: {
+    flexDirection: "row",
+    gap: spacing.xs
+  },
+  inviteCarouselHint: {
+    textAlign: "center"
+  },
   benefits: {
     flexDirection: "row",
     flexWrap: "wrap",
