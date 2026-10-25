@@ -8,7 +8,7 @@ import { Pressable } from "@/components/Pressable";
 import { BadgeDialog } from "@/components/BadgeDialog";
 import { BadgeImage } from "@/components/BadgeImage";
 import { Icon } from "@/components/Icon";
-import { MoveBadge } from "@/components/move/MoveBadge";
+import { FamilyBadge } from "@/components/move/MoveBadge";
 import { TrophyDialog } from "@/components/TrophyDialog";
 import { TrophyImage } from "@/components/TrophyImage";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -269,15 +269,9 @@ function MoveCell({
       onPressOut={() => setPressed(false)}
       style={[styles.cell, { width: size, opacity: pressed ? 0.7 : 1 }]}
     >
-      <MoveBadge
-        progress={{
-          milestone: { id: family.id, title: family.title, description: "", target: family.distanceM, metric: "distance", tier: "bronze" },
-          progress: unlocked ? family.distanceM : 0,
-          target: family.distanceM,
-          ratio: unlocked ? 1 : 0,
-          unlocked,
-          unlockedAt: null
-        }}
+      <FamilyBadge
+        family={family}
+        unlocked={unlocked}
         // Short of the full column, unlike a streak badge: Move art fills ~90%
         // of its canvas where the streak badges leave a wide margin, so at the
         // same column width it reads as the bigger of the two collections.

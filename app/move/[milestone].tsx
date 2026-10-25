@@ -4,7 +4,7 @@ import { Alert, StyleSheet, View } from "react-native";
 import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
 import { ChallengeHeadline, ChallengeSummary, TeamContributions, useMoveAccent, useTeamMembers } from "@/components/move/ChallengeUI";
-import { MoveBadge } from "@/components/move/MoveBadge";
+import { FamilyBadge } from "@/components/move/MoveBadge";
 import { MoveFriendPicker } from "@/components/move/MoveFriendPicker";
 import { MoveOptionGroup, MoveOptionRow } from "@/components/move/MoveOptionRow";
 import { PlusBadge } from "@/components/PlusBadge";
@@ -258,17 +258,7 @@ export default function MilestoneScreen() {
       />
 
       <View style={styles.hero}>
-        <MoveBadge
-          progress={{
-            milestone: { id: family.id, title: family.title, description: "", target: family.distanceM, metric: "distance", tier: "bronze" },
-            progress: earned ? family.distanceM : 0,
-            target: family.distanceM,
-            ratio: earned ? 1 : 0,
-            unlocked: earned,
-            unlockedAt: null
-          }}
-          size={148}
-        />
+        <FamilyBadge family={family} unlocked={earned} size={148} />
         <AppText variant="bodySmall" color={palette.subtle} style={styles.heroBlurb}>
           {earned ? `${family.subtitle}. Badge earned.` : `${family.subtitle}. ${describeUnlockRule(family)}`}
         </AppText>

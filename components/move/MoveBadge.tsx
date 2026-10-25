@@ -2,6 +2,7 @@ import React from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { MilestoneBadge } from "@/components/MilestoneBadge";
 import { moveBadgeArt } from "@/constants/moveBadgeAssets";
+import type { MoveMilestoneFamily } from "@/lib/move/challengeDefs";
 import type { MoveMilestoneProgress } from "@/lib/move/types";
 
 /**
@@ -91,3 +92,25 @@ const styles = StyleSheet.create({
     height: "100%"
   }
 });
+
+/**
+ * A challenge family's badge, earned or not.
+ *
+ * Every screen that shows the badge shelf drew it by building the same stand-in
+ * progress object by hand; this is that object, once.
+ */
+export function FamilyBadge({ family, unlocked, size }: { family: MoveMilestoneFamily; unlocked: boolean; size?: number }) {
+  return (
+    <MoveBadge
+      progress={{
+        milestone: { id: family.id, title: family.title, description: "", target: family.distanceM, metric: "distance", tier: "bronze" },
+        progress: unlocked ? family.distanceM : 0,
+        target: family.distanceM,
+        ratio: unlocked ? 1 : 0,
+        unlocked,
+        unlockedAt: null
+      }}
+      size={size}
+    />
+  );
+}

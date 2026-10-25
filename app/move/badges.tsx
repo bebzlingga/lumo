@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Icon } from "@/components/Icon";
-import { MoveBadge } from "@/components/move/MoveBadge";
+import { FamilyBadge } from "@/components/move/MoveBadge";
 import { Pressable } from "@/components/Pressable";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Screen } from "@/components/ui";
@@ -62,24 +62,7 @@ export default function MoveBadgesScreen() {
               onPress={() => router.push({ pathname: "/move/[milestone]", params: { milestone: family.id } })}
               style={({ pressed }) => [styles.cell, { opacity: pressed ? 0.7 : 1 }]}
             >
-              <MoveBadge
-                progress={{
-                  milestone: {
-                    id: family.id,
-                    title: family.title,
-                    description: "",
-                    target: family.distanceM,
-                    metric: "distance",
-                    tier: "bronze"
-                  },
-                  progress: unlocked ? family.distanceM : 0,
-                  target: family.distanceM,
-                  ratio: unlocked ? 1 : 0,
-                  unlocked,
-                  unlockedAt: null
-                }}
-                size={92}
-              />
+              <FamilyBadge family={family} unlocked={unlocked} size={92} />
               <AppText variant="caption" color={unlocked ? palette.ink : palette.muted} numberOfLines={1} style={styles.cellName}>
                 {family.title}
               </AppText>

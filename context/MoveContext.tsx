@@ -122,6 +122,8 @@ type MoveContextValue = {
    * different figure than the list under it is precisely the bug this replaced.
    */
   dayDistance: (dateKey: string) => number;
+  /** Every tracked walk, newest first — kept fresh as walks are saved or deleted. */
+  walks: WalkRecord[];
   /** Sets or replaces the goal. Replacing starts its history over. */
   setGoal: (target: { targetM: number; period: MoveGoalPeriod }) => void;
   /** Ends it. There is no other way out — a goal never expires on its own. */
@@ -676,6 +678,7 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
       goal: state.goal,
       goalProgress,
       dayDistance,
+      walks: walkRecords,
       setGoal({ targetM, period }) {
         /**
          * Replacing starts the history over.
@@ -886,6 +889,7 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
       progress,
       goalProgress,
       dayDistance,
+      walkRecords,
       next,
       celebration,
       connect,

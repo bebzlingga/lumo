@@ -3,7 +3,7 @@ import { useRouter } from "expo-router";
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { AwardDialog } from "@/components/AwardDialog";
-import { MoveBadge } from "@/components/move/MoveBadge";
+import { FamilyBadge } from "@/components/move/MoveBadge";
 import { Button } from "@/components/ui";
 import { MOVE_ACCENT } from "@/constants/tools";
 import { spacing } from "@/constants/theme";
@@ -72,24 +72,7 @@ export function MoveCelebration() {
               // other award card in the app.
               renderArt: (size) => (
                 <View style={styles.art}>
-                  <MoveBadge
-                    progress={{
-                      milestone: {
-                        id: family.id,
-                        title: family.title,
-                        description: "",
-                        target: family.distanceM,
-                        metric: "distance",
-                        tier: "bronze"
-                      },
-                      progress: celebration.badgeEarned ? family.distanceM : 0,
-                      target: family.distanceM,
-                      ratio: celebration.badgeEarned ? 1 : 0,
-                      unlocked: celebration.badgeEarned,
-                      unlockedAt: null
-                    }}
-                    size={Math.round(size * 0.74)}
-                  />
+                  <FamilyBadge family={family} unlocked={celebration.badgeEarned} size={Math.round(size * 0.74)} />
                 </View>
               )
             }

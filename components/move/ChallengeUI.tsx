@@ -3,7 +3,7 @@ import { StyleSheet, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { Avatar } from "@/components/Avatar";
 import { Icon, type IconName } from "@/components/Icon";
-import { MoveBadge } from "@/components/move/MoveBadge";
+import { FamilyBadge } from "@/components/move/MoveBadge";
 import { PlusBadge } from "@/components/PlusBadge";
 import { Pressable } from "@/components/Pressable";
 import { AppText } from "@/components/ui";
@@ -169,17 +169,7 @@ export function MilestoneCard({
         {/* Dimmed rather than hidden: a locked rung is a real thing further up
             the ladder, and seeing it is the point of listing it. */}
         <View style={shut ? styles.cardLocked : null}>
-          <MoveBadge
-            progress={{
-              milestone: { id: family.id, title: family.title, description: "", target: family.distanceM, metric: "distance", tier: "bronze" },
-              progress: earned ? family.distanceM : 0,
-              target: family.distanceM,
-              ratio: earned ? 1 : 0,
-              unlocked: earned,
-              unlockedAt: null
-            }}
-            size={48}
-          />
+          <FamilyBadge family={family} unlocked={earned} size={48} />
         </View>
 
         <View style={[styles.cardText, shut ? styles.cardLocked : null]}>
