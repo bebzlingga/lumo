@@ -61,6 +61,11 @@ export default function MilestoneScreen() {
   const [pickerOpen, setPickerOpen] = React.useState(false);
 
   React.useEffect(() => {
+    // Friends are switched off (MOVE_WITH_FRIENDS_ENABLED): no network round trip for a hidden picker.
+    if (!MOVE_WITH_FRIENDS_ENABLED) {
+      return;
+    }
+
     let active = true;
 
     friendsService

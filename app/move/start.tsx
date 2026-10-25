@@ -108,6 +108,11 @@ export default function MoveStartScreen() {
   const [unavailable, setUnavailable] = React.useState<Map<string, string>>(new Map());
 
   React.useEffect(() => {
+    // Friends are switched off (MOVE_WITH_FRIENDS_ENABLED): no network round trip for a hidden picker.
+    if (!MOVE_WITH_FRIENDS_ENABLED) {
+      return;
+    }
+
     let active = true;
 
     friendsService

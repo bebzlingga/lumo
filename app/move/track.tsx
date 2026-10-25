@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import * as Sharing from "expo-sharing";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { MOVE_WITH_FRIENDS_ENABLED } from "@/lib/move/gating";
 import React from "react";
 import { Alert, Animated, Easing, Image, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -354,7 +355,8 @@ export default function MoveTrackScreen() {
   const recordingNow = state !== null && state.status !== "finished";
 
   React.useEffect(() => {
-    if (!recordingNow) {
+    // Presence only feeds friends' pickers, which are switched off.
+    if (!recordingNow || !MOVE_WITH_FRIENDS_ENABLED) {
       return;
     }
 
