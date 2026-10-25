@@ -1,6 +1,6 @@
 import Constants from "expo-constants";
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import React, { ReactNode, useState } from "react";

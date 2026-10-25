@@ -1,4 +1,4 @@
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import type { AvatarConfig } from "@/lib/avatar";
 import { ensureSignedIn, isSupabaseConfigured, supabase } from "@/lib/supabase";
 import type { FeatureRequest, FeatureRequestType } from "@/types/habit";
