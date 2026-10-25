@@ -238,7 +238,8 @@ export function processLocation(
    * toward the old one, putting the route's fresh start somewhere nobody was.
    * A break restarts the estimate from this fix alone.
    */
-  const breaks = breaksSegment(previous, sample);
+  const placedAt = lastPlacedAt(ticked);
+  const breaks = breaksSegment(previous, sample, placedAt);
   const smoothed = smoothFix(breaks ? null : (ticked.smoothing ?? null), sample);
 
   /**
@@ -255,6 +256,7 @@ export function processLocation(
     previous,
     beforePrevious,
     newestAt: newestTimestamp(ticked, sample.timestamp),
+    placedAt,
     steppingRecently: options.steppingRecently
   });
 
@@ -698,6 +700,23 @@ function lastFixAt(state: ActivityTrackingState): number | null {
   const last = state.rawPoints[state.rawPoints.length - 1];
 
   return last ? last.timestamp : null;
+}
+
+/**
+ * The newest fix that still placed the phone: accepted, or rejected only for
+ * being too close to the last one. Vague or impossible fixes do not count — in a
+ * tunnel those keep arriving while the position is genuinely unknown.
+ */
+function lastPlacedAt(state: ActivityTrackingState): number | undefined {
+  for (let index = state.rawPoints.length - 1; index >= 0; index--) {
+    const point = state.rawPoints[index];
+
+    if (point.isAccepted || point.rejectionReason === "jitter" || point.rejectionReason === "duplicate") {
+      return point.timestamp;
+    }
+  }
+
+  return undefined;
 }
 
 function newestTimestamp(state: ActivityTrackingState, candidate: number): number {

@@ -609,6 +609,26 @@ describe('pace', () => {
 
 describe('movement state machine', () => {
 	/**
+	 * Regression: the blackout test measured from the last ACCEPTED fix, so a
+	 * wait over a minute — fixes still arriving, rejected as jitter — zeroed the
+	 * first leg after it and split the route.
+	 */
+	it('treats a long wait with fixes still arriving as a stop, not a blackout', () => {
+		const withSpeed = (northM: number, seconds: number, speed: number) => ({ ...fix(northM, seconds, 4), speed })
+		let state = started()
+		let north = 0
+		let t = 0
+		for (let round = 0; round < 5; round++) {
+			for (let i = 0; i < 30; i++) state = walk(state, [withSpeed((north += 3.5), (t += 1), 3.5)])
+			// 90 s at a crossing: a fix every 2 s, 1 m of wander, Doppler says still.
+			for (let i = 0; i < 45; i++) state = walk(state, [withSpeed(north + (i % 2), (t += 2), 0)])
+		}
+
+		expect(state.segments).toHaveLength(1)
+		expect(state.distanceMeters).toBeGreaterThan(0.95 * 5 * 30 * 3.5)
+	})
+
+	/**
 	 * Regression: the resume window was measured from the PREVIOUS moving fix, so
 	 * with fixes a second apart it never filled and a walker who set off promptly
 	 * after a stop banked nothing for minutes.

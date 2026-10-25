@@ -24,6 +24,12 @@ export type FilterInput = {
   /** The newest timestamp processed so far, for staleness. */
   newestAt: number;
   /**
+   * The newest fix that still PLACED the phone near the route (accepted, or
+   * rejected only as jitter/duplicate). A blackout is a gap since this, not
+   * since the last accepted fix — see the segment-break test below.
+   */
+  placedAt?: number;
+  /**
    * Whether the pedometer saw steps recently.
    *
    * Undefined on a device with no pedometer, and treated as "no opinion" —
@@ -135,7 +141,16 @@ export function filterLocationPoint(input: FilterInput): FilterVerdict {
    * it is where you are — but the gap is not distance, and the caller starts a
    * new segment so nothing draws a line across it.
    */
-  if (legM > TRACKING_CONFIG.distance.segmentBreakM || elapsedMs > TRACKING_CONFIG.distance.segmentBreakMs) {
+  /**
+   * The TIME test runs on the gap since the phone was last placed, not since
+   * the last accepted fix: standing at a crossing keeps producing fixes that
+   * are rejected as jitter, and measuring from the last accepted one turned
+   * every wait over a minute into a "blackout" that zeroed the next leg and
+   * split the route (13% short over ten stops in simulation).
+   */
+  const silentMs = point.timestamp - Math.max(previous.timestamp, input.placedAt ?? previous.timestamp);
+
+  if (legM > TRACKING_CONFIG.distance.segmentBreakM || silentMs > TRACKING_CONFIG.distance.segmentBreakMs) {
     return { accepted: true, distanceM: 0 };
   }
 
@@ -164,7 +179,11 @@ export function minimumLegM(accuracyM: number | null | undefined, stepping = fal
 }
 
 /** Whether this leg should end the segment it belongs to. */
-export function breaksSegment(previous: RawLocationPoint | null, point: { latitude: number; longitude: number; timestamp: number }): boolean {
+export function breaksSegment(
+  previous: RawLocationPoint | null,
+  point: { latitude: number; longitude: number; timestamp: number },
+  placedAt?: number
+): boolean {
   if (!previous) {
     return false;
   }
@@ -174,5 +193,7 @@ export function breaksSegment(previous: RawLocationPoint | null, point: { latitu
     { lat: point.latitude, lon: point.longitude }
   );
 
-  return legM > TRACKING_CONFIG.distance.segmentBreakM || point.timestamp - previous.timestamp > TRACKING_CONFIG.distance.segmentBreakMs;
+  const silentMs = point.timestamp - Math.max(previous.timestamp, placedAt ?? previous.timestamp);
+
+  return legM > TRACKING_CONFIG.distance.segmentBreakM || silentMs > TRACKING_CONFIG.distance.segmentBreakMs;
 }
