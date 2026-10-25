@@ -1,6 +1,5 @@
 import { Platform } from "react-native";
-import SharedGroupPreferences from "react-native-shared-group-preferences";
-import { reloadAllTimelines } from "react-native-widgetkit";
+import { ExtensionStorage } from "@bacons/apple-targets";
 import { habitColorOption } from "@/constants/theme";
 import { isDoneOnDate, isScheduledOnDate } from "@/lib/habitMath";
 import { parseDateKey, toDateKey } from "@/lib/date";
@@ -12,6 +11,10 @@ const APP_GROUP = "group.com.lumo.habits";
 const SNAPSHOT_KEY = "todaySnapshot";
 // The widget appends optimistic completions here; we apply and clear them.
 const PENDING_KEY = "pendingToggles";
+// apple-targets' own App Group bridge (an Expo module, New Architecture-safe),
+// replacing the unmaintained react-native-shared-group-preferences/-widgetkit.
+// Strings are stored as plain strings, which is what the Swift side reads.
+const storage = new ExtensionStorage(APP_GROUP);
 
 // Colours the widget uses so it matches the app's active theme. All hex strings.
 export type WidgetTheme = {
@@ -113,8 +116,8 @@ export async function updateTodayWidget(habits: Habit[], theme?: WidgetTheme, da
 
   try {
     // Stored as a JSON string so the Swift side reads it via string(forKey:).
-    await SharedGroupPreferences.setItem(SNAPSHOT_KEY, JSON.stringify(snapshot), APP_GROUP);
-    reloadAllTimelines();
+    storage.set(SNAPSHOT_KEY, JSON.stringify(snapshot));
+    ExtensionStorage.reloadWidget();
   } catch {
     // Widget not built into this binary yet — safe to ignore.
   }
@@ -132,16 +135,16 @@ export async function readPendingWidgetToggles(): Promise<PendingToggle[]> {
   }
 
   try {
-    const raw = await SharedGroupPreferences.getItem(PENDING_KEY, APP_GROUP);
-    // getItem returns the raw JSON string the widget wrote (or null/undefined).
-    const parsed = typeof raw === "string" ? JSON.parse(raw) : Array.isArray(raw) ? raw : [];
+    // The raw JSON string the widget wrote, or null.
+    const raw = storage.get(PENDING_KEY);
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : [];
     const toggles: PendingToggle[] = Array.isArray(parsed)
       ? parsed.filter((item) => item && typeof item.id === "string" && typeof item.done === "boolean")
       : [];
 
     if (toggles.length > 0) {
       // Clear so we don't re-apply on the next foreground.
-      await SharedGroupPreferences.setItem(PENDING_KEY, "[]", APP_GROUP);
+      storage.set(PENDING_KEY, "[]");
     }
 
     return toggles;
