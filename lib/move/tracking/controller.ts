@@ -595,7 +595,21 @@ class ActivityTrackerController {
 
     const stored = await loadActivity();
 
-    if (!stored || stored.status === "finished") {
+    if (!stored) {
+      return null;
+    }
+
+    /**
+     * A FINISHED-BUT-UNSAVED WALK IS ADOPTED, NOT JUST RETURNED.
+     *
+     * Killed on the summary screen (Finish tapped, Save not), the walk used to
+     * come back as a return value only — `state` stayed null, so the screen's
+     * auto-start began a fresh activity and `saveActivity` overwrote the finished
+     * one on disk. Held in memory, the screen shows its summary and Save again.
+     */
+    if (stored.status === "finished") {
+      this.set(stored);
+
       return stored;
     }
 
@@ -603,8 +617,16 @@ class ActivityTrackerController {
 
     this.set(restored);
     await saveActivity(restored);
+    /**
+     * Drained HERE, before anything else can feed the walk. The screen opens the
+     * foreground watch (`beginPrepare`) alongside recovery, so live fixes reach
+     * `onFix` while the "Keep it / Discard" prompt is still up — and every queued
+     * fix is older than the first live one, so draining later rejected the whole
+     * crash-time queue as duplicate/stale. Discarding clears the queue anyway.
+     */
+    await this.drainBackground();
 
-    return restored;
+    return this.state;
   }
 
   /**
@@ -633,7 +655,17 @@ class ActivityTrackerController {
      * in rather than on the far side of the break the resume opens.
      */
     await this.drainBackground();
-    this.set(resumeActivity({ ...this.state!, status: "paused" }, Date.now()));
+
+    /**
+     * Resume only what was running when the app died. A walk the user had paused
+     * comes back paused, and one still acquiring GPS stays in that phase —
+     * forcing every recovery to "active" restarted both behind the user's back.
+     */
+    const status = this.state?.status;
+
+    if (status === "active" || status === "autoPaused") {
+      this.set(resumeActivity({ ...this.state!, status: "paused" }, Date.now()));
+    }
   }
 
   // --- device wiring --------------------------------------------------------
