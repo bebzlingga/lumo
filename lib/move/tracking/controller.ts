@@ -872,9 +872,9 @@ class ActivityTrackerController {
   /**
    * The pedometer, which counts THIS activity's steps.
    *
-   * The platform reports a running total, so the first reading becomes the
-   * baseline and everything after is a delta. Without that, a walk would open
-   * with however many steps the phone had counted since midnight.
+   * The platform reports a running total since the subscription opened; the
+   * baseline offsets it by a recovered walk's steps and by anything counted
+   * while paused.
    */
   private async startSteps(): Promise<void> {
     // `stepWatch` is only assigned once the watch resolves, so a second call in
@@ -890,10 +890,17 @@ class ActivityTrackerController {
         return;
       }
 
-      // `state.steps` carries a recovered walk's count over a restart, which
-      // used to reset to zero on the first reading.
+      /**
+       * `watchStepCount` counts from 0 at SUBSCRIPTION, so the first reading is
+       * already this walk's steps — subtracting it (the old baseline) dropped them
+       * on every start and recovery. `state.steps` carries a recovered walk's
+       * count over the restart. Only a first reading that lands while paused or
+       * still acquiring belongs to nobody, and is absorbed into the baseline.
+       */
       if (this.stepBaseline === null) {
-        this.stepBaseline = steps - (this.state.steps ?? 0);
+        const idle = this.state.status === "paused" || this.state.status === "preparing";
+
+        this.stepBaseline = (idle ? steps : 0) - (this.state.steps ?? 0);
       }
 
       // Steps taken while paused are not this walk's.

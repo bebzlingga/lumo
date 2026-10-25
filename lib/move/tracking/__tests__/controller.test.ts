@@ -40,9 +40,13 @@ jest.mock('../liveNotification', () => ({
 	primeRecordingNote: jest.fn(async () => undefined),
 	showRecordingNote: jest.fn(async () => undefined),
 }))
+let mockOnSteps: ((steps: number) => void) | null = null
 jest.mock('@/lib/walkTracking', () => ({
 	createWalkId: () => 'walk-test',
-	watchSteps: jest.fn(async () => null),
+	watchSteps: jest.fn(async (onSteps: (steps: number) => void) => {
+		mockOnSteps = onSteps
+		return { stop: () => undefined }
+	}),
 }))
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -97,6 +101,17 @@ describe('controller recovery', () => {
 
 		expect(afterRecover - mockStored!.distanceMeters).toBeGreaterThanOrEqual(0)
 		expect(activityTracker.getState()!.distanceMeters).toBeGreaterThan(walkedMinute().distanceMeters + 400)
+	})
+
+	it('counts the first pedometer reading as this walk\'s steps', async () => {
+		mockStored = { ...walkedMinute(), steps: 100 }
+
+		await activityTracker.recover()
+		await activityTracker.continueRecovered()
+		// watchStepCount counts from 0 at subscription: 12 is 12 new steps.
+		mockOnSteps?.(12)
+
+		expect(activityTracker.getState()?.steps).toBe(112)
 	})
 
 	it('keeps a manually paused walk paused after recovery', async () => {
