@@ -1,7 +1,6 @@
-import type { WalkPoint } from "@/lib/walk";
-
 /**
- * The device side of Walk: location, permissions, steps, and a stable id.
+ * The device side of Walk that the tracker still uses: steps and a stable id.
+ * (Location and its permission live in `lib/move/tracking/backgroundLocation.ts`.)
  *
  * Every native module here is behind the deferred-require pattern from
  * `lib/orientation.ts` — `typeof import()` for the types, a three-state cache,
@@ -16,26 +15,11 @@ import type { WalkPoint } from "@/lib/walk";
  * first as the second is a lie the whole walk is then built on.
  */
 
-type LocationModule = typeof import("expo-location");
 type SensorsModule = typeof import("expo-sensors");
 type CryptoModule = typeof import("expo-crypto");
 
-let locationModule: LocationModule | null | undefined;
 let sensorsModule: SensorsModule | null | undefined;
 let cryptoModule: CryptoModule | null | undefined;
-
-function loadLocation(): LocationModule | null {
-  if (locationModule === undefined) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      locationModule = require("expo-location") as LocationModule;
-    } catch {
-      locationModule = null;
-    }
-  }
-
-  return locationModule;
-}
 
 function loadSensors(): SensorsModule | null {
   if (sensorsModule === undefined) {
@@ -63,131 +47,9 @@ function loadCrypto(): CryptoModule | null {
   return cryptoModule;
 }
 
-/** True when this build can actually record a walk. The UI hides Walk otherwise. */
-export function canTrackWalks(): boolean {
-  return loadLocation() !== null;
-}
-
 // --- permissions ------------------------------------------------------------
 
-export type WalkPermission = "not_requested" | "granted_foreground" | "granted_background" | "denied" | "restricted";
-
-/**
- * What we are allowed to do, without asking for anything.
- *
- * Read-only on purpose: the request itself is a separate call the user has to
- * trigger, because a permission sheet nobody asked for is the thing that gets
- * denied out of reflex.
- */
-export async function walkPermissionStatus(): Promise<WalkPermission> {
-  const location = loadLocation();
-
-  if (!location) {
-    return "restricted";
-  }
-
-  try {
-    const foreground = await location.getForegroundPermissionsAsync();
-
-    if (!foreground.granted) {
-      // `canAskAgain: false` means the user turned it off in Settings and no
-      // prompt will ever appear — a different situation from "not asked yet",
-      // and the UI has to say so rather than offering a button that does
-      // nothing.
-      return foreground.canAskAgain ? "not_requested" : "denied";
-    }
-
-    const background = await location.getBackgroundPermissionsAsync();
-
-    return background.granted ? "granted_background" : "granted_foreground";
-  } catch {
-    return "restricted";
-  }
-}
-
-/**
- * Asks for location, foreground first and background only after.
- *
- * Two prompts in that order because iOS will not grant Always until When In Use
- * has been granted, and asking for the bigger one cold is how you get refused.
- * Foreground alone is a working walk — it just stops recording when the screen
- * locks, which the screen says out loud rather than under-recording in silence.
- */
-export async function requestWalkPermission(): Promise<WalkPermission> {
-  const location = loadLocation();
-
-  if (!location) {
-    return "restricted";
-  }
-
-  try {
-    const foreground = await location.requestForegroundPermissionsAsync();
-
-    if (!foreground.granted) {
-      return foreground.canAskAgain ? "not_requested" : "denied";
-    }
-
-    const background = await location.requestBackgroundPermissionsAsync();
-
-    return background.granted ? "granted_background" : "granted_foreground";
-  } catch {
-    return "restricted";
-  }
-}
-
 // --- location ---------------------------------------------------------------
-
-/** Handle returned by `watchWalkLocation`, so a caller can stop the watch. */
-export type WalkWatch = { stop: () => void };
-
-/**
- * Streams fixes while a walk runs.
- *
- * `Accuracy.Balanced` rather than `BestForNavigation`: navigation accuracy runs
- * the GPS chip flat out for a precision a walking route does not need, and
- * battery is the constraint that decides whether anyone finishes an hour-long
- * walk with the app still running. `distanceInterval` means a stationary phone
- * produces almost no callbacks at all.
- *
- * Returns null when the module is missing, so the caller can tell "not watching"
- * from "watching and receiving nothing".
- */
-export async function watchWalkLocation(onPoint: (point: WalkPoint) => void): Promise<WalkWatch | null> {
-  const location = loadLocation();
-
-  if (!location) {
-    return null;
-  }
-
-  try {
-    const subscription = await location.watchPositionAsync(
-      {
-        accuracy: location.Accuracy.Balanced,
-        // A walker covers 10m in roughly seven seconds; below that the extra
-        // fixes are jitter the validator would reject anyway.
-        distanceInterval: 10,
-        timeInterval: 4000
-      },
-      (reading) => {
-        onPoint({
-          lat: reading.coords.latitude,
-          lon: reading.coords.longitude,
-          at: reading.timestamp,
-          // `accuracy` is nullable on Android. Treating a missing value as
-          // Infinity makes the validator reject it, which is the safe way
-          // round — an unplaceable fix should not join the route.
-          accuracy: reading.coords.accuracy ?? Number.POSITIVE_INFINITY,
-          speed: reading.coords.speed ?? undefined,
-          altitude: reading.coords.altitude ?? undefined
-        });
-      }
-    );
-
-    return { stop: () => subscription.remove() };
-  } catch {
-    return null;
-  }
-}
 
 // --- steps ------------------------------------------------------------------
 

@@ -1073,7 +1073,7 @@ describe('noisy receiver', () => {
 describe('walk record', () => {
 	it('stores a thinned route but the full distance, and carries linked habits', () => {
 		let state = started()
-		for (let s = 0; s <= 100; s++) state = walk(state, [{ ...fix(s * 1.5, s), speed: 1.5 }])
+		for (let s = 0; s <= 100; s++) state = walk(state, [Object.assign(fix(s * 1.5, s), { speed: 1.5 })])
 		const record = toWalkRecordFromActivity(finishActivity(state, at(101)), ['h1'])!
 
 		// A straight line needs only its ends; the distance is the tracker's, untouched.
