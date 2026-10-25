@@ -2,7 +2,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
 import { Alert, Animated, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { Icon, type IconName } from "@/components/Icon";
-import { Pressable } from "@/components/Pressable";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { WalkBackground } from "@/components/WalkBackground";
 import { WalkMap } from "@/components/WalkMap";

@@ -1,11 +1,9 @@
 import React from "react";
 import { StyleSheet, View, type StyleProp, type TextStyle } from "react-native";
-import { Icon } from "@/components/Icon";
 import { AppText } from "@/components/ui";
 import { fontFamilies, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha, readableOn } from "@/lib/color";
-import { formatDistance, formatPace } from "@/lib/move/tracking/pace";
 import { smoothingShiftM } from "@/lib/move/tracking/smoothing";
 import type { ActivityTrackingState, GpsQuality } from "@/lib/move/tracking/types";
 
@@ -206,56 +204,6 @@ export function TrackingDebugPanel({
   );
 }
 
-/**
- * Challenge progress, as it stands after this activity.
- *
- * Takes the figures rather than reading a context, so the same block draws on
- * the live screen and on the summary without either owning where they came
- * from.
- */
-export function ChallengeProgressBar({
-  title,
-  currentM,
-  targetM,
-  addedM,
-  accent
-}: {
-  title: string;
-  currentM: number;
-  targetM: number;
-  /** This activity's contribution, drawn ahead of the banked figure. */
-  addedM?: number;
-  accent: string;
-}) {
-  const { palette } = useLumo();
-  const ratio = targetM > 0 ? Math.min(1, currentM / targetM) : 0;
-  const forecast = targetM > 0 ? Math.min(1, (currentM + (addedM ?? 0)) / targetM) : 0;
-
-  return (
-    <View style={styles.challenge}>
-      <View style={styles.challengeHead}>
-        <AppText variant="bodySmall" color={palette.ink} numberOfLines={1} style={styles.challengeTitle}>
-          {title}
-        </AppText>
-        <AppText variant="bodySmall" color={palette.body} numberOfLines={1}>
-          {formatDistance(currentM)} / {formatDistance(targetM)}
-        </AppText>
-      </View>
-
-      <View style={[styles.track, { backgroundColor: alpha(palette.hairline, "80") }]}>
-        <View style={[styles.fill, { backgroundColor: alpha(accent, "59"), width: `${Math.round(forecast * 100)}%` }]} />
-        <View style={[styles.fill, styles.fillBanked, { backgroundColor: accent, width: `${Math.round(ratio * 100)}%` }]} />
-      </View>
-
-      <AppText variant="caption" color={palette.muted}>
-        {Math.round(ratio * 100)}%
-      </AppText>
-    </View>
-  );
-}
-
-/** "6:24 /km", for callers that only have a pace. */
-export { formatPace };
 
 const styles = StyleSheet.create({
   gps: {

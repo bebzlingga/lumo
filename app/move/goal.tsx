@@ -10,7 +10,6 @@ import { AppText, Button, Screen } from "@/components/ui";
 import { fontFamilies, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { useMove } from "@/context/MoveContext";
-import { alpha } from "@/lib/color";
 import { formatShortDate } from "@/lib/date";
 import {
   DEFAULT_GOAL_TARGET,

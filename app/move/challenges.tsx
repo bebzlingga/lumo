@@ -1,12 +1,10 @@
 import { useRouter } from "expo-router";
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { MilestoneCard, useMoveAccent } from "@/components/move/ChallengeUI";
-import { Pressable } from "@/components/Pressable";
+import { MilestoneCard } from "@/components/move/ChallengeUI";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { AppText, Screen } from "@/components/ui";
+import { Screen } from "@/components/ui";
 import { spacing } from "@/constants/theme";
-import { useLumo } from "@/context/LumoContext";
 import { useMove } from "@/context/MoveContext";
 import { isFamilyLocked } from "@/lib/move/achievements";
 import { MOVE_FAMILIES } from "@/lib/move/challengeDefs";
@@ -21,8 +19,6 @@ import { MOVE_FAMILIES } from "@/lib/move/challengeDefs";
  */
 export default function MoveChallengesScreen() {
   const router = useRouter();
-  const { palette } = useLumo();
-  const accent = useMoveAccent();
   const move = useMove();
 
   return (
