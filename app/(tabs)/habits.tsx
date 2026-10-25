@@ -1,7 +1,6 @@
 import { useRouter } from 'expo-router'
 import React from 'react'
 import { StyleSheet, View } from 'react-native'
-import { SegmentedControl } from '@/components/controls'
 import { HabitCard } from '@/components/HabitCard'
 import { Icon } from '@/components/Icon'
 import { EmptyState } from '@/components/states'
@@ -10,36 +9,33 @@ import { fontFamilies, layout, radius, spacing } from '@/constants/theme'
 import { useLumo } from '@/context/LumoContext'
 import { Pressable } from '@/components/Pressable'
 
-type HabitFilter = 'active' | 'paused' | 'completed'
-
-// Two controls, not one: "Active" is the day-to-day view, while Paused and
-// Completed are habits set aside — so they read as separate groups.
-const ACTIVE_FILTER: { label: string; value: HabitFilter }[] = [{ label: 'Active', value: 'active' }]
-
-const SET_ASIDE_FILTERS: { label: string; value: HabitFilter }[] = [
-	{ label: 'Paused', value: 'paused' },
-	{ label: 'Completed', value: 'completed' },
-]
+type Section = {
+	key: 'active' | 'paused' | 'completed'
+	title: string
+	items: ReturnType<typeof useLumo>['habits']
+	/** Set-aside habits: dimmed, actions off, and folded away until opened. */
+	setAside: boolean
+}
 
 export default function HabitsScreen() {
 	const router = useRouter()
 	const { habits, isReady, palette } = useLumo()
 	const [addPressed, setAddPressed] = React.useState(false)
 	const [packsPressed, setPacksPressed] = React.useState(false)
-	const [filter, setFilter] = React.useState<HabitFilter>('active')
+	// One page, no tabs: My Habits leads, the set-aside groups follow below and
+	// start folded — they are history and parking, not the day's list.
+	const [expanded, setExpanded] = React.useState<Record<string, boolean>>({})
 
 	const activeHabits = habits.filter((habit) => habit.status === 'active')
 	const pausedHabits = habits.filter((habit) => habit.status === 'paused')
 	const archivedHabits = habits.filter((habit) => habit.status === 'archived')
 	const hasNoHabits = !activeHabits.length && !pausedHabits.length && !archivedHabits.length
 
-	const filteredHabits = filter === 'completed' ? archivedHabits : filter === 'paused' ? pausedHabits : activeHabits
-
-	// "My Habits" always leads. Friends' shared habits will append as further
-	// sections below it, so the list stays a stack of labelled groups rather
-	// than one unlabelled run.
-	const SECTIONS: { key: string; title?: string; items: typeof habits; dimmed?: boolean }[] = [
-		{ key: filter, title: 'My Habits', items: filteredHabits, dimmed: filter !== 'active' },
+	// "My Habits" always leads; empty set-aside groups are left out entirely.
+	const SECTIONS: Section[] = [
+		{ key: 'active', title: 'My Habits', items: activeHabits, setAside: false },
+		{ key: 'paused', title: 'Paused', items: pausedHabits, setAside: true },
+		{ key: 'completed', title: 'Completed', items: archivedHabits, setAside: true },
 	]
 
 	if (!isReady) {
@@ -99,13 +95,6 @@ export default function HabitsScreen() {
 		</View>
 			}
 		>
-			{hasNoHabits ? null : (
-				<View style={styles.filterRow}>
-					<SegmentedControl options={ACTIVE_FILTER} value={filter} onChange={setFilter} style={styles.filterActive} />
-					<SegmentedControl options={SET_ASIDE_FILTERS} value={filter} onChange={setFilter} style={styles.filterSetAside} />
-				</View>
-			)}
-
 			<View style={styles.categoryList}>
 				{hasNoHabits ? (
 					<Card style={styles.emptyCard}>
@@ -120,21 +109,13 @@ export default function HabitsScreen() {
 					</Card>
 				) : null}
 
-				{!hasNoHabits && !filteredHabits.length ? (
+				{!hasNoHabits && !activeHabits.length ? (
 					<View style={styles.emptyState}>
 						<EmptyState
 							quiet
-							icon={filter === 'completed' ? 'award' : filter === 'paused' ? 'pause' : 'taskSquare'}
-							title={
-								filter === 'completed' ? 'Nothing completed yet' : filter === 'paused' ? 'Nothing paused' : 'No active habits'
-							}
-							body={
-								filter === 'completed'
-									? 'Habits you finish and archive will collect here.'
-									: filter === 'paused'
-										? 'Habits you put on hold will wait here until you resume them.'
-										: 'Nothing running right now — resume a paused habit, or add something new.'
-							}
+							icon='taskSquare'
+							title='No active habits'
+							body='Nothing running right now — resume a paused habit below, or add something new.'
 						/>
 					</View>
 				) : null}
@@ -145,23 +126,53 @@ export default function HabitsScreen() {
 						return null
 					}
 
+					const open = !section.setAside || Boolean(expanded[section.key])
+					const count = `${items.length} ${items.length === 1 ? 'Habit' : 'Habits'}`
+					const heading = (
+						<>
+							<AppText variant='titleSmall' color={palette.ink} style={styles.sectionTitle}>
+								{section.title}
+							</AppText>
+							<View style={styles.sectionMeta}>
+								<AppText variant='caption' color={palette.muted} style={styles.sectionCount}>
+									{count}
+								</AppText>
+								{section.setAside ? (
+									<Icon
+										name='chevronDown'
+										size={16}
+										color={palette.muted}
+										weight='bold'
+										style={open ? styles.chevronOpen : undefined}
+									/>
+								) : null}
+							</View>
+						</>
+					)
+
 					return (
 						<View key={section.key} style={styles.section}>
-							{section.title ? (
-								<View style={styles.sectionHeader}>
-									<AppText variant='titleSmall' color={palette.ink} style={styles.sectionTitle}>
-										{section.title}
-									</AppText>
-									<AppText variant='caption' color={palette.muted} style={styles.sectionCount}>
-										{items.length} {items.length === 1 ? 'Habit' : 'Habits'}
-									</AppText>
+							{section.setAside ? (
+								<Pressable
+									accessibilityRole='button'
+									accessibilityLabel={`${section.title}, ${count}`}
+									accessibilityState={{ expanded: open }}
+									onPress={() => setExpanded((current) => ({ ...current, [section.key]: !open }))}
+									hitSlop={8}
+									style={({ pressed }) => [styles.sectionHeader, { opacity: pressed ? 0.6 : 1 }]}
+								>
+									{heading}
+								</Pressable>
+							) : (
+								<View style={styles.sectionHeader}>{heading}</View>
+							)}
+							{open ? (
+								<View style={[styles.habitStack, section.setAside && styles.sectionDimmed]}>
+									{items.map((habit) => (
+										<HabitCard key={habit.id} habit={habit} compact disabledActions={section.setAside} />
+									))}
 								</View>
 							) : null}
-							<View style={[styles.habitStack, section.dimmed && styles.sectionDimmed]}>
-								{items.map((habit) => (
-									<HabitCard key={habit.id} habit={habit} compact disabledActions={section.dimmed} />
-								))}
-							</View>
 						</View>
 					)
 				})}
@@ -175,9 +186,6 @@ const styles = StyleSheet.create({
 	categoryList: {
 		gap: spacing.lg,
 	},
-	// No marginBottom: the Screen's own stack gap already separates the header
-	// from the filters. Carrying both put 36pt between them, which read as a
-	// gap the page had left for something it forgot to put there.
 	screenHeader: {
 		flexDirection: 'row',
 		alignItems: 'center',
@@ -196,21 +204,6 @@ const styles = StyleSheet.create({
 		borderRadius: radius.pill,
 		borderWidth: StyleSheet.hairlineWidth,
 	},
-	filterRow: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		gap: spacing.xs,
-		marginBottom: spacing.xs,
-	},
-	filterActive: {
-		flexShrink: 0,
-		// `segment` is flex:1 (flexBasis:0), so in a single-option control with no
-		// width the pill would collapse to its padding. Give it an explicit floor.
-		minWidth: 88,
-	},
-	filterSetAside: {
-		flex: 1,
-	},
 	// Serif display at the journal editor's top-bar size, since the title now
 	// sits between two buttons rather than filling the row.
 	screenTitle: {
@@ -223,9 +216,17 @@ const styles = StyleSheet.create({
 	},
 	sectionHeader: {
 		flexDirection: 'row',
-		alignItems: 'baseline',
+		alignItems: 'center',
 		justifyContent: 'space-between',
 		gap: spacing.sm,
+	},
+	sectionMeta: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: spacing.xxs,
+	},
+	chevronOpen: {
+		transform: [{ rotate: '180deg' }],
 	},
 	sectionTitle: {
 		fontFamily: fontFamilies.lexendBold,
@@ -239,7 +240,7 @@ const styles = StyleSheet.create({
 	habitStack: {
 		gap: spacing.xs,
 	},
-	// Completed habits are history — present, but visually retired.
+	// Paused and completed habits are set aside — present, but visually retired.
 	sectionDimmed: {
 		opacity: 0.6,
 	},
