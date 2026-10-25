@@ -32,6 +32,10 @@ export type MovementInput = {
   since: number;
   /** The last instant real movement was seen. */
   lastMovementAt: number;
+  /** While stopped: start of the current run of moving fixes (see the state type). */
+  resumingSince?: number;
+  /** How long the leg this fix closes took — the movement it shows began that long ago. */
+  legMs?: number;
   now: number;
   /**
    * Whether THIS fix was movement: an accepted leg at more than a stroll's
@@ -48,7 +52,7 @@ export type MovementInput = {
   stepping?: boolean;
 };
 
-export type MovementOutcome = { state: MovementState; since: number; lastMovementAt: number };
+export type MovementOutcome = { state: MovementState; since: number; lastMovementAt: number; resumingSince?: number };
 
 /**
  * How long quiet has to last, at the accuracy currently on offer.
@@ -93,11 +97,20 @@ export function stepMovement(input: MovementInput): MovementOutcome {
     // Movement while stopped has to persist before it counts: `since` is when
     // the current stopped state began, and only sustained movement lifts it.
     if (input.state === "stopped") {
-      const movingFor = input.now - Math.max(input.since, input.lastMovementAt);
+      /**
+       * Measured from the START of the moving run, not the previous moving fix.
+       * The old `now - max(since, lastMovementAt)` was the gap since the last
+       * moving fix, so fixes arriving every second never added up to the resume
+       * window — a walker who set off promptly stayed "stopped" and banked
+       * nothing for minutes. Any quiet fix breaks the run (see below).
+       */
+      const runStart =
+        input.resumingSince ??
+        Math.min(input.now - Math.max(0, input.legMs ?? 0), input.lastMovementAt > input.since ? input.lastMovementAt : input.now);
 
-      return movingFor >= movement.resumeAfterMs
+      return input.now - runStart >= movement.resumeAfterMs
         ? { state: "moving", since: input.now, lastMovementAt }
-        : { state: "stopped", since: input.since, lastMovementAt };
+        : { state: "stopped", since: input.since, lastMovementAt, resumingSince: runStart };
     }
 
     return input.state === "moving"

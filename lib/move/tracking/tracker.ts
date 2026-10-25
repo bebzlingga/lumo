@@ -330,6 +330,7 @@ export function processLocation(
       state: next.movement,
       since: next.movementSince,
       lastMovementAt: next.lastMovementAt,
+      resumingSince: next.resumingSince,
       now,
       moved: blind,
       // The accuracy of THIS fix, because that is what set the minimum leg it
@@ -387,6 +388,8 @@ export function processLocation(
     state: next.movement,
     since: next.movementSince,
     lastMovementAt: next.lastMovementAt,
+    resumingSince: next.resumingSince,
+    legMs: elapsedMs,
     now,
     moved,
     accuracyM: sample.horizontalAccuracy ?? null,
@@ -658,8 +661,8 @@ function withRawPoint(state: ActivityTrackingState, point: RawLocationPoint): Ac
   return { ...state, rawPoints: raw.length > TRACKING_CONFIG.storage.maxRawPoints ? raw.slice(-TRACKING_CONFIG.storage.maxRawPoints) : raw };
 }
 
-function movementFields(outcome: { state: ActivityTrackingState["movement"]; since: number; lastMovementAt: number }) {
-  return { movement: outcome.state, movementSince: outcome.since, lastMovementAt: outcome.lastMovementAt };
+function movementFields(outcome: { state: ActivityTrackingState["movement"]; since: number; lastMovementAt: number; resumingSince?: number }) {
+  return { movement: outcome.state, movementSince: outcome.since, lastMovementAt: outcome.lastMovementAt, resumingSince: outcome.resumingSince };
 }
 
 /**

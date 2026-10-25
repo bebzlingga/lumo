@@ -608,6 +608,33 @@ describe('pace', () => {
 })
 
 describe('movement state machine', () => {
+	/**
+	 * Regression: the resume window was measured from the PREVIOUS moving fix, so
+	 * with fixes a second apart it never filled and a walker who set off promptly
+	 * after a stop banked nothing for minutes.
+	 */
+	it('resumes from stopped under dense fixes and banks the run', () => {
+		// 3.5 m/s clears the 3 m minimum leg on every one-second fix, so every fix is
+		// an accepted moving leg — the case the old window could never fill.
+		const pace = 3.5
+		const withSpeed = (northM: number, seconds: number, speed: number) => ({ ...fix(northM, seconds, 4), speed })
+		let state = started()
+		for (let s = 0; s <= 60; s++) state = walk(state, [withSpeed(s * pace, s, pace)])
+		const stopAt = 60 * pace
+		let s = 61
+		while (state.movement !== 'stopped' && s < 200) {
+			state = walk(state, [withSpeed(stopAt, s, 0)])
+			s++
+		}
+		expect(state.movement).toBe('stopped')
+		const before = state.distanceMeters
+		// Off again straight away: five minutes, one fix a second.
+		for (let t = 1; t <= 300; t++) state = walk(state, [withSpeed(stopAt + t * pace, s + t, pace)])
+
+		expect(state.movement).toBe('moving')
+		expect(state.distanceMeters - before).toBeGreaterThan(0.95 * 300 * pace)
+	})
+
 	it('takes its time on the way down and further on the way back', () => {
 		const base = { since: T0, lastMovementAt: T0 }
 

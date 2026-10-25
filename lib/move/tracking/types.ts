@@ -132,6 +132,11 @@ export type ActivityTrackingState = {
   movementSince: number;
   /** The last fix that showed real movement. */
   lastMovementAt: number;
+  /**
+   * While stopped: when the current unbroken run of moving fixes began, so a
+   * resume is judged on how long movement has LASTED. Cleared by any quiet fix.
+   */
+  resumingSince?: number;
 
   gpsQuality: GpsQuality;
   /** Accuracy of the most recent fix, for the indicator and the debug overlay. */
