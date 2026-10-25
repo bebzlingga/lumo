@@ -1,3 +1,4 @@
+import type { ScrollViewInstance } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
@@ -333,7 +334,7 @@ export default function FocusScreen() {
   /** Focus mode's controls, which hide themselves again after a few seconds. */
   const [controlsShown, setControlsShown] = React.useState(false);
   const hideTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pageRef = React.useRef<ScrollView>(null);
+  const pageRef = React.useRef<ScrollViewInstance>(null);
 
   React.useEffect(() => {
     let active = true;

@@ -237,7 +237,7 @@ export default function JournalScreen() {
             <View style={styles.header}>
               <DailyReflectionCard prompt={reflectionPromptFor(todayKey)} onPress={openToday} />
             </View>
-          ) : null
+          ) : undefined
         }
         renderSectionHeader={({ section }) => (
           <AppText color={palette.ink} style={styles.monthHeading}>

@@ -1,3 +1,4 @@
+import type { ScrollViewInstance } from "react-native";
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { ScrollView, StyleSheet, View } from 'react-native'
 import { fontFamilies, layout, radius, spacing } from '@/constants/theme'
@@ -62,7 +63,7 @@ export function DateStrip({
 	onSelectDate: (dateKey: string) => void
 }) {
 	const { isDark, palette } = useLumo()
-	const scrollRef = useRef<ScrollView>(null)
+	const scrollRef = useRef<ScrollViewInstance>(null)
 	const [scrollerWidth, setScrollerWidth] = useState(0)
 	const todayKey = toDateKey()
 	const selectedBorder = isDark ? palette.greenSoft : palette.greenDark

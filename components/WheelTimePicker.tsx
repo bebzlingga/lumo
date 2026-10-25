@@ -1,3 +1,4 @@
+import type { ScrollViewInstance } from "react-native";
 import React, { useEffect, useRef } from "react";
 import { Animated, NativeScrollEvent, NativeSyntheticEvent, ScrollView, StyleSheet, View } from "react-native";
 import { fontFamilies, radius, spacing } from "@/constants/theme";
@@ -52,7 +53,7 @@ export function WheelColumn({
   /** Overrides the default column width, for longer labels like "August". */
   width?: number;
 }) {
-  const ref = useRef<ScrollView>(null);
+  const ref = useRef<ScrollViewInstance>(null);
   const settledRef = useRef(index);
   const readyRef = useRef(false);
   // Drives the live fade so the centered item brightens as you scroll, not only

@@ -1,3 +1,4 @@
+import type { HostInstance } from "react-native";
 import React from "react";
 import { PanResponder, StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import Svg, { Circle, G, Line } from "react-native-svg";
@@ -69,7 +70,7 @@ export function FocusDial({
   const track = trackColor ?? alpha(arc, isDark ? "2E" : "1F");
   const STROKE = strokeProp ?? DEFAULT_STROKE;
   const [size, setSize] = React.useState(0);
-  const wrapRef = React.useRef<View>(null);
+  const wrapRef = React.useRef<HostInstance>(null);
   /**
    * The dial's top-left in window coordinates.
    *

@@ -1,3 +1,4 @@
+import type { ScrollViewInstance } from "react-native";
 import React, { useEffect } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
@@ -133,7 +134,7 @@ export function DottedProgressChart({
   accentColor
 }: Props) {
   const todayKey = toDateKey();
-  const scrollRef = React.useRef<ScrollView>(null);
+  const scrollRef = React.useRef<ScrollViewInstance>(null);
   const weekAligned = rows === 7;
   const rawDates =
     layout === "monthly"

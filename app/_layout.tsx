@@ -67,7 +67,7 @@ preloadBackgroundArt();
  * options, add it below rather than above, and leave this alone.
  */
 export const unstable_settings = {
-  initialRouteName: "index"
+  anchor: "index"
 };
 
 function RootStack() {

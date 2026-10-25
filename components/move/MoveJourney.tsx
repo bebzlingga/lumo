@@ -1,3 +1,4 @@
+import type { ScrollViewInstance } from "react-native";
 import React from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { AppText } from "@/components/ui";
@@ -25,7 +26,7 @@ import { formatDistance } from "@/lib/move/movement";
  */
 export function MoveJourney({ position, totalDistanceM }: { position: JourneyPosition; totalDistanceM: number }) {
   const { palette } = useLumo();
-  const scrollRef = React.useRef<ScrollView>(null);
+  const scrollRef = React.useRef<ScrollViewInstance>(null);
 
   /**
    * Scrolls so the current stage is in view.

@@ -306,7 +306,7 @@ export default function GroupChatScreen() {
               <View style={styles.olderSpinner}>
                 <ActivityIndicator size="small" color={palette.muted} />
               </View>
-            ) : null
+            ) : undefined
           }
           ListEmptyComponent={
             <EmptyState

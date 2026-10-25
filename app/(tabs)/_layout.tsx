@@ -36,7 +36,7 @@ const tabIcons: Record<string, IconName> = {
   friends: "friends"
 };
 
-function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
+function FloatingTabBar({ state, descriptors, emitter, navigateToTab, insets }: BottomTabBarProps) {
   const { isDark, palette, lumoIdSuffix } = useLumo();
   // A challenge in progress — shown as a plain dot on Move. A dot rather than a
   // count because there is only ever one, and a "1" would invite the question of
@@ -119,16 +119,16 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBar
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityState={isFocused ? { selected: true } : undefined}
-        onLongPress={() => navigation.emit({ type: "tabLongPress", target: route.key })}
+        onLongPress={() => emitter.emit({ type: "tabLongPress", target: route.key })}
         onPress={() => {
-          const event = navigation.emit({
+          const event = emitter.emit({
             type: "tabPress",
             target: route.key,
             canPreventDefault: true
           });
 
           if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(route.name, route.params);
+            navigateToTab(route.key);
           }
         }}
         style={({ pressed }) => [{ opacity: pressed ? 0.72 : 1 }]}
@@ -234,13 +234,16 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBar
   );
 }
 
+export const unstable_settings = {
+  anchor: "today"
+};
+
 export default function TabLayout() {
   return (
     // Wraps the navigator so the bar and the screens whose scrolling drives it
     // share one signal — `tabBar` renders inside `Tabs`, so both are below this.
     <TabBarVisibilityProvider>
       <Tabs
-        initialRouteName="today"
         tabBar={(props) => <FloatingTabBar {...props} />}
         screenOptions={{
           animation: "shift",

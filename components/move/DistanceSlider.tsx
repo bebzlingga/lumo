@@ -1,3 +1,4 @@
+import type { HostInstance } from "react-native";
 import React from "react";
 import { PanResponder, StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import { AppText } from "@/components/ui";
@@ -71,7 +72,7 @@ export function DistanceSlider({
    * position captured at layout time is wrong the moment anything above it
    * moves. The dial takes the same approach for the same reason.
    */
-  const trackRef = React.useRef<View>(null);
+  const trackRef = React.useRef<HostInstance>(null);
   const boundsRef = React.useRef({ x: 0, width: 0 });
   const [width, setWidth] = React.useState(0);
 

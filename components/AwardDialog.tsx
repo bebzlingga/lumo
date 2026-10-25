@@ -1,3 +1,4 @@
+import type { HostInstance } from "react-native";
 import * as Sharing from "expo-sharing";
 import React from "react";
 import { Alert, Animated, Easing, Image, Modal, StyleSheet, View, useWindowDimensions } from "react-native";
@@ -63,7 +64,7 @@ export function AwardDialog({
   footer?: React.ReactNode;
 }) {
   const { width } = useWindowDimensions();
-  const cardRef = React.useRef<View>(null);
+  const cardRef = React.useRef<HostInstance>(null);
   // The card is the overlay width, capped by `content`'s maxWidth.
   const cardWidth = Math.min(340, width - spacing.lg * 2);
   const awardId = content?.id ?? null;

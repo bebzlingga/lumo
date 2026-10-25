@@ -1,3 +1,4 @@
+import type { HostInstance } from "react-native";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import * as Sharing from "expo-sharing";
@@ -128,7 +129,7 @@ export default function MoveTrackScreen() {
   /** Light figures for a dark photo, dark for a bright one. */
   const [shareLight, setShareLight] = React.useState(false);
   /** What a share captures: the figures and the route, without the page bar. */
-  const summaryRef = React.useRef<View>(null);
+  const summaryRef = React.useRef<HostInstance>(null);
   const [showDebug, setShowDebug] = React.useState(false);
   /**
    * How far the live card has arrived, 0 to 1.

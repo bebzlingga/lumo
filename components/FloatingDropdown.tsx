@@ -1,3 +1,4 @@
+import type { HostInstance } from "react-native";
 import React from "react";
 import { Dimensions, Modal, ScrollView, StyleSheet, View } from "react-native"
 import { control, fontFamilies, radius, spacing } from "@/constants/theme";
@@ -54,7 +55,7 @@ export function FloatingDropdown<T extends string>({
   const { palette, isDark } = useLumo();
   const [isOpen, setIsOpen] = React.useState(false);
   const [triggerRect, setTriggerRect] = React.useState<TriggerRect | null>(null);
-  const triggerRef = React.useRef<View>(null);
+  const triggerRef = React.useRef<HostInstance>(null);
   const activeOption = options.find((option) => option.value === value);
   const isInput = variant === "input";
   const triggerBorderColor = controlBorderColor(palette, isDark, isOpen);

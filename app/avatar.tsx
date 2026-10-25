@@ -1,5 +1,6 @@
+import type { ScrollViewInstance } from "react-native";
 import * as Haptics from "expo-haptics";
-import { useNavigation, useRouter } from "expo-router";
+import { usePreventRemove, useRouter } from "expo-router";
 import React, { useMemo, useRef, useState } from "react";
 import { Alert, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native"
 import { Avatar } from "@/components/Avatar";
@@ -168,7 +169,6 @@ function SwatchRow({
 
 export default function AvatarScreen() {
   const router = useRouter();
-  const navigation = useNavigation();
   const { width } = useWindowDimensions();
   const { avatar, setAvatar, palette } = useLumo();
   const [draft, setDraft] = useState<AvatarConfig>(avatar);
@@ -177,18 +177,11 @@ export default function AvatarScreen() {
   const colorSize = Math.floor((width - layout.screenPaddingX * 2 - COLOR_GAP * (COLOR_COLUMNS - 1)) / COLOR_COLUMNS);
   const previewSvg = useMemo(() => buildAvatarSvg(draft), [draft]);
   const active = categories.find((item) => item.key === category);
-  const optionsRef = useRef<ScrollView>(null);
+  const optionsRef = useRef<ScrollViewInstance>(null);
   // Field-by-field rather than by reference: every tap makes a new `draft`
   // object, but picking an option and picking the old one back is not a change
   // and should not arm the discard prompt.
   const dirty = (Object.keys(draft) as (keyof AvatarConfig)[]).some((key) => draft[key] !== avatar[key]);
-  // Read inside the `beforeRemove` listener, which is registered once and would
-  // otherwise close over whatever `dirty` was on the first render.
-  const dirtyRef = useRef(dirty);
-  dirtyRef.current = dirty;
-  /** Set just before a leave we have already decided on, so the guard below
-   *  lets that one through instead of prompting about it again. */
-  const leavingRef = useRef(false);
 
   function update(patch: Partial<AvatarConfig>) {
     // Every option is a one-tap change with no other confirmation, so the tap
@@ -212,7 +205,8 @@ export default function AvatarScreen() {
 
   function save() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-    leavingRef.current = true;
+    // Lift the guard first: `dirty` only clears on the next render, after this leave.
+    disablePrevention();
     setAvatar(draft);
     router.back();
   }
@@ -222,33 +216,17 @@ export default function AvatarScreen() {
    * without a word — easy to do after a couple of minutes of fiddling, with no
    * way to get any of it back.
    *
-   * On `beforeRemove` rather than on the Back button, because the button is only
+   * On removal rather than on the Back button, because the button is only
    * one of three ways off this screen: the iOS edge swipe and the Android back
    * gesture both leave without ever touching it. A prompt that catches one of
    * the three is worse than none — it teaches you that leaving is safe.
    */
-  React.useEffect(() => {
-    const unsubscribe = navigation.addListener("beforeRemove", (event) => {
-      if (leavingRef.current || !dirtyRef.current) {
-        return;
-      }
-
-      event.preventDefault();
-      Alert.alert("Discard changes?", "Your new avatar has not been saved yet.", [
-        { text: "Keep editing", style: "cancel" },
-        {
-          text: "Discard",
-          style: "destructive",
-          onPress: () => {
-            leavingRef.current = true;
-            navigation.dispatch(event.data.action);
-          }
-        }
-      ]);
-    });
-
-    return unsubscribe;
-  }, [navigation]);
+  const disablePrevention = usePreventRemove(dirty, ({ repeat }) => {
+    Alert.alert("Discard changes?", "Your new avatar has not been saved yet.", [
+      { text: "Keep editing", style: "cancel" },
+      { text: "Discard", style: "destructive", onPress: repeat }
+    ]);
+  });
 
   return (
     <Screen scroll={false} contentStyle={styles.content}>

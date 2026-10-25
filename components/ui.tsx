@@ -1,3 +1,4 @@
+import type { ScrollViewInstance } from "react-native";
 import { useFocusEffect } from "expo-router";
 import React, { ReactNode } from "react";
 import { ActivityIndicator, Animated, type GestureResponderHandlers, LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, ScrollView, StyleProp, StyleSheet, Text, TextInput, TextInputProps, TextStyle, View, ViewStyle, useWindowDimensions } from "react-native"
@@ -59,7 +60,8 @@ export function Screen({
 }: {
   children: ReactNode;
   scroll?: boolean;
-  contentStyle?: StyleProp<ViewStyle>;
+  /** Animated values only take effect with `scroll={false}` (the Animated.View branch). */
+  contentStyle?: Animated.WithAnimatedValue<StyleProp<ViewStyle>>;
   edges?: Edge[];
   // Overrides the default canvas background (e.g. an immersive full-bleed screen).
   background?: string;
@@ -78,7 +80,7 @@ export function Screen({
   /** Set false to lock the page while a child owns the gesture (e.g. a dial). */
   scrollEnabled?: boolean;
   /** Hands the page's scroller back, for screens that need to scroll to a field. */
-  scrollRef?: React.RefObject<ScrollView | null>;
+  scrollRef?: React.RefObject<ScrollViewInstance | null>;
   // Optional scroll passthrough (e.g. for infinite-scroll pagination).
   onScroll?: React.ComponentProps<typeof ScrollView>["onScroll"];
   scrollEventThrottle?: number;
@@ -129,7 +131,7 @@ export function Screen({
    * KeyboardInsets` makes the room but does not move the view, so a field near
    * the bottom is still behind the keyboard until something scrolls to it.
    */
-  const innerScrollRef = React.useRef<ScrollView>(null);
+  const innerScrollRef = React.useRef<ScrollViewInstance>(null);
   const scrollRef = scrollRefProp ?? innerScrollRef;
 
   /**
@@ -220,7 +222,7 @@ export function Screen({
           keyboardDismissMode="interactive"
           automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.screenContent, leadHeader ? styles.screenContentPinned : null, contentStyle]}
+          contentContainerStyle={[styles.screenContent, leadHeader ? styles.screenContentPinned : null, contentStyle as StyleProp<ViewStyle>]}
           refreshControl={refreshControl}
           scrollEnabled={scrollEnabled}
           onScroll={handleScroll}
