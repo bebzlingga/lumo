@@ -139,7 +139,8 @@ type MoveContextValue = {
    * that was refused, or an Android build without Health Connect. Returns
    * whether the distance was actually taken.
    */
-  creditActivity: (distanceMeters: number) => boolean;
+  /** `startedAt` files the distance under the walk's own day, as `dayDistance` does. */
+  creditActivity: (distanceMeters: number, startedAt?: number) => boolean;
 
   /**
    * Starts a challenge, or says why it cannot.
@@ -694,7 +695,7 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
       },
       connect,
       refresh: runSync,
-      creditActivity(distanceMeters) {
+      creditActivity(distanceMeters, startedAt) {
         // The rule that prevents double counting, in one condition.
         if (canRead && permission === "granted") {
           return false;
@@ -705,7 +706,9 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
         }
 
         setState((current) => {
-          const key = toDateKey();
+          // The walk's START day, matching how `dayDistance` files tracked walks;
+          // the save day double-counted a walk that crossed midnight.
+          const key = toDateKey(startedAt === undefined ? new Date() : new Date(startedAt));
           const today = current.summaries.find((entry) => entry.date === key);
 
           return {

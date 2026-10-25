@@ -517,7 +517,9 @@ export default function MoveTrackScreen() {
    * itself cannot.
    */
   async function handleSave() {
-    if (!state || saving) {
+    // `leavingRef`, not just `saving`: a second tap in the same frame still sees
+    // the stale `saving === false` and would credit the walk twice.
+    if (!state || saving || leavingRef.current) {
       return;
     }
 
@@ -553,7 +555,7 @@ export default function MoveTrackScreen() {
     const integrity = checkIntegrity(state);
 
     if (integrity.ok) {
-      move.creditActivity(state.distanceMeters);
+      move.creditActivity(state.distanceMeters, state.startedAt);
     }
 
     await controller.discard();
