@@ -79,11 +79,33 @@ export async function clearActivity(): Promise<void> {
  */
 export type PendingFix = Omit<RawLocationPoint, "isAccepted" | "rejectionReason">;
 
-export async function enqueueFixes(fixes: PendingFix[]): Promise<void> {
+/**
+ * One queue operation at a time.
+ *
+ * Enqueue is read-modify-write and drain is read-then-remove, both across
+ * awaits. The background task runs in this same JS runtime, so a delivery that
+ * landed between a drain's read and its remove was deleted unprocessed. A
+ * module-level chain makes each operation atomic within the process.
+ */
+let queueLock: Promise<unknown> = Promise.resolve();
+
+function exclusive<T>(operation: () => Promise<T>): Promise<T> {
+  const run = queueLock.then(operation, operation);
+
+  queueLock = run.catch(() => undefined);
+
+  return run;
+}
+
+export function enqueueFixes(fixes: PendingFix[]): Promise<void> {
   if (fixes.length === 0) {
-    return;
+    return Promise.resolve();
   }
 
+  return exclusive(() => appendFixes(fixes));
+}
+
+async function appendFixes(fixes: PendingFix[]): Promise<void> {
   try {
     const raw = await AsyncStorage.getItem(QUEUE_KEY);
     const existing = raw ? (JSON.parse(raw) as PendingFix[]) : [];
@@ -99,7 +121,11 @@ export async function enqueueFixes(fixes: PendingFix[]): Promise<void> {
 }
 
 /** Takes everything queued and clears it, oldest first. */
-export async function drainFixes(): Promise<PendingFix[]> {
+export function drainFixes(): Promise<PendingFix[]> {
+  return exclusive(takeFixes);
+}
+
+async function takeFixes(): Promise<PendingFix[]> {
   try {
     const raw = await AsyncStorage.getItem(QUEUE_KEY);
 
@@ -121,12 +147,14 @@ export async function drainFixes(): Promise<PendingFix[]> {
   }
 }
 
-export async function clearQueue(): Promise<void> {
-  try {
-    await AsyncStorage.removeItem(QUEUE_KEY);
-  } catch {
-    // Same as above: nothing here is worth interrupting a walk for.
-  }
+export function clearQueue(): Promise<void> {
+  return exclusive(async () => {
+    try {
+      await AsyncStorage.removeItem(QUEUE_KEY);
+    } catch {
+      // Same as above: nothing here is worth interrupting a walk for.
+    }
+  });
 }
 
 /**
