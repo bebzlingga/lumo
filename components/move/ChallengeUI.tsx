@@ -720,7 +720,7 @@ const styles = StyleSheet.create({
     overflow: "hidden"
   },
   rankFill: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     right: undefined
   },
   rankNumber: {

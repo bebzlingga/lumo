@@ -1414,7 +1414,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth
   },
   shareTitleSlot: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center"
   },

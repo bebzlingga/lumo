@@ -1354,7 +1354,7 @@ export default function FriendsScreen() {
           which as a block on the page would be a heading over an empty list. */}
       <Modal visible={invitesVisible} transparent animationType="fade" onRequestClose={() => setInvitesVisible(false)}>
         <View style={styles.inviteOverlay}>
-          <Pressable style={StyleSheet.absoluteFillObject} accessibilityLabel="Close" onPress={() => setInvitesVisible(false)} />
+          <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close" onPress={() => setInvitesVisible(false)} />
           <View style={[styles.invitesSheet, { backgroundColor: palette.card }]}>
             {/* Only over a list. The empty state carries its own "No
                 invitations" heading, so the bar title above it just said the
@@ -1416,7 +1416,7 @@ export default function FriendsScreen() {
 
       <Modal visible={inviteVisible} transparent animationType="fade" onRequestClose={closeInvite}>
         <View style={styles.inviteOverlay}>
-          <Pressable style={StyleSheet.absoluteFillObject} accessibilityLabel="Close" onPress={closeInvite} />
+          <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close" onPress={closeInvite} />
           <View style={[styles.inviteCard, { backgroundColor: palette.card }]}>
             <AppText variant="titleSmall" color={palette.ink} style={styles.inviteTitle}>
               Invite a friend

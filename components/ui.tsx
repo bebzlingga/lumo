@@ -799,7 +799,7 @@ const styles = StyleSheet.create({
     zIndex: 1
   },
   buttonSurface: {
-    ...StyleSheet.absoluteFillObject
+    ...StyleSheet.absoluteFill
   },
   iconButton: {
     width: 40,

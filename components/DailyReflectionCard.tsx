@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
     elevation: 2
   },
   clip: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: radius.card,
     overflow: "hidden"
   },

@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     lineHeight: 22
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject
+    ...StyleSheet.absoluteFill
   },
   menu: {
     position: "absolute",

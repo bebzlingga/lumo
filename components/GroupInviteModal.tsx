@@ -59,7 +59,7 @@ export function GroupInviteModal({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFillObject} accessibilityLabel="Close" onPress={onClose} />
+        <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close" onPress={onClose} />
         <View style={[styles.card, { backgroundColor: palette.card }]}>
           <AppText variant="titleSmall" color={palette.ink} style={styles.title}>
             Invite friends

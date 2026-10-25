@@ -290,7 +290,7 @@ export default function ProfileScreen() {
 
       <Modal visible={qrVisible} transparent animationType="fade" onRequestClose={() => setQrVisible(false)}>
         <View style={styles.qrOverlay}>
-          <Pressable style={StyleSheet.absoluteFillObject} accessibilityLabel="Close" onPress={() => setQrVisible(false)} />
+          <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close" onPress={() => setQrVisible(false)} />
           <View style={[styles.qrCard, { backgroundColor: palette.card }]}>
             <AppText variant="titleSmall" color={palette.ink} style={styles.qrTitle}>
               {lumoId}

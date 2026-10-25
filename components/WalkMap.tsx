@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
     elevation: 3
   },
   edge: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.card
   }

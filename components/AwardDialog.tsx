@@ -142,7 +142,7 @@ export function AwardDialog({
   return (
     <Modal visible={Boolean(content)} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFillObject} accessibilityLabel="Close" onPress={onClose} />
+        <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close" onPress={onClose} />
         {content ? (
           <>
             {celebrate ? (
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     bottom: 0
   },
   veil: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "#FBF6EC",
     opacity: 0.34
   },

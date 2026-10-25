@@ -100,7 +100,7 @@ export function GroupWinCelebration({
   return (
     <Modal visible={Boolean(payload)} transparent animationType="fade" onRequestClose={close}>
       <View style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFillObject} accessibilityLabel="Close" onPress={close} />
+        <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close" onPress={close} />
         {payload ? (
           <>
             <ConfettiCannon
