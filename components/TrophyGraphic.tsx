@@ -1,4 +1,5 @@
-import { MedalIcon, TrophyIcon } from "phosphor-react-native";
+import { MedalIcon } from "phosphor-react-native/src/icons/Medal";
+import { TrophyIcon } from "phosphor-react-native/src/icons/Trophy";
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
