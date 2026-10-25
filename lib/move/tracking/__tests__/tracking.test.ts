@@ -608,6 +608,20 @@ describe('pace', () => {
 })
 
 describe('movement state machine', () => {
+	/** Regression: drift banked distance when steps overruled a speed of 0, or with no speed at all. */
+	it('does not let the pedometer overrule a reported speed of zero', () => {
+		expect(isMovement({ legM: 4, elapsedMs: 2000, stepping: true, platformSpeedMs: 0 })).toBe(false)
+		// A slow shuffle the receiver does see is still movement.
+		expect(isMovement({ legM: 4, elapsedMs: 2000, stepping: true, platformSpeedMs: 0.3 })).toBe(true)
+	})
+
+	it('treats a speed-less leg as drift when the pedometer says nobody is walking', () => {
+		expect(isMovement({ legM: 8, elapsedMs: 4000, stepping: false, platformSpeedMs: null })).toBe(false)
+		expect(isMovement({ legM: 8, elapsedMs: 4000, stepping: false, platformSpeedMs: -1 })).toBe(false)
+		// No pedometer at all: the leg is all there is, as before.
+		expect(isMovement({ legM: 8, elapsedMs: 4000, platformSpeedMs: null })).toBe(true)
+	})
+
 	/**
 	 * Regression: the blackout test measured from the last ACCEPTED fix, so a
 	 * wait over a minute — fixes still arriving, rejected as jitter — zeroed the

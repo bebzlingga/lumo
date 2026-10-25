@@ -139,6 +139,12 @@ export const TRACKING_CONFIG = {
   movement: {
     /** Below this, in m/s, a fix is not movement. Roughly 1.8 km/h. */
     stillSpeedMs: 0.5,
+    /**
+     * With steps counting, a reported (Doppler) speed this low still counts —
+     * a slow shuffle. Below it the steps are someone fidgeting in place, and the
+     * leg is drift: a speed of 0 must never be overruled by the pedometer.
+     */
+    steppingSpeedMs: 0.2,
     /** Consistent movement for this long promotes STOPPED back to MOVING. */
     resumeAfterMs: 3_000,
     /**

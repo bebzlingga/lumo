@@ -925,7 +925,11 @@ class ActivityTrackerController {
    * well, with one fewer corroborating signal.
    */
   private steppingRecently(): boolean | undefined {
-    if (!this.stepWatch) {
+    // No pedometer, or none of its readings yet: no opinion. "false" now vetoes
+    // a speed-less leg as drift (see `isMovement`), so it has to mean the
+    // pedometer is reporting and saw nobody walking — not that it is still
+    // warming up at the start of the walk.
+    if (!this.stepWatch || this.lastStepAt === 0) {
       return undefined;
     }
 

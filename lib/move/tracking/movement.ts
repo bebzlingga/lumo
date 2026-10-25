@@ -151,10 +151,24 @@ export function isMovement(input: { legM: number; elapsedMs: number; stepping?: 
    * Android null when it has no figure, which falls through to the leg.
    */
   if (typeof input.platformSpeedMs === "number" && Number.isFinite(input.platformSpeedMs) && input.platformSpeedMs >= 0) {
-    return input.platformSpeedMs >= TRACKING_CONFIG.movement.stillSpeedMs || (input.stepping === true && input.legM > 0);
+    return (
+      input.platformSpeedMs >= TRACKING_CONFIG.movement.stillSpeedMs ||
+      (input.stepping === true && input.legM > 0 && input.platformSpeedMs >= TRACKING_CONFIG.movement.steppingSpeedMs)
+    );
   }
 
   if (input.elapsedMs <= 0) {
+    return false;
+  }
+
+  /**
+   * No speed from the receiver (iOS -1, Android without hasSpeed, Wi-Fi fixes):
+   * position differencing is all there is, and drift at ±10 m differences into
+   * a brisk walk. A phone WITH a pedometer that says nobody is stepping is a
+   * phone on a table — simulated, ten minutes standing banked ~200 m. Only a
+   * device with no pedometer (`stepping` undefined) has to trust the leg alone.
+   */
+  if (input.stepping === false) {
     return false;
   }
 
