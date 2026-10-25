@@ -222,7 +222,7 @@ export function WalkMap({
         // Everything the map wants to tell you about, off. Shops, buildings,
         // traffic and indoor floor plans are all things to read, and this map
         // is here to be glanced at — the route is the only content.
-        showsPointsOfInterest={false}
+        showsPointsOfInterests={false}
         showsBuildings={false}
         showsTraffic={false}
         showsIndoors={false}
