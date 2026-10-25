@@ -1,7 +1,7 @@
 import { averagePace, averageSpeed, estimateCalories } from "@/lib/move/tracking/pace";
 import { classifyActivity, routePoints } from "@/lib/move/tracking/tracker";
 import type { ActivityTrackingState } from "@/lib/move/tracking/types";
-import type { ActivityFacts, WalkPoint, WalkRecord } from "@/lib/walk";
+import { simplifyRouteForDisplay, type ActivityFacts, type WalkPoint, type WalkRecord } from "@/lib/walk";
 
 /**
  * The new tracker, in the shapes the rest of Lumo already speaks.
@@ -48,8 +48,16 @@ export function toWalkPoints(state: ActivityTrackingState): WalkPoint[] {
  * outright as impossible for the activity, and a rejected fix contributes no
  * distance to anything. The field stays for the record's shape.
  */
+/**
+ * Stored routes are thinned to within this many metres of the recorded line.
+ * Only the map and the upload read a saved route — distance, pace and habit
+ * credit come from the record's own totals — so this cuts storage (up to 400
+ * walks share one blob) and sync payloads without changing any number.
+ */
+const STORED_ROUTE_TOLERANCE_M = 3;
+
 export function toWalkRecordFromActivity(state: ActivityTrackingState, habitIds: string[] = []): WalkRecord | null {
-  const route = toWalkPoints(state);
+  const route = simplifyRouteForDisplay(toWalkPoints(state), STORED_ROUTE_TOLERANCE_M);
 
   if (state.distanceMeters <= 0 && route.length < 2) {
     return null;

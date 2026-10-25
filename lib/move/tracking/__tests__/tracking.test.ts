@@ -21,7 +21,7 @@ import {
 	routePoints,
 	tick,
 } from '../tracker'
-import { toWalkPoints } from '../bridge'
+import { toWalkPoints, toWalkRecordFromActivity } from '../bridge'
 import type { ActivityTrackingState, RawLocationPoint } from '../types'
 
 /**
@@ -1067,5 +1067,18 @@ describe('noisy receiver', () => {
 		for (const seed of [1, 2, 3]) {
 			expect(noisyWalk(0, 600, seed)).toBeLessThan(50)
 		}
+	})
+})
+
+describe('walk record', () => {
+	it('stores a thinned route but the full distance, and carries linked habits', () => {
+		let state = started()
+		for (let s = 0; s <= 100; s++) state = walk(state, [{ ...fix(s * 1.5, s), speed: 1.5 }])
+		const record = toWalkRecordFromActivity(finishActivity(state, at(101)), ['h1'])!
+
+		// A straight line needs only its ends; the distance is the tracker's, untouched.
+		expect(record.route.length).toBeLessThan(5)
+		expect(record.distanceM).toBe(state.distanceMeters)
+		expect(record.habitIds).toEqual(['h1'])
 	})
 })

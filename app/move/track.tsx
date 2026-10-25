@@ -83,7 +83,7 @@ const WALK_SYNC_MS = 10_000;
 
 export default function MoveTrackScreen() {
   const router = useRouter();
-  const { palette, isDark } = useLumo();
+  const { palette, isDark, habits } = useLumo();
   const move = useMove();
   const { state, prepare, averagePace, averageSpeed, controller } = useActivityTracker();
 
@@ -528,7 +528,10 @@ export default function MoveTrackScreen() {
     leavingRef.current = true;
     setSaving(true);
 
-    const record = toWalkRecordFromActivity(state);
+    // Every active habit with a measured target (time, distance or steps) is
+    // credited by the walk; without ids its progress always read zero.
+    const measuredHabitIds = habits.filter((habit) => habit.status === "active" && habit.measurement).map((habit) => habit.id);
+    const record = toWalkRecordFromActivity(state, measuredHabitIds);
 
     if (!record) {
       await controller.discard();
