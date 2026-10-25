@@ -182,11 +182,12 @@ export default function TodayScreen() {
 	const prevAllDoneRef = useRef({ dateKey: selectedDateKey, allDone })
 	useEffect(() => {
 		const previous = prevAllDoneRef.current
-		if (previous.dateKey === selectedDateKey && allDone && !previous.allDone) {
+		// Minimal mode is the calm setup: no confetti burst.
+		if (previous.dateKey === selectedDateKey && allDone && !previous.allDone && !settings.minimalMode) {
 			setShowConfetti(true)
 		}
 		prevAllDoneRef.current = { dateKey: selectedDateKey, allDone }
-	}, [allDone, selectedDateKey])
+	}, [allDone, selectedDateKey, settings.minimalMode])
 
 	// Always open on today, and snap back to it whenever the app returns to the
 	// foreground — otherwise a phone left overnight still shows yesterday.

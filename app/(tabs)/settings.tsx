@@ -435,7 +435,7 @@ export default function SettingsScreen() {
         <SettingsRow
           icon="eyeSlash"
           title="Minimal"
-          body="Hide the illustrations and Lumo for a plainer look"
+          body="No illustrations, mascot, or confetti — a calmer look"
           right={
             <SettingsSwitch
               checked={settings.minimalMode}

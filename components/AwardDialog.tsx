@@ -11,6 +11,7 @@ import { Pressable } from "@/components/Pressable";
 import { AppText } from "@/components/ui";
 import { BACKGROUND_ASPECT, backgroundAsset } from "@/constants/backgroundAssets";
 import { control, fontFamilies, radius, spacing } from "@/constants/theme";
+import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 
 /** The award's art, drawn at the size the card gives it. */
@@ -63,6 +64,7 @@ export function AwardDialog({
   /** Extra controls under the card — the celebration's "Show All Badges". */
   footer?: React.ReactNode;
 }) {
+  const { settings } = useLumo();
   const { width } = useWindowDimensions();
   const cardRef = React.useRef<HostInstance>(null);
   // The card is the overlay width, capped by `content`'s maxWidth.
@@ -146,7 +148,7 @@ export function AwardDialog({
         <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close" onPress={onClose} />
         {content ? (
           <>
-            {celebrate ? (
+            {celebrate && !settings.minimalMode ? (
               <ConfettiCannon
                 count={140}
                 origin={{ x: width / 2, y: -20 }}

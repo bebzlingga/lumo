@@ -35,7 +35,7 @@ export function GroupWinCelebration({
   trophies: GroupTrophy[];
   scoreLevel: number;
 }) {
-  const { palette, isDark } = useLumo();
+  const { palette, isDark, settings } = useLumo();
   const { width } = useWindowDimensions();
   const [payload, setPayload] = React.useState<Payload | null>(null);
 
@@ -103,15 +103,17 @@ export function GroupWinCelebration({
         <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close" onPress={close} />
         {payload ? (
           <>
-            <ConfettiCannon
-              count={140}
-              origin={{ x: width / 2, y: -20 }}
-              colors={CONFETTI_COLORS}
-              fadeOut
-              autoStart
-              explosionSpeed={360}
-              fallSpeed={2900}
-            />
+            {settings.minimalMode ? null : (
+              <ConfettiCannon
+                count={140}
+                origin={{ x: width / 2, y: -20 }}
+                colors={CONFETTI_COLORS}
+                fadeOut
+                autoStart
+                explosionSpeed={360}
+                fallSpeed={2900}
+              />
+            )}
             <View style={styles.content} pointerEvents="box-none">
               <View style={[styles.card, { backgroundColor: cardBackground }]}>
                 <AppText variant="caption" color={cardMuted} style={styles.kicker}>
