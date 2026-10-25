@@ -80,6 +80,47 @@ export type GroupReaction = {
   at: string;
 };
 
+/**
+ * One message in a group's chat.
+ *
+ * Flat and self-describing: the author's name and face travel WITH it rather than
+ * being looked up by the screen, because a bubble has to be renderable on its own
+ * — the roster it would otherwise be joined against may not have loaded, and a
+ * member who has since left the group still wrote what they wrote.
+ */
+export type GroupMessage = {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar?: AvatarConfig;
+  body: string;
+  /**
+   * The message this one answers, if any.
+   *
+   * An id rather than a copy of the quoted text: the screen already holds the page
+   * these both live in, so it resolves the quote from the list — and a stored copy
+   * would go stale the moment the original was deleted, leaving a quote of something
+   * nobody can find. Null once the target is gone (`on delete set null`), which the
+   * screen reads as "nothing to quote".
+   */
+  replyToId?: string;
+  /** ISO. The screen groups by day and prints the time. */
+  at: string;
+};
+
+/**
+ * Why a message could not be posted.
+ *
+ * A shape rather than a boolean, because "it did not send" has four causes and only
+ * one of them is the connection. The screen printed "check your connection" for all
+ * of them, which is a wrong answer three times out of four — and the one that sends
+ * somebody to their router when the real problem is that they have been removed from
+ * the group.
+ */
+export type SendMessageFailure = "signed-out" | "refused" | "unavailable" | "offline";
+
+export type SendMessageResult = { ok: true; message: GroupMessage } | { ok: false; reason: SendMessageFailure };
+
 export type GroupActivity = {
   profile: FriendProfile;
   habitName: string;
@@ -151,6 +192,34 @@ export type GroupDraft = {
   avatarSeed?: string;
 };
 
+/**
+ * Whether group chat is reachable at all.
+ *
+ * FALSE hides the feature without removing it: the table, the policies, the client
+ * calls and the screen all stay, and the two places that would put it in front of
+ * somebody — the chat button on a group's page bar, and the banner for an incoming
+ * message — check this first. The route still exists but nothing links to it.
+ *
+ * One flag rather than commented-out code, and exported rather than local, because
+ * hiding a feature in two places is how one of them gets missed: a button removed
+ * while its notification still fires is a notification that opens a screen the app
+ * says it does not have.
+ *
+ * Flip to true to bring it back. Nothing else needs changing, and any messages sent
+ * while it was on are still there.
+ */
+export const GROUP_CHAT_ENABLED = false;
+
+/**
+ * How many messages one page of a chat holds.
+ *
+ * 30 — comfortably more than a screenful, so scrolling up has somewhere to go
+ * before the next page is asked for, and small enough that opening a chat is one
+ * quick read rather than a month of history. The screen asks for the next page as
+ * the top comes into view.
+ */
+const CHAT_PAGE = 30;
+
 // ---------------------------------------------------------------------------
 // Row shapes + mappers (schema columns are snake_case).
 // ---------------------------------------------------------------------------
@@ -198,6 +267,29 @@ function rowToGroupHabit(row: GroupHabitRow): GroupHabit {
     repeatSchedule: row.repeat_schedule,
     goal: row.goal
   };
+}
+
+/**
+ * Turns a Supabase error into something a person can act on.
+ *
+ * The codes are Postgres's own: 42501 is an RLS refusal, and the 42xxx family is
+ * "the schema does not have what you asked for" — a missing table or column, which
+ * on this app means a migration has not been run. PostgREST adds its own PGRST1xx
+ * for the same class. Everything left over is treated as the network, because a
+ * fetch that never reached the server has no code at all.
+ */
+function sendFailureFor(error: { code?: string; message?: string } | null): SendMessageFailure {
+  const code = error?.code ?? "";
+
+  if (code === "42501" || /row-level security/i.test(error?.message ?? "")) {
+    return "refused";
+  }
+
+  if (code.startsWith("42") || code.startsWith("PGRST")) {
+    return "unavailable";
+  }
+
+  return "offline";
 }
 
 async function profileIdByLumoId(lumoId: string): Promise<string | null> {
@@ -951,6 +1043,203 @@ export const friendsService = {
       recipientId: row.recipient,
       at: row.created_at
     }));
+  },
+
+  /**
+   * One page of a group's chat, NEWEST FIRST.
+   *
+   * ## Why newest first, and why a page
+   *
+   * The screen is an inverted list — index 0 is the message at the bottom — so this
+   * hands back the order it renders in rather than reversing twice. And it reads a
+   * PAGE: a group that has been talking for months has more history than a phone
+   * should mount, and the interesting end of a conversation is always the recent
+   * one. Scrolling up asks for the next page by passing `before`.
+   *
+   * `before` is the oldest message the screen already holds. A timestamp rather than
+   * an offset, because an offset shifts under you the moment somebody posts — page 2
+   * of an OFFSET query re-reads a row page 1 already showed.
+   *
+   * The author's nickname and avatar ride along from `profiles`, because a chat
+   * without a name on each bubble is a wall of text. The embed is the same
+   * relationship syntax `listTodayReactions` uses.
+   */
+  async listGroupMessages(groupId: string, options?: { before?: string; limit?: number }): Promise<GroupMessage[]> {
+    if (!(await ensureSignedIn())) {
+      return [];
+    }
+
+    let query = supabase
+      .from("group_messages")
+      .select("id, author, body, reply_to, created_at, profiles!group_messages_author_fkey(nickname, avatar)")
+      .eq("group_id", groupId)
+      .order("created_at", { ascending: false })
+      .limit(options?.limit ?? CHAT_PAGE);
+
+    if (options?.before) {
+      query = query.lt("created_at", options.before);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      return [];
+    }
+
+    type MessageRow = {
+      id: string;
+      author: string;
+      body: string;
+      reply_to: string | null;
+      created_at: string;
+      profiles: { nickname: string | null; avatar: AvatarConfig | null } | null;
+    };
+
+    // Left newest-first: the LIMIT keeps the most recent, and the inverted list
+    // renders index 0 at the bottom.
+    return ((data ?? []) as unknown as MessageRow[])
+      .map((row) => ({
+        id: row.id,
+        authorId: row.author,
+        authorName: row.profiles?.nickname?.trim() || "Lumo user",
+        authorAvatar: row.profiles?.avatar ?? undefined,
+        body: row.body,
+        replyToId: row.reply_to ?? undefined,
+        at: row.created_at
+      }));
+  },
+
+  /**
+   * How many messages have arrived in this group since `since`, from other people.
+   *
+   * `head: true` with an exact count: the rows are not wanted, only the number, so
+   * this transfers a count rather than a page of text somebody may never open.
+   *
+   * Your OWN messages are excluded — a badge that counted them would light up the
+   * moment you sent something, which is the most confusing possible unread count.
+   *
+   * A null `since` means this device has never opened the chat. That is deliberately
+   * NOT treated as "everything is unread": a group with two years of history would
+   * open on a badge of four hundred, which says nothing anybody can act on. The
+   * first look is what sets the mark.
+   */
+  async countUnreadMessages(groupId: string, since: string | null): Promise<number> {
+    const userId = await ensureSignedIn();
+
+    if (!userId || !since) {
+      return 0;
+    }
+
+    const { count } = await supabase
+      .from("group_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("group_id", groupId)
+      .neq("author", userId)
+      .gt("created_at", since);
+
+    return count ?? 0;
+  },
+
+  /**
+   * Posts one. Returns the stored row, so the screen can replace its own
+   * optimistic copy with the id and timestamp the server gave it.
+   */
+  async sendGroupMessage(groupId: string, body: string, replyToId?: string): Promise<SendMessageResult> {
+    const userId = await ensureSignedIn();
+    const text = body.trim();
+
+    if (!userId || !text) {
+      return { ok: false, reason: "signed-out" };
+    }
+
+    // 2000 is the column's own limit; trimming to it here means a paste of a whole
+    // article posts its opening rather than being refused outright.
+    const trimmed = text.slice(0, 2000);
+    /**
+     * `reply_to` is included ONLY when there is a reply.
+     *
+     * Not `reply_to: null` on every message, which is what this did and what broke
+     * sending outright: PostgREST rejects the whole insert when a column does not
+     * exist, so a database that has the chat table but not yet the replies column
+     * failed EVERY message with "not sent" — including the ordinary ones that have
+     * nothing to do with replies. Omitting the key keeps plain messages working on
+     * either shape of the table.
+     */
+    const row: Record<string, unknown> = { group_id: groupId, author: userId, body: trimmed };
+
+    if (replyToId) {
+      row.reply_to = replyToId;
+    }
+
+    let { data, error } = await supabase.from("group_messages").insert(row).select("id, created_at").maybeSingle();
+
+    if (error && replyToId) {
+      if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.warn("[sendGroupMessage] insert with reply_to failed, retrying without", error);
+      }
+
+      // The message matters more than the quote: send it as a plain one rather than
+      // losing what somebody typed to a column that is not there.
+      ({ data, error } = await supabase
+        .from("group_messages")
+        .insert({ group_id: groupId, author: userId, body: trimmed })
+        .select("id, created_at")
+        .maybeSingle());
+    }
+
+    if (error || !data) {
+      if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.warn("[sendGroupMessage] failed", error);
+      }
+
+      return { ok: false, reason: sendFailureFor(error) };
+    }
+
+    const stored = data as { id: string; created_at: string };
+
+    return {
+      ok: true,
+      message: { id: stored.id, authorId: userId, authorName: "You", body: trimmed, replyToId, at: stored.created_at }
+    };
+  },
+
+  /** Removes your own message. The policy allows nobody else's. */
+  async deleteGroupMessage(messageId: string): Promise<boolean> {
+    if (!(await ensureSignedIn())) {
+      return false;
+    }
+
+    const { error } = await supabase.from("group_messages").delete().eq("id", messageId);
+
+    return !error;
+  },
+
+  /**
+   * Live messages for one group.
+   *
+   * Rings on any insert in this group and hands back the row's id and nothing
+   * else — the screen re-reads. A payload-driven append would have to resolve the
+   * author's name itself and would show a message the reader may not be allowed to
+   * see if the policy changed underneath it.
+   *
+   * Returns a teardown, and a no-op one when Supabase is unconfigured.
+   */
+  subscribeToGroupMessages(groupId: string, onMessage: () => void): () => void {
+    if (!isSupabaseConfigured) {
+      return () => undefined;
+    }
+
+    const channel = supabase
+      .channel(`group-chat-${groupId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "group_messages", filter: `group_id=eq.${groupId}` }, onMessage)
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "group_messages", filter: `group_id=eq.${groupId}` }, onMessage)
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   },
 
   /** Owner sets (or clears) the group's weekly completion target. */

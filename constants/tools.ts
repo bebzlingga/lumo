@@ -52,6 +52,16 @@ export const MOVE_ROUTE_ACCENT = "#F07A1E";
  */
 export const MOVE_ACCENT = "#5C9A6B";
 
+/**
+ * Whether Today shows the Goodies section at all.
+ *
+ * Off for now — the tools are still there and still reachable by route; what is
+ * hidden is the shelf advertising them on the home screen. Flipped here rather
+ * than by deleting the block so the section comes back as one edit, with its
+ * copy, its ordering and its spacing intact.
+ */
+export const GOODIES_ENABLED = false;
+
 export const TOOLS: Tool[] = [
   {
     slug: "focus",

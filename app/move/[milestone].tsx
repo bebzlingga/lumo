@@ -8,6 +8,7 @@ import { MoveBadge } from "@/components/move/MoveBadge";
 import { MoveFriendPicker } from "@/components/move/MoveFriendPicker";
 import { MoveOptionGroup, MoveOptionRow } from "@/components/move/MoveOptionRow";
 import { PlusBadge } from "@/components/PlusBadge";
+import { SubscriptionGate } from "@/components/SubscriptionGate";
 import { Pressable } from "@/components/Pressable";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Button, Screen } from "@/components/ui";
@@ -20,7 +21,7 @@ import { challengeClient } from "@/lib/move/challengeClient";
 import { pauseState, START_REFUSAL_COPY, type TeamGoal } from "@/lib/move/activeChallenge";
 import { familyProgress, hasMilestone, hasVariant, isFamilyLocked, previousFamily } from "@/lib/move/achievements";
 import { describeUnlockRule, findFamily } from "@/lib/move/challengeDefs";
-import { moveSocialUnlocked } from "@/lib/move/gating";
+import { MOVE_WITH_FRIENDS_ENABLED, moveSocialUnlocked } from "@/lib/move/gating";
 import { formatDistance } from "@/lib/move/movement";
 
 /**
@@ -34,7 +35,7 @@ import { formatDistance } from "@/lib/move/movement";
 export default function MilestoneScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ milestone: string }>();
-  const { palette, isDark, isPlus } = useLumo();
+  const { palette, isDark, isPlus, isUnlimited } = useLumo();
   const accent = useMoveAccent();
   const move = useMove();
 
@@ -55,6 +56,8 @@ export default function MilestoneScreen() {
    * and "out on a move right now" are different facts.
    */
   const [busy, setBusy] = React.useState<Map<string, string>>(new Map());
+  /** Whether the Pro offer is open over this screen — see the blocked panel. */
+  const [paywallOpen, setPaywallOpen] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -92,6 +95,53 @@ export default function MilestoneScreen() {
     };
   }, []);
 
+  /**
+   * The routes this build offers for the rung.
+   *
+   * Every variant, minus the team one while company is switched off — see
+   * `MOVE_WITH_FRIENDS_ENABLED`. Filtered rather than badged: a route that
+   * cannot be taken at any price should not be on the list at all.
+   *
+   * `routes` below is NOT filtered on purpose. It counts what has been earned
+   * against what exists, and a tally that quietly dropped a route would tell
+   * somebody who walked the team route last year that they had done fewer than
+   * they had.
+   */
+  const routeVariants = React.useMemo(
+    () => (family ? (MOVE_WITH_FRIENDS_ENABLED ? family.variants : family.variants.filter((variant) => variant.kind !== "team")) : []),
+    [family]
+  );
+  /** The running challenge, but only if it belongs to THIS milestone. */
+  const running = family && move.progress && move.progress.variant.milestoneId === family.id ? move.progress : null;
+  /** Names and faces for a team challenge's roster. Empty for every other kind. */
+  const teamMembers = useTeamMembers(running?.challenge.participants);
+
+  /**
+   * EVERY HOOK IS ABOVE THIS LINE, and that is what the two returns below are
+   * about.
+   *
+   * They used to sit further up — the paywall before the `!family` guard, both
+   * before `routeVariants` and `useTeamMembers` — which meant opening the offer
+   * rendered two fewer hooks than the render before it, and React tore the
+   * screen down with "rendered fewer hooks than expected". Tapping "See Lumo
+   * Pro" on a Pro rung crashed on the spot.
+   *
+   * The guards are not conditional hooks and never were; the hooks were simply
+   * downstream of a `return`. So the hooks moved up rather than the returns
+   * moving down, and they now tolerate a missing `family` instead of assuming
+   * one.
+   */
+
+  /**
+   * The offer, taking the whole screen — the shape `SubscriptionGate` is built
+   * for, and the same one `habit/new` and the journal editor use when they hit
+   * their limits. Ahead of the `!family` guard so it does not depend on which
+   * rung was asked for.
+   */
+  if (paywallOpen) {
+    return <SubscriptionGate product="unlimited" />;
+  }
+
   if (!family) {
     return (
       <Screen contentStyle={styles.content}>
@@ -106,26 +156,31 @@ export default function MilestoneScreen() {
   const earned = hasMilestone(move.achievements, family.id);
   const routes = familyProgress(move.achievements, family);
   const chosen = family.variants.find((entry) => entry.id === selected) ?? null;
-  /** The running challenge, but only if it belongs to THIS milestone. */
-  const running = move.progress && move.progress.variant.milestoneId === family.id ? move.progress : null;
   // Another rung's challenge is what blocks this one. This rung's own is not a
   // block — it is what the screen is about.
   const blocked = move.active !== null && !running;
   const pause = running ? pauseState(running.challenge) : { can: false, left: 0 };
-  /** Names and faces for a team challenge's roster. Empty for every other kind. */
-  const teamMembers = useTeamMembers(running?.challenge.participants);
   // Reachable from the badges screens even when the list has it shut, so the
   // rule is stated here too rather than only being enforced in the list.
   const locked = isFamilyLocked(move.achievements, family);
   /**
-   * A Plus rung, and the reader has not subscribed.
+   * A PRO rung, and the reader has not bought Pro.
+   *
+   * 25K and above sit behind Pro — the ₱149 one-off — not behind Plus, the ₱49
+   * monthly. The two products are not a ladder (see `components/PlusBadge.tsx`):
+   * Plus buys the shared side of the app, Pro lifts the limits on what one
+   * person can do, and the long rungs are the Move-shaped version of exactly
+   * that. Read `isUnlimited`, which is Pro's persisted flag.
+   *
+   * `family.pro` and the `is_pro` column behind it were named for this gate when
+   * it pointed at the other product; both are load-bearing (a shipped column and
+   * a stored key) and keep their names.
    *
    * Checked here as well as on the list, because the badges screens push
    * straight to a milestone — a rule enforced only where you usually enter from
-   * is not a rule. `family.pro` and the `is_pro` column behind it keep their old
-   * names; the product is called Plus (see components/PlusBadge.tsx).
+   * is not a rule.
    */
-  const needsPlus = family.pro && !isPlus;
+  const needsPro = family.pro && !isUnlimited;
   // The amber is a wash, so the label is darkened until it clears the card it
   // sits on rather than taking the raw token.
   const pauseInk = readableOn(palette.chartPartial, palette.card, 4.5);
@@ -214,23 +269,32 @@ export default function MilestoneScreen() {
         </AppText>
       </View>
 
-      {needsPlus ? (
+      {needsPro ? (
         <View style={[styles.blocked, { backgroundColor: alpha(palette.accent, "1F") }]}>
           <AppText variant="bodySmall" color={palette.ink} style={styles.blockedTitle}>
-            A Lumo Plus challenge
+            A Lumo Pro challenge
           </AppText>
           <AppText variant="caption" color={palette.body} style={styles.blockedBody}>
-            {family.title} and everything above it come with Lumo Plus, the ₱49 monthly. The first three rungs are free and stay
-            free — including the badges you have already earned.
+            {family.title} and everything above it come with Lumo Pro, ₱149 once. The first three rungs are free and stay free —
+            including the badges you have already earned.
           </AppText>
+          {/* The page's primary button, not an outlined one.
+              An outline says "secondary, there is a main action elsewhere" —
+              and on a Pro rung there is no elsewhere: this card IS the screen's
+              answer, and the only thing to do on it. Same fill and same shape
+              as Start Challenge, because it occupies the same place in the
+              page's argument. */}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="See Lumo Plus"
-            onPress={() => router.push("/friends")}
-            style={({ pressed }) => [styles.blockedButton, { borderColor: readableOn(palette.accent, palette.canvas, 3), opacity: pressed ? 0.7 : 1 }]}
+            accessibilityLabel="See Lumo Pro"
+            /* Opens the paywall over this screen rather than pushing at a route:
+               Pro has no page of its own — `SubscriptionGate` is rendered in
+               place wherever a limit is hit, and this is one more such place. */
+            onPress={() => setPaywallOpen(true)}
+            style={({ pressed }) => [styles.blockedButton, { backgroundColor: accent.primary, opacity: pressed ? 0.85 : 1 }]}
           >
-            <AppText variant="bodySmall" color={readableOn(palette.accent, palette.canvas, 4.5)}>
-              See Lumo Plus
+            <AppText color={palette.white} style={styles.blockedButtonLabel}>
+              See Lumo Pro
             </AppText>
           </Pressable>
         </View>
@@ -327,7 +391,7 @@ export default function MilestoneScreen() {
         </View>
 
         <MoveOptionGroup>
-          {family.variants.map((variant, index) => {
+          {routeVariants.map((variant, index) => {
             const done = hasVariant(move.achievements, variant.id);
             /**
              * A TEAM route needs Plus, even on a free rung.
@@ -345,7 +409,7 @@ export default function MilestoneScreen() {
              * Asked through `moveSocialUnlocked` rather than `isPlus`, so the
              * testing bypass covers this route and the start screen's company
              * option together — see `lib/move/gating.ts`. The RUNG gate above
-             * (`needsPlus`) is a different question and is not bypassed.
+             * (`needsPro`) is a different question and is not bypassed.
              */
             const teamNeedsPlus = variant.kind === "team" && !moveSocialUnlocked(isPlus);
 
@@ -364,7 +428,7 @@ export default function MilestoneScreen() {
                     <Icon name="checkCircle" size={20} color={palette.greenDark} weight="bulk" />
                   ) : undefined
                 }
-                last={index === family.variants.length - 1}
+                last={index === routeVariants.length - 1}
               />
             );
           })}
@@ -373,7 +437,7 @@ export default function MilestoneScreen() {
       )}
 
       {/* The rule, stated where it applies, with the way out beside it. */}
-      {running || locked || needsPlus ? null : blocked ? (
+      {running || locked || needsPro ? null : blocked ? (
         <View style={[styles.blocked, { backgroundColor: accent.soft }]}>
           <AppText variant="bodySmall" color={palette.ink} style={styles.blockedTitle}>
             Active challenge in progress
@@ -443,7 +507,7 @@ export default function MilestoneScreen() {
                   refusal would otherwise arrive after the invite went out. */}
               {family.pro ? (
                 <AppText variant="caption" color={palette.subtle} style={styles.proNote}>
-                  Friends need Lumo Plus to join a {family.title} challenge.
+                  Friends need Lumo Pro to join a {family.title} challenge.
                 </AppText>
               ) : null}
 
@@ -657,25 +721,44 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontFamily: fontFamilies.lexendSemiBold
   },
+  // Centred, and roomier than a plain notice: this card is the whole answer to
+  // a tap that expected a challenge, so it stands on its own rather than
+  // reading as a strip of text pinned to the top of the page.
   blocked: {
+    alignItems: "center",
     gap: spacing.xs,
-    padding: spacing.md,
+    padding: spacing.lg,
     borderRadius: radius.card
   },
   blockedTitle: {
-    fontFamily: fontFamilies.lexendSemiBold
+    fontFamily: fontFamilies.lexendSemiBold,
+    textAlign: "center"
   },
   blockedBody: {
-    fontFamily: fontFamilies.lexend
+    fontFamily: fontFamilies.lexend,
+    textAlign: "center"
   },
+  /**
+   * Filled like a primary button, but sized like the card it lives in.
+   *
+   * Not the 56 of Start Challenge: that one spans the page and ends a long
+   * scroll, while this sits inside a notice a third of the height. At the full
+   * size it was the loudest thing on the screen, which is the wrong emphasis
+   * for an offer — the badge above it is what the page is about.
+   */
   blockedButton: {
-    alignSelf: "flex-start",
     alignItems: "center",
     justifyContent: "center",
     minHeight: 42,
-    paddingHorizontal: spacing.ml,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth
+    // Set apart from the sentence it answers — the gap is what makes it the
+    // card's action rather than its last line.
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill
+  },
+  blockedButtonLabel: {
+    fontFamily: fontFamilies.lexendSemiBold,
+    fontSize: 14
   },
   // Set apart from the summary above it: this is the commit, not the last row
   // of what it describes.

@@ -6,6 +6,7 @@ import { fontFamilies, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha, readableOn } from "@/lib/color";
 import { formatDistance, formatPace } from "@/lib/move/tracking/pace";
+import { smoothingShiftM } from "@/lib/move/tracking/smoothing";
 import type { ActivityTrackingState, GpsQuality } from "@/lib/move/tracking/types";
 
 /**
@@ -54,9 +55,32 @@ export function GpsIndicator({ quality, accuracyM }: { quality: GpsQuality; accu
   );
 }
 
-/** The advice that goes with a bad signal, or nothing when it is fine. */
-export function GpsHint({ quality }: { quality: GpsQuality }) {
+/**
+ * The advice that goes with a bad signal, or nothing when it is fine.
+ *
+ * `phase` outranks the quality band, because two states are about the recording
+ * rather than the reception and have to be said even on a decent signal: the
+ * moments before the clock starts, and a pause the tracker took by itself. Both
+ * are the app doing something on its own, and neither is allowed to be silent.
+ */
+export function GpsHint({ quality, phase = "tracking" }: { quality: GpsQuality; phase?: "preparing" | "signalLost" | "tracking" }) {
   const { palette } = useLumo();
+
+  if (phase === "preparing") {
+    return (
+      <AppText variant="caption" color={palette.subtle} style={styles.hint}>
+        Finding your location. Lumo starts recording the moment it has a fix — you do not need to press anything.
+      </AppText>
+    );
+  }
+
+  if (phase === "signalLost") {
+    return (
+      <AppText variant="caption" color={palette.subtle} style={styles.hint}>
+        Paused — no signal to record from. Keep walking: this picks up by itself the moment your location comes back.
+      </AppText>
+    );
+  }
 
   if (quality === "excellent" || quality === "good") {
     return null;
@@ -150,6 +174,17 @@ export function TrackingDebugPanel({
     ["Points", `${accepted} of ${state.rawPoints.length}`],
     ["Movement", state.movement],
     ["Status", state.status],
+    // What the smoother is doing to the line. A few metres is it reading the
+    // receiver; tens of metres is it arguing with one.
+    [
+      "Smoothed",
+      last?.drawLatitude === undefined || last.drawLongitude === undefined
+        ? "—"
+        : `${smoothingShiftM(last, { latitude: last.drawLatitude, longitude: last.drawLongitude }).toFixed(1)} m`
+    ],
+    // How close this is to auto-pausing, which is otherwise invisible until it
+    // happens — and the whole point of walking around with this panel open.
+    ["Located", `${Math.round((state.lastTickAt - state.lastLocatedAt) / 1000)}s ago`],
     ["Segments", String(state.segments.length)],
     ["Moving", `${Math.round(state.movingDuration / 1000)}s`],
     ["Elapsed", `${Math.round(state.elapsedDuration / 1000)}s`]

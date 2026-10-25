@@ -26,10 +26,7 @@ export default function MoveChallengesScreen() {
   const move = useMove();
 
   return (
-    /* The one screen whose bar scrolls. The list IS the page — seven cards and
-       nothing else — and a pinned bar over a page with no other chrome read as
-       a strip of empty canvas above it. */
-    <Screen contentStyle={styles.content} pinHeader={false}>
+    <Screen contentStyle={styles.content}>
       <ScreenHeader title="Challenges" leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }} />
 
       <View style={styles.list}>

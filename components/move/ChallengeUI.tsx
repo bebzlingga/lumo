@@ -199,16 +199,17 @@ export function MilestoneCard({
               </View>
             ) : null}
 
-            {/* Gold, and never red: a rung that needs a subscription is an
-                offer, not a fault. Shown on every Plus rung whether or not the
-                reader has subscribed — hiding it from subscribers would leave
-                them unable to see what they are getting.
+            {/* Gold, and never red: a rung that costs something is an offer,
+                not a fault. Shown on every Pro rung whether or not the reader
+                has bought it — hiding it from buyers would leave them unable to
+                see what they are getting.
 
-                The shared badge, not a chip of its own: this is the same mark
-                Move's start screen puts on company, and two hand-built gold
-                pills would drift the first time one was tuned. (`family.pro`
-                keeps its name — see components/PlusBadge.tsx.) */}
-            {family.pro ? <PlusBadge /> : null}
+                PRO, not PLUS: 25K and above sit behind the ₱149 one-off, not
+                the monthly. Same badge component either way — two hand-built
+                gold pills would drift the first time one was tuned — with the
+                product's name passed in. (`family.pro` keeps its name; see
+                components/PlusBadge.tsx.) */}
+            {family.pro ? <PlusBadge label="PRO" /> : null}
           </View>
           <AppText
             variant="caption"
@@ -322,10 +323,15 @@ export function MoveSummaryCard({
           ]}
         >
           <Icon name={row.icon} size={18} color={palette.subtle} weight="bulk" />
-          <AppText variant="bodySmall" color={palette.body} style={styles.summaryLabel}>
+          <AppText variant="bodySmall" color={palette.body} numberOfLines={1} style={styles.summaryLabel}>
             {row.label}
           </AppText>
-          <AppText variant="bodySmall" color={palette.ink} style={styles.summaryValue}>
+          {/* Wraps to a second line before it truncates, which is the order that
+              suits what goes in here: a list of names reads fine over two lines
+              and badly cut in half. Two is the ceiling — past that the row is
+              taller than the card's other rows put together, and a value nobody
+              can read in a glance is not doing the job of a summary. */}
+          <AppText variant="bodySmall" color={palette.ink} numberOfLines={2} style={styles.summaryValue}>
             {row.value}
           </AppText>
         </View>
@@ -611,11 +617,32 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     minHeight: 46
   },
+  /**
+   * The label holds its own width; the VALUE gives way.
+   *
+   * These were the other way round — `flex: 1` on the label and nothing on the
+   * value — which made the left column a function of the right one: a long value
+   * ("Abdul, Sarah and 2 others") took the width it wanted and squeezed the
+   * label beside it, so "Company" wrapped or clipped while the fact it was
+   * naming ran on. Reading down a card whose labels each start in a different
+   * place, and shift as the values change, is the thing this card exists not to
+   * be.
+   *
+   * So the label is unshrinkable and the value takes what is left.
+   */
   summaryLabel: {
-    flex: 1,
+    flexShrink: 0,
     fontFamily: fontFamilies.lexend
   },
+  /**
+   * `flex: 1` for a basis of zero: the value's width is exactly the space the
+   * label and the icon leave, so it wraps at that edge rather than pushing
+   * through it. Right-aligned, so a value that fits still sits against the card
+   * — and a wrapped one stays a block against the same edge instead of drifting.
+   */
   summaryValue: {
+    flex: 1,
+    textAlign: "right",
     fontFamily: fontFamilies.lexendSemiBold
   },
   summaryWith: {

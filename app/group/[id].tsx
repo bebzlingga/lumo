@@ -59,6 +59,8 @@ import {
   type GroupReaction,
   type MemberDayStatus
 } from "@/lib/friends";
+import { GROUP_CHAT_ENABLED } from "@/lib/friends";
+import { groupChatLastRead } from "@/lib/groupChatReads";
 import { formatLumoId } from "@/lib/lumoId";
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -283,6 +285,14 @@ export default function GroupDetailScreen() {
   // warm sand, which reads as its own filled bar beside a short one.
   const trackColor = chartTrackColor(palette, isDark);
   const subjectBottom = useGroupBackdropSubjectBottom(BACKDROP_LIFT);
+  /**
+   * Messages in this group's chat since this device last opened it.
+   *
+   * Counted rather than listed — the badge needs a number, not the text — and read
+   * on focus, which is also when coming back from the chat clears it. Unread is a
+   * per-device fact by design; see `lib/groupChatReads.ts`.
+   */
+  const [unreadMessages, setUnreadMessages] = React.useState(0);
   const [headerBottom, setHeaderBottom] = React.useState(0);
   const handleHeaderLayout = React.useCallback(
     (event: LayoutChangeEvent) => {
@@ -381,7 +391,22 @@ export default function GroupDetailScreen() {
   useFocusEffect(
     React.useCallback(() => {
       loadAll();
-    }, [loadAll])
+
+      /**
+       * And the chat's unread count, on the same visit.
+       *
+       * Here rather than inside `loadAll` because it is not part of the group: it is
+       * a fact about this DEVICE (when it last looked) measured against the server,
+       * and it has to be re-read on every arrival — including the arrival that comes
+       * from closing the chat, which is what clears the badge.
+       */
+      if (GROUP_CHAT_ENABLED && typeof id === "string") {
+        void groupChatLastRead(id)
+          .then((since) => friendsService.countUnreadMessages(id, since))
+          .then(setUnreadMessages)
+          .catch(() => undefined);
+      }
+    }, [loadAll, id])
   );
 
   if (!loaded) {
@@ -795,7 +820,11 @@ export default function GroupDetailScreen() {
     // GroupBackdrop for why it isn't a `backgroundVariant`.
     <Screen
       backgroundVariant={null}
-      backgroundNode={<GroupBackdrop scrollY={scrollY} lift={BACKDROP_LIFT} />}
+      // `soft` and not the Friends tab's full weight: this page's content starts
+      // ON the scene rather than below it — the identity block only clears part
+      // of the picnic, and the tabs and cards stack straight over the rest — so
+      // the plate is held back far enough for the cards and their text to read.
+      backgroundNode={<GroupBackdrop scrollY={scrollY} lift={BACKDROP_LIFT} weight="soft" />}
       contentStyle={styles.content}
       refreshControl={
         <RefreshControl
@@ -820,6 +849,29 @@ export default function GroupDetailScreen() {
           <ScreenHeader
             leftAction={{ icon: "back", label: "Back", onPress: () => router.back() }}
             rightActions={[
+              /**
+               * Chat first, because it is the one people come back for.
+               *
+               * On the bar rather than as a tab or a card down the page: a
+               * conversation is somewhere you GO, and it needs the whole screen for
+               * the keyboard (see `app/group/chat.tsx`). Left of the other two so
+               * the overflow stays where it is on every screen in the app.
+               */
+              ...(GROUP_CHAT_ENABLED
+                ? [
+                    {
+                      icon: "messages" as IconName,
+                      // The count belongs in the NAME as well as the pip: a screen
+                      // reader otherwise announces "Group chat" whether three are
+                      // waiting or none.
+                      label: unreadMessages > 0 ? `Group chat, ${unreadMessages} unread` : "Group chat",
+                      iconWeight: "bulk" as const,
+                      iconSize: 22,
+                      badge: unreadMessages,
+                      onPress: () => router.push(`/group/chat?id=${group.id}` as Href)
+                    }
+                  ]
+                : []),
               ...(canInvite && hasInvitableFriends
                 ? [
                     {

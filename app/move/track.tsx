@@ -305,9 +305,35 @@ export default function MoveTrackScreen() {
    * action rather than gating it.
    */
   const startedRef = React.useRef(false);
+  /**
+   * Set the moment this screen commits to leaving — saving, or discarding.
+   *
+   * WHY IT IS NEEDED, because the effect below looks like it is already guarded.
+   *
+   * `startedRef` is only armed when THIS screen instance started the walk. Come
+   * back to a walk already running — the Moving now card on the Move tab, or
+   * simply returning to the map after leaving it — and the effect sees a truthy
+   * `state`, returns, and leaves the ref false.
+   *
+   * Saving then clears the tracker, which sets `state` back to null while this
+   * screen is STILL MOUNTED: the pop is animated, so at least one more render
+   * happens before the unmount. The effect read that null as "no walk yet" and
+   * started a fresh one on the way out — you saved a walk, landed back on Move,
+   * and it said Moving now over a recording that had begun by itself.
+   *
+   * A separate flag rather than arming `startedRef` when a walk is adopted,
+   * because those are two different facts and only one of them is about leaving.
+   * Discarding a RECOVERED walk also empties the tracker while this screen is
+   * mounted, and there the auto-start is correct: you opened the map to walk,
+   * and the thing you threw away was last week's crash.
+   *
+   * A ref rather than state: it has to hold for the very next render, and
+   * nothing on screen depends on it.
+   */
+  const leavingRef = React.useRef(false);
 
   React.useEffect(() => {
-    if (startedRef.current || state || !recoveryChecked) {
+    if (startedRef.current || leavingRef.current || state || !recoveryChecked) {
       return;
     }
 
@@ -351,11 +377,41 @@ export default function MoveTrackScreen() {
   React.useEffect(() => {
     let active = true;
 
-    loadWalkSession().then((stored) => {
-      if (active) {
-        setSessionId(stored?.sessionId ?? null);
+    /**
+     * Read on mount AND on a short retry, because the writer is a race.
+     *
+     * The start page saves the session after `startWalkTogether` answers and this
+     * screen is opened in the same tick, so a single read on mount usually misses
+     * it — which meant the owner's device published nothing for the whole walk and
+     * their friend watched a number that never moved.
+     *
+     * Two seconds is longer than the round trip and short enough to be inside the
+     * first GPS fix. It stops as soon as it finds one, and gives up rather than
+     * polling for the life of the walk: no session by then means a solo walk.
+     */
+    let attempts = 0;
+
+    const read = async () => {
+      const stored = await loadWalkSession();
+
+      if (!active) {
+        return;
       }
-    });
+
+      if (stored?.sessionId) {
+        setSessionId(stored.sessionId);
+
+        return;
+      }
+
+      attempts += 1;
+
+      if (attempts < 4) {
+        setTimeout(() => void read(), 500);
+      }
+    };
+
+    void read();
 
     return () => {
       active = false;
@@ -415,15 +471,37 @@ export default function MoveTrackScreen() {
       return;
     }
 
-    // Free this account up in friends' invite lists, and step off the shared
-    // session if there was one. Fire-and-forget: the walk is over either way, and
-    // both rows are ignored once stale (see PRESENCE_STALE_MS).
+    // Free this account up in friends' invite lists.
     void challengeClient.endPresence().catch(() => undefined);
 
-    if (sessionId) {
-      void challengeClient.leaveWalkTogether(sessionId).catch(() => undefined);
-      void clearWalkSession().catch(() => undefined);
+    /**
+     * THE SHARED SESSION IS CLEARED FROM STORAGE, NOT FROM STATE — and always.
+     *
+     * This was `if (sessionId)`, reading the copy this screen loaded when it
+     * mounted, and it caused a loop that could not be got out of:
+     *
+     *  1. Starting a walk with friends saves the session id from the START page,
+     *     fire-and-forget, after `startWalkTogether` answers.
+     *  2. This screen is opened by `replace` in the same tick and reads storage
+     *     once — usually BEFORE that write lands, so `sessionId` stays null.
+     *  3. Finishing therefore cleared nothing, and the session outlived the walk.
+     *  4. Back on the Move tab, a stored session arms "Move Now" to skip the start
+     *     page and begin recording immediately — so the next tap started another
+     *     walk, which finished, which left the session again. Round and round.
+     *
+     * Re-reading storage here closes the race: whatever was written, however late,
+     * is what gets cleared. The `clear` is unconditional because the loop came from
+     * a conditional that could be wrong — there is nothing to lose by clearing a
+     * key that was already empty.
+     */
+    const stored = await loadWalkSession();
+
+    if (stored?.sessionId) {
+      void challengeClient.leaveWalkTogether(stored.sessionId).catch(() => undefined);
     }
+
+    await clearWalkSession();
+    setSessionId(null);
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
   }
@@ -440,12 +518,17 @@ export default function MoveTrackScreen() {
       return;
     }
 
+    // Before the first await, and before anything empties the tracker: from here
+    // on this screen is on its way out and must not start a walk. See `leavingRef`.
+    leavingRef.current = true;
     setSaving(true);
 
     const record = toWalkRecordFromActivity(state);
 
     if (!record) {
       await controller.discard();
+      // Nothing recorded, but the pairing still has to go — see `handleFinish`.
+      await clearWalkSession();
       router.back();
 
       return;
@@ -594,7 +677,15 @@ export default function MoveTrackScreen() {
         text: "Discard",
         style: "destructive",
         onPress: () => {
+          // Same reason as in `handleSave`, and it has to be set BEFORE the
+          // discard: emptying the tracker is exactly what would otherwise trip
+          // the auto-start on the way out. See `leavingRef`.
+          leavingRef.current = true;
           void controller.discard();
+          // Belt as well as braces: `handleFinish` clears the pairing already, but a
+          // discard is the other way out of this screen and it must not be the one
+          // path that leaves a session behind to arm "Move Now" again.
+          void clearWalkSession().catch(() => undefined);
           router.back();
         }
       }
@@ -873,6 +964,26 @@ export default function MoveTrackScreen() {
 
   if (state) {
     const paused = state.status === "paused" || state.status === "autoPaused";
+    /**
+     * Whether the walk is stopped by the WALKER, which is the only kind of pause
+     * they get to lift.
+     *
+     * `paused` above is what the card and the chip read from — to the person
+     * holding the phone both states are "paused", and saying otherwise would be
+     * pedantry. This one drives the button, and the two must not be confused:
+     * the tracker's own pause means it cannot place you, so there is nothing to
+     * resume into and no button to offer. It lifts itself on the first fix.
+     */
+    const pausedByUser = state.status === "paused";
+    /**
+     * The acquisition phase, on screen.
+     *
+     * The map and the card are already here and already reading zero, which is
+     * the truth — nothing is being recorded yet. What the screen owes is the
+     * reason, and the promise that no second tap is coming: the walk begins on
+     * the first decent fix, or after fifteen seconds, whichever lands first.
+     */
+    const preparing = state.status === "preparing";
     /** Fades the map up and lifts the card into place. */
     const entering = {
       opacity: enter,
@@ -920,15 +1031,30 @@ export default function MoveTrackScreen() {
            * screen to the one irreversible control, so the tap that ENDS a walk
            * is never next to the tap that pauses it.
            */
-          rightAction={{
-            icon: paused ? "play" : "pause",
-            label: paused ? "Resume" : "Pause",
-            // Filled, not outlined: a transport control is a solid shape
-            // everywhere else it appears, and at 20pt over a map an outline
-            // reads as a smudge.
-            iconWeight: "fill",
-            onPress: () => (paused ? controller.resume() : controller.pause())
-          }}
+          rightAction={
+            /**
+             * Nothing to pause until the clock is running — and nothing to
+             * RESUME while the tracker is the one holding it.
+             *
+             * An auto-pause still gets the Pause button, not a disabled Resume
+             * and not an empty slot. The walk is waiting for a fix, which is a
+             * running state as far as the walker's options go: they may still
+             * take it over by hand, and having done so they may lift it again.
+             * Offering Resume instead would be a button whose only honest
+             * behaviour is to do nothing, which is what it used to be.
+             */
+            preparing
+              ? undefined
+              : {
+                  icon: pausedByUser ? "play" : "pause",
+                  label: pausedByUser ? "Resume" : "Pause",
+                  // Filled, not outlined: a transport control is a solid shape
+                  // everywhere else it appears, and at 20pt over a map an outline
+                  // reads as a smudge.
+                  iconWeight: "fill",
+                  onPress: () => (pausedByUser ? controller.resume() : controller.pause())
+                }
+          }
           centerContent={
             /* No title over the map.
                "Moving" said what the whole screen was already saying, and the
@@ -953,17 +1079,23 @@ export default function MoveTrackScreen() {
         {/* Dev only, and off by default even there. */}
         {__DEV__ && showDebug ? <TrackingDebugPanel state={state} lastDeltaM={0} /> : null}
 
-        <GpsHint quality={state.gpsQuality} />
+        <GpsHint
+          quality={state.gpsQuality}
+          phase={preparing ? "preparing" : state.status === "autoPaused" ? "signalLost" : "tracking"}
+        />
 
         {/* Said on the screen doing the recording, because it changes what that
             recording will be.
-            This warning used to live on the ready screen; when that screen went
-            it went with it, and a foreground-only grant became silent — the
-            route simply stopped at the lock screen with nothing having said it
-            would. */}
-        {prepare.permission === "foreground-only" ? (
+
+            The caveat is much smaller than it used to be, and the wording moved
+            with it. Without "Allow all the time" Lumo used to stop recording at
+            the lock screen; it no longer does — the walk keeps tracing with the
+            screen off either way. What that permission still buys is the OS
+            being allowed to wake Lumo again if it gets closed mid-walk, which is
+            worth one line and not worth a warning. */}
+        {prepare.permission === "while-running" ? (
           <AppText variant="caption" color={palette.subtle} style={styles.permissionNote}>
-            Lumo only has location while the app is open, so this stops when the screen locks.
+            Recording continues with the screen off. Just leave Lumo running — closing it ends the walk.
           </AppText>
         ) : null}
 

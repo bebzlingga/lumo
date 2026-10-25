@@ -3,7 +3,7 @@
     "name": "Lumo",
     "slug": "lumo",
     "scheme": "lumo",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/production/expo-ready/icon.png",
@@ -35,8 +35,19 @@
         "foregroundImage": "./assets/production/expo-ready/adaptive-icon.png",
         "backgroundColor": "#FDBD1C"
       },
+      "edgeToEdgeEnabled": true,
       "permissions": [
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACTIVITY_RECOGNITION",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_DISTANCE",
+        "android.permission.health.READ_EXERCISE"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ]
     },
     "plugins": [
@@ -51,6 +62,18 @@
       "expo-asset",
       "@bacons/apple-targets",
       "@react-native-community/datetimepicker",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Lumo uses your location to trace the route of a walk and measure how far you went.",
+          "locationAlwaysAndWhenInUsePermission": "Lumo keeps recording your walk while the screen is off, so your route and distance stay accurate when the phone is in your pocket.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      "react-native-health-connect",
+      "react-native-iap",
       [
         "expo-image-picker",
         {

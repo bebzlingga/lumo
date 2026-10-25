@@ -75,8 +75,21 @@ export function familyProgress(achievements: MoveAchievement[], family: MoveMile
 export function isFamilyUnlocked(achievements: MoveAchievement[], family: MoveMilestoneFamily): boolean {
   const done = (variant: { id: string }) => hasVariant(achievements, variant.id);
 
+  /**
+   * Asked of the ACHIEVEMENTS rather than of the family's current routes.
+   *
+   * Identical for every route on offer — each files against its own family — and
+   * different in exactly one case: a route that has since been REMOVED from the
+   * ladder. The short rungs used to carry a team route and no longer do (see
+   * `MOVE_FAMILIES`), so anyone who earned 10K by walking it with a friend holds
+   * an achievement for a variant that is not in `family.variants` any more.
+   *
+   * Read against the variant list, that badge silently went out. A badge is a
+   * record of something somebody DID, and rearranging the routes afterwards
+   * cannot make it un-happen.
+   */
   if (family.unlock === "any") {
-    return family.variants.some(done);
+    return achievements.some((entry) => entry.milestoneId === family.id);
   }
 
   // `teamPlusSolo`: every team route AND at least one solo route. Written

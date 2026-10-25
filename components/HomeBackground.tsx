@@ -4,6 +4,7 @@ import {
 	HOME_BACKGROUND_ASPECT,
 	HOME_PLATE_FIT,
 	homeBackgroundAsset,
+	homeDarkBackgroundAsset,
 	homePeriodForHour,
 	type HomePeriod,
 } from '@/constants/backgroundAssets'
@@ -62,7 +63,10 @@ export function HomeBackground({ period, scrollY }: { period: HomePeriod; scroll
 	// than a wash behind it — so a theme with a different canvas needs them held
 	// back further than any other screen does. Same source of truth as
 	// LumoBackground, so the two never drift.
-	const restOpacity = (isDark ? PLATE_OPACITY.dark : PLATE_OPACITY.light) * themePlateOpacity(themeId, isDark)
+	// The dark cut keeps Lumo as painted and darkens only the scene, so it is
+	// drawn at full strength — dimming the light plate dimmed him with it.
+	const darkPlate = isDark ? homeDarkBackgroundAsset(period, themeId) : undefined
+	const restOpacity = darkPlate ? 1 : (isDark ? PLATE_OPACITY.dark : PLATE_OPACITY.light) * themePlateOpacity(themeId, isDark)
 	// Fades as the page scrolls DOWN over it, and comes back on the way up —
 	// interpolating the offset gives both directions from one expression, since
 	// the offset falls again as the user returns to the top.
@@ -81,7 +85,7 @@ export function HomeBackground({ period, scrollY }: { period: HomePeriod; scroll
 	return (
 		<View style={StyleSheet.absoluteFill} pointerEvents='none'>
 			<Animated.Image
-				source={homeBackgroundAsset(period, themeId)}
+				source={darkPlate ?? homeBackgroundAsset(period, themeId)}
 				style={{
 					position: 'absolute',
 					top: -plateHeight * fit.shiftY,

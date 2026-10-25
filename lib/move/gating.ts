@@ -16,8 +16,10 @@
  *    challenge. That is the shared half of Move and it is what this file
  *    answers.
  *  - **The upper rungs** — 25K and above (`family.pro`). A different gate about
- *    distance, checked against `isPlus` at its own call site, and deliberately
- *    NOT bypassed here: it is the one someone reads about on the paywall.
+ *    DISTANCE, and a different product: those rungs come with Pro, the ₱149
+ *    one-off (`isUnlimited`), not with Plus. Checked at its own call site in
+ *    `app/move/[milestone].tsx` and deliberately NOT bypassed here — nothing in
+ *    this file should be able to give away the other product.
  */
 
 /**
@@ -36,14 +38,40 @@
  * every screen and the writes are still refused. It is a way past the UI, not a
  * way past the rule.
  */
-export const BYPASS_MOVE_PLUS_GATE = true;
+export const BYPASS_MOVE_PLUS_GATE = false;
+
+/**
+ * Whether Move's company exists AT ALL in this build.
+ *
+ * Off for now: Move ships as a solo feature — record a walk, take on a rung,
+ * watch the line climb — and everything about doing it WITH somebody is hidden
+ * behind this. That means the "bring friends" route, the team route on a
+ * challenge, and the invitations that arrive from either.
+ *
+ * A DIFFERENT KIND OF SWITCH FROM THE PLUS GATE BELOW, and the difference is
+ * what each one says to the reader. A locked Plus feature stays on screen
+ * wearing a badge, because a feature you cannot see is one you cannot decide to
+ * pay for. A feature that is switched off is not on offer at any price, so it
+ * shows nothing at all — a "comes with Plus" row for something nobody can have
+ * yet would be selling a thing that is not there.
+ *
+ * Nothing server-side is touched. The tables, the policies and the realtime
+ * channels stay exactly as they are, so an invite sent from an older build still
+ * lands in the database — this build simply neither sends nor shows one. Turning
+ * it back on is this flag and nothing else.
+ */
+export const MOVE_WITH_FRIENDS_ENABLED = false;
 
 /**
  * Whether this account may take people along on a move or a challenge.
  *
  * Takes the entitlement rather than reading the context, so it stays a plain
  * function the screens can call inside render and a test can call directly.
+ *
+ * The feature switch comes FIRST and beats both the entitlement and the testing
+ * bypass: with company switched off there is nothing to unlock, and a bypass
+ * that reopened it would defeat the switch on exactly the builds it matters on.
  */
 export function moveSocialUnlocked(isPlus: boolean): boolean {
-  return isPlus || BYPASS_MOVE_PLUS_GATE;
+  return MOVE_WITH_FRIENDS_ENABLED && (isPlus || BYPASS_MOVE_PLUS_GATE);
 }

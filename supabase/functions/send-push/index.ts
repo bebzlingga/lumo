@@ -8,7 +8,7 @@
 // Then create four Database Webhooks (Database → Webhooks), each on INSERT,
 // pointing at this function's URL, for the tables:
 //   friendships, group_members, group_reactions, move_challenge_invites,
-//   move_walk_invites
+//   move_walk_invites, group_messages
 //
 // The fourth is what makes a Move invitation arrive while the app is closed.
 // Without it the invite still lands — the row is the invitation, and the Move tab
@@ -89,6 +89,35 @@ Deno.serve(async (req) => {
     recipientId = record.member;
     title = "Group invitation";
     body = `You've been invited to ${await groupName(record.group_id)}.`;
+  } else if (table === "group_messages") {
+    /**
+     * A group message goes to every member EXCEPT its author.
+     *
+     * The only branch here that notifies more than one person, which is why it
+     * returns early rather than falling through to the single-recipient send at the
+     * foot of the function. The body is the group's name and who spoke; the message
+     * itself is deliberately not in the push — a lock screen is not the place to
+     * quote a private conversation, and tapping it opens the thread.
+     */
+    const members = await rest(
+      `group_members?group_id=eq.${record.group_id}&status=eq.accepted&select=member`
+    );
+    const recipients = (members ?? [])
+      .map((row: { member: string }) => row.member)
+      .filter((member: string) => member !== record.author);
+
+    if (!recipients.length) {
+      return ok();
+    }
+
+    const [who, groupLabel] = await Promise.all([nickname(record.author), groupName(record.group_id)]);
+    const tokens = (await Promise.all(recipients.map((member: string) => tokensFor(member)))).flat();
+
+    if (tokens.length) {
+      await sendExpoPush(tokens, groupLabel, `${who} sent a message.`, { route: `/group/chat?id=${record.group_id}` });
+    }
+
+    return ok();
   } else if (table === "move_walk_invites") {
     // An ordinary move happening right now. With a session id there is a Join
     // waiting in the app; without one this is a row from before sessions existed,

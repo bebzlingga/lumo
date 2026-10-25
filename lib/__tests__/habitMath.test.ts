@@ -9,6 +9,7 @@ import {
 	isPerfectWeek,
 	isScheduledOnDate,
 	perfectWeeksForHabits,
+	periodAnalytics,
 	scheduledWeekdays,
 	totalCompletions,
 	weeklyCompletionCount,
@@ -274,5 +275,34 @@ describe('perfectWeeksForHabits', () => {
 	it('ignores archived habits when deciding a perfect week', () => {
 		const archived = makeHabit({ id: 'x', status: 'archived', createdAt: '2026-01-04' })
 		expect(perfectWeeksForHabits([archived], 1, '2026-01-10')).toBe(0)
+	})
+})
+
+describe('periodAnalytics', () => {
+	// Wed 2026-01-07: the week runs Mon 5th → Wed 7th so far.
+	const WED = '2026-01-07'
+	const habit = makeHabit({ createdAt: '2025-12-01', completions: completions(['2026-01-05', '2026-01-06', '2025-12-31']) })
+
+	it('covers the week from Monday to today', () => {
+		const week = periodAnalytics([habit], 'week', WED)
+		expect(week.startKey).toBe('2026-01-05')
+		expect(week.elapsedDays).toBe(3)
+		expect(week.done).toBe(2)
+		expect(week.rate).toBe(67)
+		expect(week.bestRun).toBe(2)
+		expect(week.buckets.map((bucket) => bucket.rate)).toEqual([100, 100, 0, null, null, null, null])
+	})
+
+	it('compares against the whole previous period', () => {
+		// Dec 29 – Jan 4: only the 31st done, 1 of 7.
+		expect(periodAnalytics([habit], 'week', WED).previousRate).toBe(14)
+	})
+
+	it('rolls the year up by month, with future months empty', () => {
+		const year = periodAnalytics([habit], 'year', WED)
+		expect(year.buckets).toHaveLength(12)
+		expect(year.buckets[0].rate).toBe(29)
+		expect(year.buckets[1].rate).toBeNull()
+		expect(year.activeDays).toBe(2)
 	})
 })

@@ -1,5 +1,5 @@
 import { Habit, Weekday } from "@/types/habit";
-import { addDays, dateRange, daysBetween, monthRange, toDateKey, weekRange } from "./date";
+import { addDays, dateRange, daysBetween, monthRange, parseDateKey, startOfMonth, startOfWeekMonday, toDateKey, weekRange, weekRangeMonday } from "./date";
 
 /**
  * Upper bound on how far back streak and completion-rate calculations look.
@@ -373,5 +373,89 @@ export function habitSummary(habit: Habit) {
     totalCompletions: totalCompletions(habit),
     weeklyCount: weeklyCompletionCount(habit),
     monthlyCount: monthlyCompletionCount(habit)
+  };
+}
+
+export type AnalyticsPeriod = "week" | "month" | "year";
+
+export type PeriodAnalytics = DaySpanSummary & {
+  /** First and last day covered — the period's start through today. */
+  startKey: string;
+  endKey: string;
+  /** Days with at least one check-in, out of the days elapsed so far. */
+  activeDays: number;
+  elapsedDays: number;
+  /** Longest run of consecutive check-in days inside the period. */
+  bestRun: number;
+  /** One bar per day (week, month) or per month (year). `rate` is null for days not yet reached. */
+  buckets: { key: string; label: string; rate: number | null }[];
+  /** Per-habit rate across the period, best first. Habits with nothing due are left out. */
+  habits: { habit: Habit; done: number; scheduled: number; rate: number }[];
+  /** The whole previous period's rate, or null when nothing was due in it. */
+  previousRate: number | null;
+};
+
+/**
+ * The analytics page's figures for this week, month or year to date.
+ *
+ * Built on `summarizeDays`, so a rest day is never a miss here either. Rates
+ * read active habits only (that is what `isScheduledOnDate` counts); check-in
+ * days read every habit passed, matching `currentActivityStreak`.
+ */
+export function periodAnalytics(habits: Habit[], period: AnalyticsPeriod, todayKey = toDateKey()): PeriodAnalytics {
+  const today = parseDateKey(todayKey);
+  const startKey =
+    period === "week" ? startOfWeekMonday(todayKey) : period === "month" ? startOfMonth(todayKey) : `${today.getFullYear()}-01-01`;
+  const days = dateRange(daysBetween(startKey, todayKey) + 1, todayKey);
+  const summary = summarizeDays(habits, days);
+
+  const activity = new Set(activityDays(habits));
+  let bestRun = 0;
+  let run = 0;
+
+  for (const day of days) {
+    run = activity.has(day) ? run + 1 : 0;
+    bestRun = Math.max(bestRun, run);
+  }
+
+  const rateOf = (span: string[]) => {
+    const result = summarizeDays(habits, span);
+    return result.scheduled ? result.rate : null;
+  };
+
+  const buckets =
+    period === "year"
+      ? Array.from({ length: 12 }, (_, month) => {
+          const key = toDateKey(new Date(today.getFullYear(), month, 1, 12));
+          return {
+            key,
+            label: parseDateKey(key).toLocaleDateString(undefined, { month: "narrow" }),
+            rate: key > todayKey ? null : rateOf(monthRange(key).filter((day) => day <= todayKey))
+          };
+        })
+      : (period === "week" ? weekRangeMonday(todayKey) : monthRange(todayKey)).map((key, index) => ({
+          key,
+          label: period === "week" ? ["M", "T", "W", "T", "F", "S", "S"][index] : String(index + 1),
+          rate: key > todayKey ? null : rateOf([key])
+        }));
+
+  const previousEnd = addDays(startKey, -1);
+  const previousStart =
+    period === "week" ? startOfWeekMonday(previousEnd) : period === "month" ? startOfMonth(previousEnd) : `${today.getFullYear() - 1}-01-01`;
+
+  return {
+    ...summary,
+    startKey,
+    endKey: todayKey,
+    activeDays: days.filter((day) => activity.has(day)).length,
+    elapsedDays: days.length,
+    bestRun,
+    buckets,
+    habits: habits
+      .map((habit) => ({ habit, ...summarizeDays([habit], days) }))
+      .filter((item) => item.scheduled > 0)
+      .sort((a, b) => b.rate - a.rate || b.done - a.done)
+      .map(({ habit, done, scheduled, rate }) => ({ habit, done, scheduled, rate })),
+    previousRate: rateOf(dateRange(daysBetween(previousStart, previousEnd) + 1, previousEnd))
   };
 }

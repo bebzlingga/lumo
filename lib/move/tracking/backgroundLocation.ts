@@ -1,4 +1,6 @@
+import { AppState } from "react-native";
 import { TRACKING_CONFIG } from "@/lib/move/tracking/config";
+import { requestBackgroundLocationConsent } from "@/lib/move/tracking/disclosure";
 import { enqueueFixes, type PendingFix } from "@/lib/move/tracking/storage";
 
 /**
@@ -103,7 +105,39 @@ export function defineMoveLocationTask(): void {
     }
 
     await enqueueFixes(locations.map(toPendingFix));
+
+    /**
+     * And tell the controller, IF there is one in this JS context.
+     *
+     * The queue is still written first and unconditionally — that is what makes
+     * a fix survive the app being killed between deliveries. But when the app is
+     * merely backgrounded, the tracker is very much alive in this same context
+     * and simply was not being told: the drain ran off a `setInterval`, and iOS
+     * does not run timers in a suspended app. So a walk in a pocket accumulated
+     * nothing until the screen came back on, which meant the clock, the
+     * auto-pause and anything watching them were all working from a state
+     * minutes out of date.
+     *
+     * Nothing is DECIDED here. It is a nudge to drain, and the drain is the same
+     * pipeline a foreground fix goes through.
+     */
+    liveSink?.();
   });
+}
+
+/**
+ * Somewhere for the task to hand fixes on to, when the tracker is in this
+ * process.
+ *
+ * A registered callback rather than an import, because the controller imports
+ * this module and the cycle would be real. Null whenever there is no tracker —
+ * a cold relaunch for a single background delivery — and the queue covers that
+ * case on its own.
+ */
+let liveSink: (() => void) | null = null;
+
+export function setLiveFixSink(sink: (() => void) | null): void {
+  liveSink = sink;
 }
 
 type LocationSample = {
@@ -133,16 +167,23 @@ export function toPendingFix(sample: LocationSample): PendingFix {
   };
 }
 
-export type BackgroundStartResult = "started" | "foreground-only" | "unavailable";
-
 /**
- * Starts OS location updates for an activity.
+ * What the OS agreed to.
  *
- * Returns what it managed to get rather than throwing, because every outcome is
- * usable: with background permission the walk survives a locked screen; with
- * only foreground permission it records while the app is open and the UI says
- * so. Refusing to start at all would be the worst of the three.
+ * THE DISTINCTION IS NOT "does it record with the screen off" — the first two
+ * both do. It is what happens to a recording when Lumo itself is gone:
+ *
+ *  - `always`: the OS may relaunch Lumo to hand over a fix, so a walk survives
+ *    the app being force-quit or evicted under memory pressure.
+ *  - `while-running`: updates were started from the foreground and keep coming
+ *    with the screen locked and the app in the background — Apple's
+ *    user-initiated foreground service, and Android's location foreground
+ *    service with its notification. This is the ordinary case and it is enough
+ *    for a walk; what it cannot survive is Lumo being killed outright.
+ *  - `unavailable`: no location at all.
  */
+export type BackgroundStartResult = "always" | "while-running" | "unavailable";
+
 /** Which sampling profile the OS is currently on. */
 export type SamplingProfile = "moving" | "stopped";
 
@@ -162,13 +203,28 @@ export async function setSamplingProfile(profile: SamplingProfile): Promise<void
     return;
   }
 
-  currentProfile = profile;
-
   const location = loadLocation();
 
   if (!location) {
     return;
   }
+
+  /**
+   * Never while the app is away, and Android is the reason.
+   *
+   * Changing the profile means re-registering the task, and re-registering it
+   * means starting the foreground service again — which Android forbids from
+   * the background and `LocationModule.kt` throws for. On iOS the restart is
+   * legal but not free either: a new `CLLocationManager` is built and the
+   * receiver re-acquires, so the first fixes back are the coarse ones. Neither
+   * is worth doing to a phone in a pocket, and the profile it is already on is
+   * always a working one.
+   */
+  if (AppState.currentState !== "active") {
+    return;
+  }
+
+  currentProfile = profile;
 
   try {
     const running = await location.hasStartedLocationUpdatesAsync(MOVE_LOCATION_TASK);
@@ -193,25 +249,59 @@ function locationOptions(location: LocationModule, profile: SamplingProfile) {
     // and this is what keeps a stationary phone from waking us every second.
     distanceInterval: stopped ? battery.stoppedDistanceM : battery.movingDistanceM,
     timeInterval: stopped ? battery.stoppedIntervalMs : battery.movingIntervalMs,
-    // iOS batches deliveries when the app is suspended; deferring lets it hold
-    // a handful of fixes and hand them over together, which is far cheaper on
-    // battery than waking for each one.
-    deferredUpdatesDistance: 25,
-    deferredUpdatesInterval: 15_000,
+    /**
+     * NO DISTANCE TERM IN THE DEFERRAL, and that zero is what decides whether a
+     * walk records with the screen off.
+     *
+     * `expo-location` holds background deliveries back until BOTH the deferred
+     * interval has elapsed AND the deferred distance has been covered — an AND,
+     * identically in `EXLocationTaskConsumer.shouldReportDeferredLocations` and
+     * `LocationTaskConsumer.shouldReportDeferredLocations` — and it applies that
+     * ONLY while the app is not active. Set to 25 m, a walk in a pocket was
+     * handed over in 25 m lumps at best, and a slow or stationary stretch was
+     * held indefinitely with no lower bound. The route came back as a few
+     * corners joined by straight lines, standing at a crossing was
+     * indistinguishable from the app having died, and none of it happened with
+     * the app open — which is exactly why walking with the screen on looked fine
+     * and everything else did not.
+     *
+     * With the distance at zero the condition collapses to the time one, which
+     * is the good half of the feature: fixes are BATCHED for five seconds and
+     * then handed over in full, so nothing is dropped and the JS context is
+     * woken a fifth as often. Five seconds of lag on a background delivery is
+     * invisible against a forty-second signal-lost window.
+     */
+    deferredUpdatesDistance: 0,
+    deferredUpdatesInterval: 5_000,
     pausesUpdatesAutomatically: false,
     activityType: location.ActivityType.Fitness,
     showsBackgroundLocationIndicator: true,
     foregroundService: {
-      // Android only, and required there: a foreground service with a visible
-      // notification is the only way to keep location alive, and being told
-      // your walk is recording is the honest version of that anyway.
+      /**
+       * Android only, and required there twice over.
+       *
+       * A foreground service with a visible notification is the only way to keep
+       * location alive with the screen off — and, per `LocationModule.kt`, it is
+       * also what makes `startLocationUpdatesAsync` legal WITHOUT the
+       * "Allow all the time" permission. Being told your walk is recording, on
+       * the lock screen, is the honest version of that anyway.
+       */
       notificationTitle: "Lumo is recording your walk",
       notificationBody: "Tap to return to Lumo",
-      notificationColor: "#648A4C"
+      notificationColor: "#648A4C",
+      // The recording outlives the Activity: swiping Lumo out of the recents
+      // list must not silently end a walk that is still being tracked.
+      killServiceOnDestroy: false
     }
   };
 }
 
+/**
+ * Starts OS location updates for an activity.
+ *
+ * Returns what it managed to get rather than throwing, because every outcome is
+ * usable and the difference is worth saying out loud on screen.
+ */
 export async function startTracking(): Promise<BackgroundStartResult> {
   const location = loadLocation();
   const tasks = loadTaskManager();
@@ -229,26 +319,92 @@ export async function startTracking(): Promise<BackgroundStartResult> {
       return "unavailable";
     }
 
-    const background = await location.requestBackgroundPermissionsAsync();
-
-    if (!background.granted) {
-      return "foreground-only";
-    }
-
+    /**
+     * UPDATES ARE STARTED ON THE FOREGROUND PERMISSION ALONE, AND THIS IS THE
+     * FIX FOR "IT ONLY RECORDS WHILE THE APP IS OPEN".
+     *
+     * What used to happen: "Allow all the time" was demanded first, and without
+     * it this returned early and never called `startLocationUpdatesAsync` at
+     * all. The only source left was `watchPositionAsync` — which
+     * `BaseLocationProvider` explicitly configures with
+     * `allowsBackgroundLocationUpdates = false` — so the route stopped dead the
+     * instant the screen locked. And "Allow all the time" is a permission both
+     * platforms make very hard to get: iOS defers its Always prompt and answers
+     * "denied" in the meantime, and Android 11+ shows no dialog at all, it sends
+     * you to the Settings app. Most people therefore never had it, and every one
+     * of them had a walk that could not survive a locked screen.
+     *
+     * Both platforms say plainly, in the source of the very function being
+     * called, that this is not required: a task started from the foreground WITH
+     * a foreground-service notification is a "user-initiated foreground service"
+     * and needs only the when-in-use permission. That is the same thing every
+     * fitness app does, and it is what the blue location pill on iOS and the
+     * notification on Android are FOR.
+     *
+     * Started BEFORE the background permission is requested, deliberately.
+     * Android refuses to start a foreground service from the background, and
+     * `requestBackgroundPermissionsAsync` on Android 11+ leaves the app to go to
+     * Settings — so asking first is how the start would fail.
+     */
     const already = await location.hasStartedLocationUpdatesAsync(MOVE_LOCATION_TASK);
 
-    if (already) {
-      return "started";
+    if (!already) {
+      currentProfile = "moving";
+      await location.startLocationUpdatesAsync(MOVE_LOCATION_TASK, locationOptions(location, "moving"));
     }
 
-    currentProfile = "moving";
-    await location.startLocationUpdatesAsync(MOVE_LOCATION_TASK, locationOptions(location, "moving"));
-
-    return "started";
+    return (await ensureBackgroundPermission(location)) ? "always" : "while-running";
   } catch {
     return "unavailable";
   }
 }
+
+/**
+ * Whether the OS may wake Lumo for location once Lumo is gone.
+ *
+ * Worth having and never worth blocking on: it is the difference between a walk
+ * that survives being force-quit and one that does not, and the recording is
+ * already running either way by the time this is asked.
+ *
+ * Google Play requires a prominent disclosure BEFORE the system dialog, so the
+ * already-granted case is checked first — nobody who has said yes is
+ * re-explained to — and a decline means the dialog is not shown at all.
+ */
+async function ensureBackgroundPermission(location: LocationModule): Promise<boolean> {
+  try {
+    const current = await location.getBackgroundPermissionsAsync();
+
+    if (current.granted) {
+      return true;
+    }
+
+    /**
+     * Asked once per launch, not once per walk.
+     *
+     * Neither platform answers "granted" the moment somebody agrees — iOS defers
+     * its Always prompt, Android hands over to Settings — so without this the
+     * disclosure and the dialog would come back at the start of every single
+     * walk, which is how a permission gets refused for good. A fresh launch asks
+     * again, and the disclosure still comes first every time it does, which is
+     * what the policy is actually about.
+     */
+    if (askedForBackgroundThisLaunch) {
+      return false;
+    }
+
+    askedForBackgroundThisLaunch = true;
+
+    if (!(await requestBackgroundLocationConsent())) {
+      return false;
+    }
+
+    return (await location.requestBackgroundPermissionsAsync()).granted;
+  } catch {
+    return false;
+  }
+}
+
+let askedForBackgroundThisLaunch = false;
 
 /**
  * Stops OS location updates.

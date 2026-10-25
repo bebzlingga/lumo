@@ -128,23 +128,50 @@ export const lightPalette = {
   shadow: brand.navy
 };
 
-/** Deep navy/charcoal — never pure black — with muted pastel accents. */
+/**
+ * Deep navy/charcoal — never pure black — with muted pastel accents.
+ *
+ * ## Elevation is LIGHT here, not shadow
+ *
+ * Every dark palette in this file used to set `card` to the same value as
+ * `canvas`, which was fine in light mode — there a card is told apart by its
+ * shadow, and the two greys barely differ — but in dark mode `Card` draws no
+ * shadow at all (it disappears against a dark ground), so a card was literally
+ * invisible: the same fill as the page, no edge, no shade. Every card-based
+ * screen lost its structure the moment the theme went dark.
+ *
+ * So the dark ramp does what dark interfaces do instead: a raised surface is
+ * LIGHTER than what it sits on, and the amount of lift is the amount of
+ * elevation. `canvas` is the ground, `card` a step above it, `surface` a step
+ * above that, `surfaceStrong` highest. `Card` adds a hairline on top of that,
+ * because a single step is a fine cue for a big panel and a weak one for a row
+ * forty points tall.
+ */
 export const darkPalette: LumoPalette = {
   canvas: "#1A2130",
   surface: "#202838",
   surfaceStrong: "#263049",
-  card: "#1A2130",
+  card: "#232C3E",
   ink: "#F7F8FA",
   body: "#C3C8D0",
   muted: "#98A2B3",
   subtle: "#A8AEB9",
-  hairline: "#2A3346",
+  hairline: "#354059",
   hairlineStrong: "#55648A",
   green: "#8FB47A",
   greenActive: "#A8C892",
   greenDark: "#A8C892",
   greenSoft: "#22301F",
-  chartTrack: "#202838",
+  /**
+   * The empty part of a ring or a bar.
+   *
+   * Lifted well clear of `card`, which it used to equal — it was set to the
+   * same value as `surface`, so an unfilled ring on a card was invisible and
+   * three separate call sites had grown their own workaround for it
+   * (`chartTrackColor`, the settings switch, the segmented control). A token
+   * nobody can use as-is is not a token.
+   */
+  chartTrack: "#39455F",
   chartPartial: brand.gold,
   glow: brand.gold,
   glowSoft: "#3A2F17",
@@ -245,18 +272,18 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       canvas: "#16231A",
       surface: "#1B2A1E",
       surfaceStrong: "#223526",
-      card: "#16231A",
+      card: "#1F2F23",
       ink: "#F2F7F0",
       body: "#C2CFBE",
       muted: "#8FA08C",
       subtle: "#A6B5A2",
-      hairline: "#263A2A",
+      hairline: "#304534",
       hairlineStrong: "#4E6B52",
       green: "#7FB06E",
       greenActive: "#9BCB88",
       greenDark: "#9BCB88",
       greenSoft: "#1E2E1C",
-      chartTrack: "#1B2A1E",
+      chartTrack: "#344A38",
       chartPartial: "#E8A33D",
       glow: "#E8A33D",
       glowSoft: "#33290F",
@@ -309,18 +336,18 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       canvas: "#121D28",
       surface: "#17242F",
       surfaceStrong: "#1F2E3C",
-      card: "#121D28",
+      card: "#1C2935",
       ink: "#F0F6FA",
       body: "#BCC9D3",
       muted: "#8A9AA8",
       subtle: "#A2B1BD",
-      hairline: "#22323F",
+      hairline: "#2D3F4D",
       hairlineStrong: "#4A6274",
       green: "#58A9B6",
       greenActive: "#76C4D0",
       greenDark: "#76C4D0",
       greenSoft: "#172E33",
-      chartTrack: "#17242F",
+      chartTrack: "#324453",
       chartPartial: "#E9A83C",
       glow: "#E9A83C",
       glowSoft: "#322914",
@@ -371,18 +398,18 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       canvas: "#20141B",
       surface: "#291A22",
       surfaceStrong: "#33212B",
-      card: "#20141B",
+      card: "#302028",
       ink: "#FAF2F4",
       body: "#D0BEC4",
       muted: "#A08E95",
       subtle: "#B4A2A8",
-      hairline: "#2E1D26",
+      hairline: "#4B333E",
       hairlineStrong: "#614350",
       green: "#D9805F",
       greenActive: "#EE9C79",
       greenDark: "#EE9C79",
       greenSoft: "#33201A",
-      chartTrack: "#291A22",
+      chartTrack: "#513743",
       chartPartial: "#E2A32F",
       glow: "#E2A32F",
       glowSoft: "#382A12",
@@ -400,26 +427,40 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
 };
 
 /**
- * Whether the Appearance settings exist at all.
+ * Whether the Appearance settings exist at all — the master switch.
  *
- * Held back for now: the extra palettes and the dark mode are built and tested,
- * but the app ships on cream + light while they get more time on real screens.
- * With this false the whole Appearance card is hidden and `LumoContext` pins
- * BOTH the theme and the mode.
+ * ON — Light / Dark / System is live, with dark cuts of the background art
+ * (see `darkBackgroundAsset`). Turned off, `LumoContext` pins BOTH the mode and
+ * the theme to light cream: both, not just one, because hiding a control
+ * without pinning its value strands anyone who had already switched — the card
+ * that would let them switch back is the card being hidden.
  *
- * Both are pinned, not just the theme, because hiding the control without
- * pinning the value strands anyone who had already switched: the card that
- * would let them switch back is the card being hidden.
+ * The dark palettes below are NOT dead. They are built, and as of the elevation
+ * ramp above they are correct on a dark screen rather than shipping cards the
+ * same colour as the page behind them. What they have not had is time on real
+ * hardware across every screen, which is the whole reason this is a switch and
+ * not a deletion.
  *
- * A flag rather than commented-out JSX on purpose — the picker keeps compiling,
- * keeps being typechecked, and `setThemeId`/`setThemeMode` stay referenced
- * bindings instead of dead code. Flip this to true to ship appearance; nothing
- * else needs changing.
- *
- * Note it pins at RESOLUTION, not by rewriting stored settings, so an install
- * that already chose a theme or dark mode still has that choice waiting.
+ * It pins at RESOLUTION rather than by rewriting stored settings, which is what
+ * makes it safe to flip either way — an install that chose dark while it was on
+ * still has that choice waiting, and gets it back untouched when this returns.
  */
-export const APPEARANCE_ENABLED = false;
+export const APPEARANCE_ENABLED = true;
+
+/**
+ * Whether the THEME picker exists — nested inside the switch above.
+ *
+ * Two flags because they are two decisions, and they will not necessarily come
+ * back together. A MODE is the same app lit for a dark room; the hue families
+ * are four palettes across every screen, which is four times the surface to get
+ * wrong. So the mode can ship on its own one day, and the picker stays behind
+ * this until its four palettes have each had the same walk.
+ *
+ * Moot while `APPEARANCE_ENABLED` is false — the card it lives in is hidden
+ * either way — and it still governs `themeId`, so nothing depends on the order
+ * the two are turned back on in.
+ */
+export const THEME_PICKER_ENABLED = false;
 
 /** Picker order. Cream leads because it is the default and the brand. */
 export const THEME_IDS = Object.keys(THEMES) as ThemeId[];
@@ -609,6 +650,35 @@ export const control = {
   height: 52,
   radius: radius.button,
   borderWidth: 1
+};
+
+/**
+ * What chrome wears when it sits ON the backdrop art rather than on flat canvas:
+ * Home's date pill, the page-bar tab pill on Move and Friends, and the round 38pt
+ * header buttons either side of both.
+ *
+ * A SEMI-TRANSPARENT card fill, never a solid one. Up on the plate's sky a solid
+ * chip reads as pasted over the artwork; at this alpha the scene shows through and
+ * the control reads as sitting on it. The soft shadow is what separates it from a
+ * busy plate without a heavier outline — and it is dropped in dark mode at the use
+ * site, where the navy has nothing to catch it.
+ *
+ * One token because these controls sit side by side in the SAME BAR, where any
+ * drift between them is visible at a glance. It was three hand-matched copies —
+ * the date pill, the tab pill, and Home's avatar button — before the header
+ * buttons were given the surface too and made it four.
+ *
+ * `fill` is the alpha suffix for `alpha(palette.card, …)`; the shadow's COLOUR
+ * comes from the palette at the use site, so only its geometry lives here.
+ */
+export const onArtChrome = {
+  fill: "A6",
+  shadow: {
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2
+  }
 };
 
 export const fontFamilies = {

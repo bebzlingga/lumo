@@ -6,7 +6,8 @@
 | `LumoDoneWalking.webp` | 853 × 1844 | Backdrop plate — the walk-complete screen |
 | `LumoWalked.webp` | 941 × 1672 | Full-bleed scene, the same shape as the journal's today scene |
 | `LumoWalkingNight.webp` | 853 × 1844 | Night cut of the walking scene — **not wired up** |
-| `LumoWalkedNight.webp` | 941 × 1672 | Night cut of the waving scene — **not wired up** |
+| `LumoWalkedNight.webp` | 941 × 1672 | Night cut of the waving scene — the `walkDone` plate in dark mode |
+| `LumoWalkingDark.webp` | 822 × 1913 | Dark cut of `LumoWalking`, from `scripts/dark-plates.py` — the `walking` plate in dark mode |
 
 The two plates share `BACKGROUND_ASPECT` (853/1844) with everything in
 `assets/bg/`, so they slot into the background registry unchanged.
@@ -34,7 +35,7 @@ which is free here because encoding happens once.
 completion ones, both through `components/WalkBackground.tsx` — which draws them
 at full strength with no bottom fade, unlike the eight landscape washes.
 
-The two night cuts are **not referenced by any screen**. They were encoded for a
+`LumoWalkedNight` is the dark-mode `walkDone` plate (same frame as `LumoWalked`). `LumoWalkingNight` is **not referenced by any screen**. They were encoded for a
 day/night swap at 6pm–4am that was backed out before it shipped; wiring them
 back up means a `WalkPlate` entry each, their own `PLATE_FIT` row — they are cut
 to DIFFERENT frames from each other, so neither can borrow the other's numbers —

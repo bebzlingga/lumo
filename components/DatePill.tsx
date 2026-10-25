@@ -1,6 +1,6 @@
 import React from "react";
 import { Modal, StyleSheet, View } from "react-native";
-import { fontFamilies, layout, radius, spacing } from "@/constants/theme";
+import { fontFamilies, layout, onArtChrome, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { parseDateKey, toDateKey } from "@/lib/date";
@@ -57,8 +57,9 @@ export function DatePill({
           {
             // Semi-transparent: the pill sits on the home backdrop's sky, and
             // a solid fill up there reads as a chip pasted over the artwork.
-            // The header buttons either side of it carry the same alpha.
-            backgroundColor: alpha(palette.card, "A6"),
+            // The header buttons either side of it carry the same surface —
+            // see `onArtChrome`, which is where both get it from.
+            backgroundColor: alpha(palette.card, onArtChrome.fill),
             borderColor: palette.hairline,
             shadowColor: isDark ? "transparent" : palette.shadow,
             opacity: pressed ? 0.82 : 1
@@ -130,10 +131,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2
+    ...onArtChrome.shadow
   },
   pillLabel: {
     flexShrink: 1,

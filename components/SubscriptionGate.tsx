@@ -131,7 +131,7 @@ const PRODUCTS: Record<
     sku: UNLIMITED_SKU,
     icon: "sparkle",
     title: "Room\nfor everything",
-    subtitle: "Free accounts keep 3 habits and 3 journal entries. This lifts both limits for good — one payment, no subscription.",
+    subtitle: "Free accounts keep 3 habits, 3 journal entries and the first three Move rungs. This lifts all of it for good — one payment, no subscription.",
     basePrice: 149,
     terms: "One payment · yours for good",
     // Not a subscription, so none of the renewal small print applies — saying
@@ -144,6 +144,7 @@ const PRODUCTS: Record<
       { icon: "taskSquare", title: "Unlimited habits", body: "Track as many habits as you want, instead of the 3 a free account keeps." },
       { icon: "book", title: "Unlimited journal", body: "Write every day and keep every entry, instead of the 3 a free account keeps." },
       { icon: "elementPlus", title: "Starter packs in full", body: "Add a whole starter pack in one tap, instead of only the habits that fit in three free slots." },
+      { icon: "trophy", title: "The long Move rungs", body: "25K and above in Lumo Move, with the badges that come with them. The first three rungs are free and stay free." },
       { icon: "lock", title: "Pay once, keep it", body: "A single payment — not a subscription. Nothing renews and there is nothing to cancel." },
       { icon: "heart", title: "Support Lumo", body: "One purchase keeps the app being built, and keeps it free of ads for everyone." }
     ]
@@ -299,7 +300,6 @@ export function SubscriptionGate({ product = "friends" }: { product?: PaywallPro
        * top because that is where you start, and the button that matters is at
        * the foot in its own right.
        */
-      pinHeader={false}
     >
       {/* The app's page bar, so this looks like a screen of Lumo rather than a
           modal that arrived from somewhere else. The back button is dropped

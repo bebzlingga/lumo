@@ -12,7 +12,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, LoadingState, LumoInput, Screen } from "@/components/ui";
 import { WheelTimePicker } from "@/components/WheelTimePicker";
 import { CHECK_INS, checkInTimeFor, checkInTimeLabel, type CheckIn } from "@/constants/checkIns";
-import { APPEARANCE_ENABLED, fontFamilies, layout, radius, spacing } from "@/constants/theme";
+import { APPEARANCE_ENABLED, fontFamilies, layout, radius, spacing, THEME_PICKER_ENABLED } from "@/constants/theme";
 import { ThemePicker } from "@/components/ThemePicker";
 import { SegmentedControl } from "@/components/controls";
 import { useLumo } from "@/context/LumoContext";
@@ -396,17 +396,26 @@ export default function SettingsScreen() {
       {APPEARANCE_ENABLED ? (
         <SettingsGroup>
           <View style={styles.appearanceBlock}>
-            <View style={styles.appearanceLabel}>
-              <AppText color={palette.ink} style={styles.appearanceTitle}>
-                Theme
-              </AppText>
-              <AppText variant="bodySmall" color={palette.subtle}>
-                The colour Lumo wears.
-              </AppText>
-            </View>
-            <View style={styles.themeRow}>
-              <ThemePicker value={themeId} onChange={setThemeId} />
-            </View>
+            {/* The hue families, on their own flag. Lumo wears cream while they
+                wait — see `THEME_PICKER_ENABLED`. The light/dark control below
+                is not held back with them: a mode is the same app lit for a
+                dark room, where four palettes are four times the surface to get
+                wrong. */}
+            {THEME_PICKER_ENABLED ? (
+              <>
+                <View style={styles.appearanceLabel}>
+                  <AppText color={palette.ink} style={styles.appearanceTitle}>
+                    Theme
+                  </AppText>
+                  <AppText variant="bodySmall" color={palette.subtle}>
+                    The colour Lumo wears.
+                  </AppText>
+                </View>
+                <View style={styles.themeRow}>
+                  <ThemePicker value={themeId} onChange={setThemeId} />
+                </View>
+              </>
+            ) : null}
 
             <View style={styles.appearanceLabel}>
               <AppText color={palette.ink} style={styles.appearanceTitle}>
@@ -720,12 +729,15 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     minHeight: 66
   },
+  // A rounded square, not a disc. At 36pt `radius.lg` is exactly half the tile,
+  // so the corner ran all the way round and every row opened with a circle —
+  // the shape the app reserves for avatars and transport controls.
   rowIcon: {
     width: 36,
     height: 36,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.lg
+    borderRadius: radius.md
   },
   rowCopy: {
     flex: 1,

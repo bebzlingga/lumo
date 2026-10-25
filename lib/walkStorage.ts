@@ -36,6 +36,25 @@ export async function loadWalkState(): Promise<WalkState> {
   }
 }
 
+/**
+ * Listeners told whenever the store is written.
+ *
+ * Added because the walk store is read by things that are not screens: Move's
+ * context reconciles tracked walks against health data for the goal, and a
+ * context cannot use `useFocusEffect` to notice a walk that has just finished.
+ * The same shape as `onMoveInvitesChanged` — a plain set, no dependency.
+ */
+const listeners = new Set<() => void>();
+
+/** Subscribes to walk-store writes. Returns the unsubscribe. */
+export function onWalksChanged(listener: () => void): () => void {
+  listeners.add(listener);
+
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 /** Fire-and-forget, like every other local write in the app. */
 export async function saveWalkState(state: WalkState): Promise<void> {
   try {
@@ -43,6 +62,17 @@ export async function saveWalkState(state: WalkState): Promise<void> {
   } catch {
     // Nothing useful to do here — the in-memory state is still correct, and the
     // next save will carry it.
+  }
+
+  /**
+   * Rung even when the write threw.
+   *
+   * A listener's job is to re-read, and the in-memory state is correct either
+   * way — staying silent on a failed write would leave the goal reading a walk
+   * short until something else happened to refresh it.
+   */
+  for (const listener of listeners) {
+    listener();
   }
 }
 

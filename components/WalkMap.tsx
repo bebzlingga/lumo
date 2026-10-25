@@ -124,6 +124,11 @@ export function WalkMap({
    */
   following: followingProp,
   onFollowChange,
+  /**
+   * The wash over the tiles. On where the map is a SURFACE, off where it is the
+   * subject — see the note where it is drawn.
+   */
+  scrim = true,
   style
 }: {
   route: WalkPoint[];
@@ -135,6 +140,7 @@ export function WalkMap({
   recenterBottom?: number;
   following?: boolean;
   onFollowChange?: (next: boolean) => void;
+  scrim?: boolean;
   style?: object;
 }) {
   const { palette, isDark } = useLumo();
@@ -288,8 +294,16 @@ export function WalkMap({
 
       {/* Holds the map back so it reads as a surface the walk is drawn on
           rather than a Maps app someone opened. The route keeps its full
-          strength; only what is underneath is quietened. */}
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: alpha(palette.canvas, isDark ? "59" : "4D") }]} />
+          strength; only what is underneath is quietened.
+
+          Off where the map is the thing being looked at rather than the ground
+          under something else. On the live screen the readout, the hint and the
+          card all sit over these tiles and the wash is what keeps them legible;
+          on a finished walk there is nothing over it, and quietening the streets
+          only makes the route harder to place. */}
+      {scrim ? (
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: alpha(palette.canvas, isDark ? "59" : "4D") }]} />
+      ) : null}
       <View pointerEvents="none" style={[styles.edge, { borderColor: alpha(palette.hairline, "60") }]} />
     </View>
   );

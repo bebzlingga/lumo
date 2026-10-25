@@ -1,7 +1,7 @@
 import React from 'react'
 import { Image, StyleSheet, View, useWindowDimensions } from 'react-native'
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg'
-import { BACKGROUND_ASPECT, backgroundAsset, hasThemeArt, type BackgroundVariant } from '@/constants/backgroundAssets'
+import { BACKGROUND_ASPECT, backgroundAsset, darkBackgroundAsset, hasThemeArt, type BackgroundVariant } from '@/constants/backgroundAssets'
 import { themePlateOpacity } from '@/constants/theme'
 import { useLumo } from '@/context/LumoContext'
 
@@ -56,13 +56,16 @@ export function LumoBackground({
 	const themeFade = hasThemeArt(variant, themeId) ? 1 : themePlateOpacity(themeId, isDark)
 	// Dark mode: the plates are pastel-light, so they're dimmed hard to keep the
 	// deep-navy canvas dominant.
-	const opacity = INTENSITY_OPACITY[intensity] * (isDark ? 0.35 : 1) * themeFade
+	// A dark cut is already graded onto the dark canvas, so it is drawn whole;
+	// only a plate without one falls back to the dimmed light art.
+	const darkPlate = isDark ? darkBackgroundAsset(variant, themeId) : undefined
+	const opacity = darkPlate ? 1 : INTENSITY_OPACITY[intensity] * (isDark ? 0.35 : 1) * themeFade
 	const plateHeight = width / BACKGROUND_ASPECT
 
 	return (
 		<View style={StyleSheet.absoluteFill} pointerEvents='none'>
 			<Image
-				source={backgroundAsset(variant, themeId)}
+				source={darkPlate ?? backgroundAsset(variant, themeId)}
 				style={{
 					position: 'absolute',
 					bottom: 0,

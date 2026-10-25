@@ -63,7 +63,7 @@ describe('move nudges', () => {
 	// The group cannot walk for you, and you cannot walk for them — so being
 	// done yourself is a different message.
 	it('says something different when you are done and the others are not', () => {
-		const team = findVariant('10k-team')!
+		const team = findVariant('25k-team')!
 		const nudge = challengeNudge(
 			progress({ variant: team, currentM: 10_000, ratio: 1, remainingM: 0, teamDone: 1, teamSize: 3, daysLeft: 3 })
 		)

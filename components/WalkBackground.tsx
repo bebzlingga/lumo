@@ -1,7 +1,7 @@
 import React from "react";
 import { Animated, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { backgroundAsset } from "@/constants/backgroundAssets";
+import { backgroundAsset, darkBackgroundAsset } from "@/constants/backgroundAssets";
 import { spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 
@@ -133,6 +133,12 @@ const PLATE_TINT: Record<WalkPlate, string> = {
   walkDone: "#FDEEC4"
 };
 
+/** The same, sampled from the top band of each dark cut. */
+const PLATE_TINT_DARK: Record<WalkPlate, string> = {
+  walking: "#191E22",
+  walkDone: "#0C1535"
+};
+
 /**
  * How far a screen's first element must be pushed down to clear the scene.
  *
@@ -180,7 +186,8 @@ export function WalkBackground({ plate, scrollY }: { plate: WalkPlate; scrollY?:
   // weight they would be the brightest thing on a dark screen and every card
   // would sit in a pool of daylight. This is legibility, not the bottom fade
   // this component exists to drop.
-  const restOpacity = isDark ? 0.32 : 1;
+  const darkPlate = isDark ? darkBackgroundAsset(plate, themeId) : undefined;
+  const restOpacity = isDark && !darkPlate ? 0.32 : 1;
 
   /**
    * Fades as the page scrolls DOWN over it, and comes back on the way up —
@@ -202,9 +209,9 @@ export function WalkBackground({ plate, scrollY }: { plate: WalkPlate; scrollY?:
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {/* The plate's own colour, under it and at its opacity — see PLATE_TINT.
           Both fade together on scroll because they share `opacity`. */}
-      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: PLATE_TINT[plate], opacity }]} />
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: darkPlate ? PLATE_TINT_DARK[plate] : PLATE_TINT[plate], opacity }]} />
       <Animated.Image
-        source={backgroundAsset(plate, themeId)}
+        source={darkPlate ?? backgroundAsset(plate, themeId)}
         style={{
           position: "absolute",
           left,

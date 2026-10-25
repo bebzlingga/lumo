@@ -1,4 +1,5 @@
 import type { ActivityType } from "@/lib/move/tracking/config";
+import type { SmoothingState } from "@/lib/move/tracking/smoothing";
 
 /**
  * The shapes the tracker works in.
@@ -40,6 +41,23 @@ export type RawLocationPoint = {
   timestamp: number;
   isAccepted: boolean;
   rejectionReason?: RejectionReason;
+  /**
+   * Where the tracker believes this fix actually was — see `smoothing.ts`.
+   *
+   * SEPARATE FIELDS RATHER THAN CORRECTING THE ONES ABOVE. The filter judges
+   * the RAW fix; distance, current pace and the drawn line all use THESE,
+   * because raw fixes zigzag several metres either side of a street that was
+   * straight and every zig is counted as distance.
+   *
+   * Both are true of the same fix: one is what the receiver said, the other is
+   * the best estimate of where the phone was when it said it. Neither is allowed
+   * to overwrite the other.
+   *
+   * Absent on rejected fixes and on anything recorded before smoothing existed,
+   * so every reader falls back to the raw pair.
+   */
+  drawLatitude?: number;
+  drawLongitude?: number;
 };
 
 /**
@@ -66,8 +84,9 @@ export type GpsQuality = "excellent" | "good" | "weak" | "poor" | "unavailable";
  * Where the activity is.
  *
  * `preparing` is the acquisition phase — fixes arrive and set the signal
- * indicator, and nothing counts. `autoPaused` is the tracker's own decision and
- * lifts itself; `paused` is the user's and only they can lift it.
+ * indicator, and nothing counts. `autoPaused` is the tracker's own decision,
+ * taken only when it cannot locate you, and it lifts itself the moment it can;
+ * `paused` is the user's and only they can lift it.
  */
 export type ActivityStatus = "preparing" | "active" | "autoPaused" | "paused" | "finished";
 
@@ -117,10 +136,31 @@ export type ActivityTrackingState = {
   gpsQuality: GpsQuality;
   /** Accuracy of the most recent fix, for the indicator and the debug overlay. */
   lastAccuracyM: number | null;
+  /**
+   * The last instant the tracker knew where it was — a fix inside the accuracy
+   * gate, whether or not the leg it made was counted.
+   *
+   * What auto-pause is measured from. Rejected-for-accuracy fixes deliberately
+   * do NOT count: a reading we would not put in the route is not a location.
+   * Jitter does count — standing still with a perfect lock is not lost.
+   *
+   * Reset whenever tracking (re)starts, so a resume, a recovery and a fresh
+   * start all get the same grace before the tracker concludes anything.
+   */
+  lastLocatedAt: number;
 
   segments: ActivitySegment[];
   /** Every fix, accepted or not, newest last. Bounded — see the config. */
   rawPoints: RawLocationPoint[];
+  /**
+   * The position estimate the route is drawn from — see `smoothing.ts`.
+   *
+   * Undefined before the first fix, and cleared at every segment break: the
+   * point of a break is that we do not know what happened across it, and an
+   * estimate carried over one would drag the first fix of the new segment back
+   * toward where the old one ended.
+   */
+  smoothing?: SmoothingState;
 
   /**
    * Who set out with you, by display name.
@@ -133,7 +173,7 @@ export type ActivityTrackingState = {
    */
   companions?: string[];
 
-  /** Set when the user takes over from auto-pause. Manual always wins. */
+  /** Set when the user pauses by hand. Only they can lift that one. */
   manuallyPaused: boolean;
   autoPauseEnabled: boolean;
 };

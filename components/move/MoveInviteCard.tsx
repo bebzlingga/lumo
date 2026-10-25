@@ -77,7 +77,7 @@ export function MoveInviteCard({
             {variant.kind === "team" ? "Team challenge" : "Challenge"} · {formatDistance(variant.targetM)}
           </AppText>
         </View>
-        {invite.needsPlus ? <PlusBadge /> : null}
+        {invite.needsPro ? <PlusBadge label="PRO" /> : null}
       </View>
 
       {/* The terms, one per line. Same shape as the summary on the challenge
@@ -121,13 +121,13 @@ export function MoveInviteCard({
         </Pressable>
       </View>
 
-      {invite.needsPlus ? (
-        // Said before the tap, not after the refusal: joining a Plus rung takes
-        // the joiner's OWN subscription (the database checks it — see the
+      {invite.needsPro ? (
+        // Said before the tap, not after the refusal: joining a Pro rung takes
+        // the joiner's OWN purchase (the database checks it — see the
         // participation policy), and the inviter's device cannot see whether this
         // one has it.
         <AppText variant="caption" color={alpha(palette.subtle, "E6")} style={styles.note}>
-          This one needs Lumo Plus to join.
+          This one needs Lumo Pro to join.
         </AppText>
       ) : null}
     </Card>

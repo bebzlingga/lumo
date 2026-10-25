@@ -5,7 +5,15 @@ import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AppState, useColorScheme } from "react-native";
-import { APPEARANCE_ENABLED, DEFAULT_THEME_ID, getPalette, LumoPalette, normalizeThemeId, type ThemeId } from "@/constants/theme";
+import {
+  APPEARANCE_ENABLED,
+  DEFAULT_THEME_ID,
+  getPalette,
+  LumoPalette,
+  normalizeThemeId,
+  THEME_PICKER_ENABLED,
+  type ThemeId
+} from "@/constants/theme";
 import { toDateKey } from "@/lib/date";
 import { bestActivityStreak, completionCount } from "@/lib/habitMath";
 import {
@@ -29,6 +37,7 @@ import { createId } from "@/lib/id";
 import { journalHasContent } from "@/lib/journal";
 import {
   fetchServerEntitlement,
+  syncServerEntitlements,
   purchaseFriendsSubscription,
   purchaseUnlimited as purchaseUnlimitedUnlock,
   restoreFriendsSubscription,
@@ -517,10 +526,15 @@ export function LumoProvider({ children }: { children: ReactNode }) {
   const isDark =
     APPEARANCE_ENABLED &&
     (state.settings.themeMode === "dark" || (state.settings.themeMode === "system" && systemScheme === "dark"));
-  // Pinned to cream while `APPEARANCE_ENABLED` is false — see the note on that
-  // flag. Deliberately overrides the stored value rather than rewriting it, so
-  // an install that already chose a theme gets it back when the picker returns.
-  const themeId = APPEARANCE_ENABLED ? (state.settings.themeId ?? DEFAULT_THEME_ID) : DEFAULT_THEME_ID;
+  /**
+   * Pinned to cream unless the picker is on — see `THEME_PICKER_ENABLED`.
+   *
+   * Its own flag rather than riding on `APPEARANCE_ENABLED`, because the two
+   * shipped apart: the light/dark control is live and the hue families are not.
+   * Overrides the stored value rather than rewriting it, so an install that
+   * already chose a theme gets it back when the picker returns.
+   */
+  const themeId = THEME_PICKER_ENABLED ? (state.settings.themeId ?? DEFAULT_THEME_ID) : DEFAULT_THEME_ID;
   const palette = useMemo(() => getPalette(themeId, isDark), [themeId, isDark]);
 
   /**
@@ -744,6 +758,15 @@ export function LumoProvider({ children }: { children: ReactNode }) {
     if (!isReady) {
       return;
     }
+
+    // Re-verify whatever this store account owns against the server, so a
+    // purchase made before receipt validation existed still produces an
+    // `entitlements` row — that row is what the database's own write policies
+    // check, and without it a paying subscriber has an unlocked UI and no
+    // permission to use it. Deliberately not awaited and deliberately not part
+    // of the Promise.all below: it repairs the SERVER's record, and must never
+    // delay or alter what this launch decides the person owns.
+    void syncServerEntitlements();
 
     Promise.all([fetchServerEntitlement(), restoreFriendsSubscription(), restoreUnlimited()]).then(([server, store, unlimited]) => {
       setState((current) => {

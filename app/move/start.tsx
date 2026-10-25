@@ -16,8 +16,9 @@ import { useMove } from "@/context/MoveContext";
 import { friendsService, type Friendship } from "@/lib/friends";
 import { challengeClient } from "@/lib/move/challengeClient";
 import { findFamily } from "@/lib/move/challengeDefs";
-import { formatDistance } from "@/lib/move/movement";
-import { moveSocialUnlocked } from "@/lib/move/gating";
+import { describeGoal, periodLabel } from "@/lib/move/goal";
+import { formatDistance, formatKilometres } from "@/lib/move/movement";
+import { MOVE_WITH_FRIENDS_ENABLED, moveSocialUnlocked } from "@/lib/move/gating";
 import { clearWalkSession, saveWalkSession } from "@/lib/move/walkSession";
 
 /**
@@ -60,7 +61,18 @@ import { clearWalkSession, saveWalkSession } from "@/lib/move/walkSession";
  * FOR: pick it and the page stops describing an open-ended stroll and starts
  * describing the target, what is left of it, and how long there is.
  */
-type Route = "alone" | "friends" | "challenge";
+type Route = "alone" | "goal" | "friends" | "challenge";
+
+/** "a", "a and b", "a, b and c" — for a sentence built from optional parts. */
+function joinPhrases(parts: (string | null)[]): string {
+  const kept = parts.filter((part): part is string => Boolean(part));
+
+  if (kept.length < 2) {
+    return kept[0] ?? "";
+  }
+
+  return `${kept.slice(0, -1).join(", ")} and ${kept[kept.length - 1]}`;
+}
 
 export default function MoveStartScreen() {
   const router = useRouter();
@@ -148,7 +160,17 @@ export default function MoveStartScreen() {
    * by a default nobody stored is exactly the case that goes wrong when the default
    * is only applied at mount.
    */
-  const route: Route = routeTouched ? pickedRoute : move.progress ? "challenge" : "alone";
+  /** The goal in force and where it stands, or null when none is set. */
+  const goalStanding = move.goalProgress;
+  /**
+   * The route in force: what was picked, or a sensible default.
+   *
+   * The default prefers a running CHALLENGE over a goal, and a goal over a plain
+   * walk. Not a ranking of importance — a challenge is the one with a deadline
+   * on it, so it is the one somebody is most likely to mean by "go for a walk"
+   * today; a goal renews, so missing it once is not the same kind of loss.
+   */
+  const route: Route = routeTouched ? pickedRoute : move.progress ? "challenge" : goalStanding ? "goal" : "alone";
 
   function chooseRoute(next: Route) {
     setRouteTouched(true);
@@ -180,6 +202,8 @@ export default function MoveStartScreen() {
    * to have noticed which route was chosen.
    */
   const onChallenge = route === "challenge" && move.progress !== null;
+  /** The goal route, and a goal to describe — the same pairing as `onChallenge`. */
+  const onGoal = route === "goal" && goalStanding !== null;
   const summaryRows = [
     {
       icon: "walk" as const,
@@ -187,7 +211,11 @@ export default function MoveStartScreen() {
       value:
         onChallenge && move.progress
           ? `${formatDistance(move.progress.targetM)} — ${formatDistance(move.progress.remainingM)} to go`
-          : "No target — go as far as you like"
+          : onGoal && goalStanding
+            ? goalStanding.hit
+              ? `${describeGoal(goalStanding.goal)} — already made, keep going`
+              : `${describeGoal(goalStanding.goal)} — ${formatKilometres(goalStanding.remainingM)} to go`
+            : "No target — go as far as you like"
     },
     {
       icon: "calendar" as const,
@@ -197,14 +225,29 @@ export default function MoveStartScreen() {
           ? move.progress.daysLeft === null
             ? "No deadline on this one"
             : `${move.progress.daysLeft} ${move.progress.daysLeft === 1 ? "day" : "days"} left`
-          : "Until you finish it"
+          : onGoal && goalStanding
+            ? // The period's own clock, not the goal's: a goal has no end, and
+              // the honest deadline is the one the current period is under.
+              `${goalStanding.daysLeft} ${goalStanding.daysLeft === 1 ? "day" : "days"} left ${periodLabel(
+                goalStanding.goal.period
+              ).toLowerCase()}`
+            : "Until you finish it"
     },
     { icon: "friends" as const, label: "Company", value: !withFriends ? "On your own" : names.length > 0 ? names.join(", ") : "Nobody picked yet" },
     { icon: "sun" as const, label: "Starts", value: "As soon as you tap" },
     {
       icon: "target" as const,
       label: "Counts toward",
-      value: challengeFamily ? `Your total and the ${challengeFamily.title} challenge` : "Your lifetime total"
+      /**
+       * Every metre counts toward everything at once — the tracker measures
+       * distance, not intent — so this lists what is actually running rather
+       * than whichever route was picked above.
+       */
+      value: joinPhrases([
+        "Your lifetime total",
+        challengeFamily ? `the ${challengeFamily.title} challenge` : null,
+        goalStanding ? `your ${describeGoal(goalStanding.goal)} goal` : null
+      ])
     }
   ];
 
@@ -298,23 +341,60 @@ export default function MoveStartScreen() {
             selected={route === "alone"}
             onPress={() => chooseRoute("alone")}
           />
-          {/* Pressable even when locked, and routed to the paywall rather than
-              refusing silently: `disabled` would dim the row and swallow the tap,
-              which tells somebody they cannot have this without telling them how
-              to. The badge replaces the radio, so the row cannot look chosen. */}
+          {/* THE GOAL ROUTE — a walk taken against a target the reader set
+              themselves, rather than against a rung somebody else wrote.
+
+              Its subtitle is the goal's own standing, not a description: this
+              row is the only place the figure appears before setting out, and
+              "72 of 100 km this week" is what decides how far to go today.
+
+              With no goal set, the row is the way to set one and goes to the
+              goal page instead of selecting — nothing to walk toward yet.
+
+              The bottom of the group whenever company is switched off, so the
+              card does not end on the rule that separated it from the row that
+              is no longer there. */}
           <MoveOptionRow
-            icon="friends"
-            title="Bring friends"
+            icon="target"
+            title={goalStanding ? describeGoal(goalStanding.goal) : "Set a goal"}
             subtitle={
-              canBringFriends
-                ? "Note who is with you. Their names ride along with this one."
-                : "Comes with Plus, along with friends and groups."
+              goalStanding
+                ? // Kilometres on both halves of the pair: `formatDistance`
+                  // drops to metres under 1 km, and "800 m of 100 km" reads as
+                  // two unrelated numbers.
+                  `${formatKilometres(goalStanding.walkedM)} of ${formatKilometres(goalStanding.targetM)} ${periodLabel(
+                    goalStanding.goal.period
+                  ).toLowerCase()}${goalStanding.hit ? " · made it" : ` · ${formatKilometres(goalStanding.remainingM)} to go`}`
+                : "Pick a distance for the day, week or month. It renews until you end it."
             }
-            selected={withFriends}
-            onPress={() => (canBringFriends ? chooseRoute("friends") : router.push("/friends"))}
-            trailing={canBringFriends ? undefined : <PlusBadge />}
-            last
+            selected={route === "goal"}
+            onPress={() => (goalStanding ? chooseRoute("goal") : router.push("/move/goal"))}
+            last={!MOVE_WITH_FRIENDS_ENABLED}
           />
+          {/* GONE, not locked, while company is switched off — see
+              MOVE_WITH_FRIENDS_ENABLED. A row reading "comes with Plus" would be
+              offering something no subscription currently buys.
+
+              While it IS on and merely unpaid, it stays pressable and goes to the
+              paywall rather than refusing silently: `disabled` would dim the row
+              and swallow the tap, which tells somebody they cannot have this
+              without telling them how to. The badge replaces the radio, so the row
+              cannot look chosen. */}
+          {MOVE_WITH_FRIENDS_ENABLED ? (
+            <MoveOptionRow
+              icon="friends"
+              title="Bring friends"
+              subtitle={
+                canBringFriends
+                  ? "Note who is with you. Their names ride along with this one."
+                  : "Comes with Plus, along with friends and groups."
+              }
+              selected={withFriends}
+              onPress={() => (canBringFriends ? chooseRoute("friends") : router.push("/friends"))}
+              trailing={canBringFriends ? undefined : <PlusBadge />}
+              last
+            />
+          ) : null}
 
         </MoveOptionGroup>
       </View>

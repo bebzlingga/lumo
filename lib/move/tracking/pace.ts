@@ -104,9 +104,10 @@ export function smoothedPace(segments: ActivitySegment[], now: number): PaceMsPe
       break;
     }
 
+    // Smoothed positions, same as the distance total — raw legs read fast.
     distanceM += calculateDistance(
-      { lat: older.latitude, lon: older.longitude },
-      { lat: newer.latitude, lon: newer.longitude }
+      { lat: older.drawLatitude ?? older.latitude, lon: older.drawLongitude ?? older.longitude },
+      { lat: newer.drawLatitude ?? newer.latitude, lon: newer.drawLongitude ?? newer.longitude }
     );
     index -= 1;
   }

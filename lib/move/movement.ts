@@ -258,7 +258,7 @@ export function movementStreak(summaries: MovementSummary[], todayKey: string, p
  * Whole numbers never carry a pointless ".0", which is what stopped "50 / 100
  * km" reading as "50.0 / 100 km".
  */
-function kmValue(meters: number): string {
+export function kmValue(meters: number): string {
   const value = Math.max(0, meters) / 1000;
 
   return Number.isInteger(value) || value >= 100 ? String(Math.round(value)) : value.toFixed(1);

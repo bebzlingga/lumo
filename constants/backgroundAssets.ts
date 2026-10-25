@@ -259,6 +259,20 @@ const themeHomeArt: Partial<Record<ThemeId, Partial<Record<HomePeriod, ImageSour
 	// forest: { morning: require('../assets/bg/forest/HomeMorning.webp') as ImageSourcePropType, ... },
 }
 
+const homeDarkArt: Record<HomePeriod, ImageSourcePropType> = {
+	earlyMorning: require('../assets/bg-home/LumoEarlyMorningDark.webp') as ImageSourcePropType,
+	morning: require('../assets/bg-home/LumoMorningDark.webp') as ImageSourcePropType,
+	lunch: require('../assets/bg-home/LumoLunchDark.webp') as ImageSourcePropType,
+	afternoon: require('../assets/bg-home/LumoAfternoonDark.webp') as ImageSourcePropType,
+	lateAfternoon: require('../assets/bg-home/LumoLateAfternoonDark.webp') as ImageSourcePropType,
+	evening: require('../assets/bg-home/LumoEveningDark.webp') as ImageSourcePropType,
+}
+
+/** Dark cut of a home plate. Cream only — a theme's own art has no dark cut yet. */
+export function homeDarkBackgroundAsset(period: HomePeriod, themeId: ThemeId = 'cream'): ImageSourcePropType | undefined {
+	return themeHomeArt[themeId]?.[period] ? undefined : homeDarkArt[period]
+}
+
 export function homeBackgroundAsset(period: HomePeriod, themeId: ThemeId = 'cream'): ImageSourcePropType {
 	return themeHomeArt[themeId]?.[period] ?? homeArt[period] ?? homeArt.morning
 }
@@ -294,6 +308,32 @@ export function backgroundAsset(variant: BackgroundVariant, themeId: ThemeId = '
 }
 
 /** True once a theme brings its own plate for this variant — see `themeArt`. */
+/**
+ * Dark-mode cuts, keyed by the light plate they replace. Lumo is left exactly as
+ * painted and only the scene is graded down — see `scripts/dark-plates.py`.
+ * `walkDone` uses the painted night cut of the same scene instead.
+ *
+ * Keyed by SOURCE rather than variant so every variant borrowing a plate gets
+ * its dark cut for free. A plate with no entry here keeps the dimmed light plate.
+ */
+const darkArt = new Map<ImageSourcePropType, ImageSourcePropType>([
+	[art.onboarding, require('../assets/bg/01_onboardingDark.webp') as ImageSourcePropType],
+	[art.today, require('../assets/bg/02_todayDark.webp') as ImageSourcePropType],
+	[art.habits, require('../assets/bg/03_habitsDark.webp') as ImageSourcePropType],
+	[art.habitDetail, require('../assets/bg/04_habit_detailsDark.webp') as ImageSourcePropType],
+	[art.insights, require('../assets/bg/05_insightsDark.webp') as ImageSourcePropType],
+	[art.journal, require('../assets/bg/06_journalDark.webp') as ImageSourcePropType],
+	[art.challenge, require('../assets/bg/07_challengeDark.webp') as ImageSourcePropType],
+	[art.trophies, require('../assets/bg/08_trophiesDark.webp') as ImageSourcePropType],
+	[art.walking, require('../assets/walk/LumoWalkingDark.webp') as ImageSourcePropType],
+	[art.walkDone, require('../assets/walk/LumoWalkedNight.webp') as ImageSourcePropType],
+])
+
+/** The dark cut of a variant's plate, or undefined when it has none. */
+export function darkBackgroundAsset(variant: BackgroundVariant, themeId: ThemeId = 'cream'): ImageSourcePropType | undefined {
+	return darkArt.get(backgroundAsset(variant, themeId))
+}
+
 export function hasThemeArt(variant: BackgroundVariant, themeId: ThemeId): boolean {
 	return Boolean(themeArt[themeId]?.[variant])
 }

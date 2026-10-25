@@ -103,21 +103,76 @@ export type MoveMilestoneFamily = {
   variants: MoveChallengeVariant[];
 };
 
-/** Builds a family's three variants from its distance, so the set stays uniform. */
+/** Builds a family's variants from its distance, so the set stays uniform. */
 function family(input: {
   id: string;
   title: string;
   distanceKm: number;
   /** Days for the timed variant. */
   timedDays: number;
-  /** Friends required by the team variant. */
+  /**
+   * Friends required by the team variant — or ZERO for a family that has no
+   * team variant at all. See the ladder for which rungs those are.
+   */
   minFriends: number;
   unlock: MoveUnlockRule;
   pro: boolean;
 }): MoveMilestoneFamily {
   const targetM = input.distanceKm * 1000;
   const distance = `${input.distanceKm} km`;
-  const friendWord = `at least ${input.minFriends} ${input.minFriends === 1 ? "friend" : "friends"}`;
+  const variants: MoveChallengeVariant[] = [
+    {
+      id: `${input.id}-open`,
+      milestoneId: input.id,
+      title: "Go it alone",
+      description: `Finish ${distance} at your own pace, with no deadline.`,
+      kind: "solo",
+      targetM,
+      durationDays: null,
+      minFriends: 0
+    },
+    {
+      id: `${input.id}-timed`,
+      milestoneId: input.id,
+      title: "Beat the clock",
+      description: `Finish ${distance} within ${input.timedDays} ${input.timedDays === 1 ? "day" : "days"}.`,
+      kind: "solo",
+      targetM,
+      durationDays: input.timedDays,
+      minFriends: 0
+    }
+  ];
+
+  /**
+   * And the team route, only where the family asks for company.
+   *
+   * A rung with `minFriends: 0` has no "Bring friends" at all — not a locked
+   * one, not one behind a Plus badge. Getting a group together to each walk a
+   * kilometre is more organising than the thing being organised, and offering
+   * it there made the shortest rungs — the ones somebody meets on their first
+   * day — look like the app's social features were the point of them.
+   *
+   * Driven off `minFriends` rather than a flag of its own because it is the
+   * same fact said once: a team route needs a number of people, and a family
+   * that needs nobody has no team route to describe.
+   */
+  if (input.minFriends > 0) {
+    const friendWord = `at least ${input.minFriends} ${input.minFriends === 1 ? "friend" : "friends"}`;
+
+    variants.push({
+      id: `${input.id}-team`,
+      milestoneId: input.id,
+      title: "Bring friends",
+      description: `You and ${friendWord} each cover ${distance}.`,
+      kind: "team",
+      targetM,
+      // Team challenges are always time-boxed. An open-ended one never
+      // resolves — someone drifts off, and it sits in everybody's slot for
+      // months blocking anything else.
+      durationDays: input.timedDays,
+      minFriends: input.minFriends
+    });
+  }
 
   return {
     id: input.id,
@@ -126,41 +181,7 @@ function family(input: {
     distanceM: targetM,
     unlock: input.unlock,
     pro: input.pro,
-    variants: [
-      {
-        id: `${input.id}-open`,
-        milestoneId: input.id,
-        title: "Go it alone",
-        description: `Finish ${distance} at your own pace, with no deadline.`,
-        kind: "solo",
-        targetM,
-        durationDays: null,
-        minFriends: 0
-      },
-      {
-        id: `${input.id}-timed`,
-        milestoneId: input.id,
-        title: "Beat the clock",
-        description: `Finish ${distance} within ${input.timedDays} ${input.timedDays === 1 ? "day" : "days"}.`,
-        kind: "solo",
-        targetM,
-        durationDays: input.timedDays,
-        minFriends: 0
-      },
-      {
-        id: `${input.id}-team`,
-        milestoneId: input.id,
-        title: "Bring friends",
-        description: `You and ${friendWord} each cover ${distance}.`,
-        kind: "team",
-        targetM,
-        // Team challenges are always time-boxed. An open-ended one never
-        // resolves — someone drifts off, and it sits in everybody's slot for
-        // months blocking anything else.
-        durationDays: input.timedDays,
-        minFriends: input.minFriends
-      }
-    ]
+    variants
   };
 }
 
@@ -171,9 +192,17 @@ function family(input: {
  * whose id has no art falls back to a drawn hexagon rather than breaking.
  */
 export const MOVE_FAMILIES: MoveMilestoneFamily[] = [
-  family({ id: "1k", title: "1K Starter", distanceKm: 1, timedDays: 1, minFriends: 1, unlock: "any", pro: false }),
-  family({ id: "5k", title: "5K Explorer", distanceKm: 5, timedDays: 3, minFriends: 1, unlock: "any", pro: false }),
-  family({ id: "10k", title: "10K Explorer", distanceKm: 10, timedDays: 7, minFriends: 1, unlock: "any", pro: false }),
+  /**
+   * SOLO ONLY BELOW 25 KM — `minFriends: 0`, which is what drops the team route.
+   *
+   * The three shortest rungs are where somebody starts, usually alone and often
+   * on the day they install the app, and a kilometre is not a thing you assemble
+   * a group for. 25K is the first distance far enough to be worth agreeing to
+   * together, and it is where the ladder turns Plus in any case.
+   */
+  family({ id: "1k", title: "1K Starter", distanceKm: 1, timedDays: 1, minFriends: 0, unlock: "any", pro: false }),
+  family({ id: "5k", title: "5K Explorer", distanceKm: 5, timedDays: 3, minFriends: 0, unlock: "any", pro: false }),
+  family({ id: "10k", title: "10K Explorer", distanceKm: 10, timedDays: 7, minFriends: 0, unlock: "any", pro: false }),
   family({ id: "25k", title: "25K Adventurer", distanceKm: 25, timedDays: 7, minFriends: 2, unlock: "any", pro: true }),
   family({ id: "50k", title: "50K Voyager", distanceKm: 50, timedDays: 14, minFriends: 2, unlock: "teamPlusSolo", pro: true }),
   family({ id: "100k", title: "100K Champion", distanceKm: 100, timedDays: 30, minFriends: 3, unlock: "teamPlusSolo", pro: true }),

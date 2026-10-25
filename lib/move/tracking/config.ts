@@ -101,6 +101,32 @@ export const TRACKING_CONFIG = {
      */
     minLegM: 3,
     /**
+     * How much of a fix's own claimed error a leg has to clear before it counts.
+     *
+     * THE FLAT FLOOR ABOVE IS ONLY HONEST AT A GOOD FIX. Three metres is the
+     * right line when the receiver says ±5 m; at ±30 m — under trees, between
+     * buildings, on a cloudy start — a "leg" of four metres is very likely the
+     * same spot measured twice, and counting it is how a walk gains a kilometre
+     * it never went. The floor therefore scales with what the receiver admits
+     * to: at ±5 m it is the 3 m it always was, at ±30 m a leg has to be about
+     * twenty metres to be believed.
+     *
+     * Nothing is LOST by raising it, which is the part worth understanding. A
+     * rejected fix does not move the anchor the next one is measured from, so a
+     * genuine walk through a bad patch simply accumulates in coarser steps —
+     * four 20 m legs instead of twenty 4 m ones — and arrives at the same
+     * distance. What it cannot do any more is accumulate the noise.
+     */
+    accuracyLegFactor: 0.7,
+    /**
+     * And a ceiling on that, so the gate cannot shut altogether.
+     *
+     * At the 40 m the accuracy filter allows, an unbounded factor would demand
+     * 28 m legs, which is most of a city block — long enough that a real walk
+     * would visibly stop counting. 20 m is the most this rule may ask for.
+     */
+    accuracyLegMaxM: 20,
+    /**
      * A leg longer than this is treated as a break in the route rather than a
      * line to draw across: a tunnel, a lost signal, a phone that slept. The
      * distance is not counted and a new segment begins.
@@ -115,20 +141,72 @@ export const TRACKING_CONFIG = {
     stillSpeedMs: 0.5,
     /** Consistent movement for this long promotes STOPPED back to MOVING. */
     resumeAfterMs: 3_000,
-    /** Quiet for this long demotes MOVING to POSSIBLY_STOPPED. */
+    /**
+     * Quiet for this long demotes MOVING to POSSIBLY_STOPPED.
+     *
+     * A FLOOR, NOT THE WHOLE ANSWER — see `detectSpeedMs`.
+     */
     possiblyStoppedAfterMs: 6_000,
-    /** Still quiet this long after that, and it is a stop. */
-    stoppedAfterMs: 12_000
+    /** Still quiet this long after that, and it is a stop. Also a floor. */
+    stoppedAfterMs: 12_000,
+    /**
+     * The walking speed the quiet thresholds above are scaled by, in m/s.
+     *
+     * THIS IS THE FIX FOR "MOVING TIME STOPS WHILE I AM WALKING", and the
+     * reasoning is worth keeping. The detector only ever hears about movement
+     * through ACCEPTED legs, and a leg is accepted once it clears
+     * `minimumLegM` — which scales with the accuracy the receiver admits to
+     * (`accuracyLegFactor`). At ±5 m the floor is 3.5 m and a walker clears it
+     * every two or three seconds, so a flat six-second threshold is generous.
+     * At ±25 m the floor is 17.5 m and the SAME walker clears it only every
+     * twelve or thirteen seconds — so the flat twelve-second threshold fired
+     * between every pair of legs, the detector latched on `stopped`, the moving
+     * clock stopped and, because distance is only banked while not stopped, a
+     * ten-minute walk recorded zero metres.
+     *
+     * The thresholds therefore cannot be constants: they have to be at least as
+     * long as it TAKES the tracker to see movement at the accuracy it is
+     * getting. 1.0 m/s is a slow walk, so the scaled window is what a genuinely
+     * slow walker needs to clear the floor once. Standing still is unaffected —
+     * drift never clears the floor at all, so the quiet simply grows until the
+     * (larger) threshold is reached and the stop is called a few seconds later
+     * than it used to be. Which is honest: at ±25 m you cannot tell any sooner.
+     */
+    detectSpeedMs: 1.0
   },
 
   autoPause: {
     /**
-     * On by default, and overridable per activity. A walk that waits at three
-     * sets of lights should not report the waiting as walking — but somebody
-     * who wants the raw clock can say so, and a MANUAL pause always wins over
-     * whatever this decides.
+     * On by default, and overridable per activity. A MANUAL pause always wins
+     * over whatever this decides.
      */
-    enabled: true
+    enabled: true,
+    /**
+     * How long without an accurate fix before the tracker pauses itself.
+     *
+     * SIGNAL, NOT STILLNESS. Auto-pause used to fire when the movement detector
+     * reached `stopped`, and it was wrong far more often than it was right: the
+     * detector reads "quiet" during the whole GPS acquisition, so a walk paused
+     * itself within seconds of setting off, and every dip past the accuracy gate
+     * — a row of tall buildings, a bridge — paused it again mid-stride. Standing
+     * still is already handled where it belongs: `movingDuration` only advances
+     * while the detector says moving, and no distance is banked while stopped.
+     * Nothing was gained by flipping the status too, and a walk that says
+     * "paused" while you are walking is the app calling you a liar.
+     *
+     * So the only thing that pauses a recording by itself now is not knowing
+     * where you are — which is the one state where carrying on genuinely
+     * records nothing.
+     *
+     * 40 s. The window used to be set by `deferredUpdatesInterval` — iOS held
+     * background deliveries for fifteen seconds, so the newest fix in hand was
+     * routinely that old through no fault of the signal, and anything near it
+     * read a batched delivery as a blackout. Deferring is off now (see
+     * `backgroundLocation.ts`) and fixes arrive as they are taken, so this is
+     * measured against the signal alone: forty seconds without knowing where
+     * the phone is, awake or asleep, is a genuine blackout.
+     */
+    signalLostAfterMs: 40_000
   },
 
   pace: {
@@ -166,6 +244,45 @@ export const TRACKING_CONFIG = {
     staleAfterMs: 15_000
   },
 
+  smoothing: {
+    /**
+     * The tightest error bar a fix is believed at, in metres.
+     *
+     * A receiver that claims ±1 m is claiming better than consumer GPS gives,
+     * and taking that at face value makes the filter chase every reading — which
+     * is the same as not filtering. Five is about the honest best case outdoors.
+     */
+    minAccuracyM: 5,
+    /** What a fix with no accuracy at all is assumed to be worth. */
+    assumedAccuracyM: 20,
+    /**
+     * How hard the walker is allowed to change speed, in m/s². This is the
+     * process noise of the constant-velocity model — see `smoothing.ts`.
+     *
+     * IT REPLACED A PLAIN DRIFT TERM, and the reason is the whole point of that
+     * rewrite. The old model assumed you were standing still and charged the
+     * walking itself to noise; the correction it applied was therefore always
+     * behind, and at a ±10 m fix it moved the estimate only about a seventh of
+     * the way to each reading — roughly eight metres of lag at walking pace,
+     * with corners rounded off and cut across. Modelling the velocity removes
+     * that lag entirely, so this number only has to describe how abruptly a
+     * person can speed up, slow down or turn.
+     *
+     * 0.6 m/s² is a brisk change of pace over a second. Too low and a corner
+     * takes several fixes to follow; too high and the filter chases noise again.
+     */
+    accelMs2: 0.6,
+    /**
+     * The longest gap the velocity is carried across, in ms.
+     *
+     * Beyond it the estimate keeps its position and forgets which way it was
+     * going: a fix after a long silence says nothing about the heading before
+     * it, and predicting forward from a stale velocity is exactly how a filter
+     * invents a position nobody was at.
+     */
+    maxCarryMs: 8_000
+  },
+
   elevation: {
     /**
      * How far the altitude must climb from the last reference before any of it
@@ -192,10 +309,40 @@ export const TRACKING_CONFIG = {
      * yet, and easing off there would cost the first few metres of every
      * restart, which is the accuracy that matters most.
      */
-    movingIntervalMs: 2_000,
-    movingDistanceM: 5,
+    movingIntervalMs: 1_000,
+    /**
+     * NO DISTANCE FILTER WHILE MOVING, which is the setting the drawn route
+     * lives or dies by.
+     *
+     * A distance filter tells the receiver not to bother us until the phone has
+     * moved that far, and the fix it finally delivers is the one at the END of
+     * that stretch — so at 5 m a walk is sampled as a series of 5 m chords with
+     * every curve between them cut off. Corners came back clipped, a bend in a
+     * path came back as two straight lines, and no amount of smoothing puts
+     * back a shape that was never sampled.
+     *
+     * Zero means every fix the receiver produces, about one a second, which is
+     * what the smoother and the minimum leg are both tuned for. Standing still
+     * is paid for by the stopped profile below rather than by throwing away the
+     * detail of the walking.
+     */
+    movingDistanceM: 0,
     stoppedIntervalMs: 10_000,
-    stoppedDistanceM: 15
+    stoppedDistanceM: 15,
+    /**
+     * How long the movement detector has to have said `stopped` before the
+     * sampling actually eases off.
+     *
+     * Changing profile means restarting location updates, and a restart costs a
+     * fresh acquisition — the receiver drops its lock and the first fixes back
+     * are the bad ones. At a crossing, a kerb or a shop window that is a price
+     * paid several times a mile for a few seconds of radio each time, and it is
+     * paid in exactly the places a route needs to be sharp.
+     *
+     * A minute of genuine stillness is a stop worth saving battery on. Anything
+     * shorter is a walk.
+     */
+    stoppedSettleMs: 60_000
   },
 
   storage: {

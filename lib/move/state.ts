@@ -1,6 +1,7 @@
 import { addDays } from "@/lib/date";
 import { normalizeAchievement, type MoveAchievement } from "@/lib/move/achievements";
 import { normalizeActiveChallenge, type ActiveMoveChallenge } from "@/lib/move/activeChallenge";
+import { normalizeGoal, type MoveGoal } from "@/lib/move/goal";
 import { emptyTotals, mergeSummaries, normalizeSummary, normalizeTotals } from "@/lib/move/movement";
 import type { MovementSummary, MoveTotals } from "@/lib/move/types";
 
@@ -55,6 +56,16 @@ export type MoveState = {
   lastSyncedDate: string | null;
   /** Challenge ids already celebrated, so the finish screen fires once. */
   celebrated: string[];
+  /**
+   * The reader's own renewing distance target, or null.
+   *
+   * Singular, like `active` above and for the same reason: two goals at once is
+   * two answers to "how much am I walking", and the type is the cheapest place
+   * to say there is only one. It sits ALONGSIDE `active` rather than competing
+   * with it — see `lib/move/goal.ts` for why a goal and a challenge are
+   * different things that both run.
+   */
+  goal: MoveGoal | null;
 };
 
 export const emptyMoveState: MoveState = {
@@ -64,7 +75,8 @@ export const emptyMoveState: MoveState = {
   summaries: [],
   totals: emptyTotals,
   lastSyncedDate: null,
-  celebrated: []
+  celebrated: [],
+  goal: null
 };
 
 /**
@@ -74,12 +86,17 @@ export const emptyMoveState: MoveState = {
  * — the app has no schema version, so every reader repairs what it can and
  * drops only what it cannot use.
  *
- * ## Migrating off goals
+ * ## Migrating off the OLD goals
  *
- * A stored `goals` array from the old system is DROPPED, silently. A goal was a
- * recurring target with no milestone and no fixed distance, so there is no
- * honest challenge to turn one into — inventing a mapping would hand someone a
- * challenge they never chose.
+ * A stored `goals` ARRAY from the system that predates challenges is DROPPED,
+ * silently. Those goals were recurring targets with no milestone and no fixed
+ * distance, so there was no honest challenge to turn one into — inventing a
+ * mapping would have handed someone a challenge they never chose.
+ *
+ * The singular `goal` field read below is a different thing under a different
+ * key, added after: one renewing distance target the reader sets for themselves
+ * (see `lib/move/goal.ts`). A device carrying the old array gets `null` and sets
+ * a new one if it wants; nothing is migrated between them, deliberately.
  *
  * What survives is the only thing that matters: `summaries` and `totals`. Every
  * metre ever recorded, the cumulative ledger, and therefore the journey are
@@ -140,7 +157,8 @@ export function normalizeMoveState(value: unknown): MoveState {
     summaries: mergeSummaries([], summaries),
     totals: normalizeTotals(raw.totals),
     lastSyncedDate: typeof raw.lastSyncedDate === "string" ? raw.lastSyncedDate : null,
-    celebrated: Array.isArray(raw.celebrated) ? raw.celebrated.filter((id): id is string => typeof id === "string") : []
+    celebrated: Array.isArray(raw.celebrated) ? raw.celebrated.filter((id): id is string => typeof id === "string") : [],
+    goal: normalizeGoal(raw.goal)
   };
 }
 

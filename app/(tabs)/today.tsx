@@ -3,8 +3,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, AppState, ScrollView, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import ConfettiCannon from 'react-native-confetti-cannon'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { fontFamilies, layout, radius, spacing, tileRadius } from '@/constants/theme'
-import { TOOLS } from '@/constants/tools'
+import { fontFamilies, layout, onArtChrome, radius, spacing, tileRadius } from '@/constants/theme'
+import { GOODIES_ENABLED, TOOLS } from '@/constants/tools'
 import { MoveHomeCard } from '@/components/move/MoveCards'
 import { useMove } from '@/context/MoveContext'
 import { addDays, startOfWeekMonday } from '@/lib/date'
@@ -36,14 +36,6 @@ const CONTENT_GAP = spacing.xs
 /** What actually separates the header from the greeting: the row gap above,
  *  plus the extra top margin the greeting block drops by. */
 const HERO_TOP_GAP = CONTENT_GAP + spacing.xl
-/**
- * The avatar's ring carries the card colour, but semi-transparent — it sits
- * directly on the backdrop plate's sky, and a solid fill up there reads as a
- * chip pasted over the artwork. Matches the day selector beside it. The
- * settings button stays a bare outline: it holds a glyph rather than a
- * portrait, so it has nothing to sit on.
- */
-const HEADER_FILL_ALPHA = 'A6'
 
 /**
  * One hue per destination, sampled from that screen's own art.
@@ -252,7 +244,7 @@ export default function TodayScreen() {
 						hitSlop={8}
 						style={({ pressed }) => [
 							styles.avatarButton,
-							{ backgroundColor: alpha(palette.card, HEADER_FILL_ALPHA), opacity: pressed ? 0.7 : 1 },
+							{ backgroundColor: alpha(palette.card, onArtChrome.fill), opacity: pressed ? 0.7 : 1 },
 						]}
 					>
 						<Avatar config={avatar} size={42} backgroundColor={palette.greenSoft} />
@@ -269,7 +261,14 @@ export default function TodayScreen() {
 						hitSlop={10}
 						style={({ pressed }) => [
 							styles.headerButton,
-							{ borderColor: alpha(palette.ink, '2E'), opacity: pressed ? 0.6 : 1 },
+							{
+								backgroundColor: alpha(palette.card, onArtChrome.fill),
+								borderColor: alpha(palette.ink, '2E'),
+								// Dropped in dark mode, as every control wearing this surface does:
+								// the navy has nothing for a soft shadow to catch.
+								shadowColor: isDark ? 'transparent' : palette.shadow,
+								opacity: pressed ? 0.6 : 1,
+							},
 						]}
 					>
 						{/* Ink glyph, but only a tint of it on the ring. Full ink on both
@@ -321,10 +320,17 @@ export default function TodayScreen() {
 				title={isToday ? 'Today’s Habits' : 'Habits'}
 			/>
 
-			<DailyReflectionCard
-				prompt={reflectionPromptFor(selectedDateKey)}
-				onPress={() => router.push(`/journal/${selectedDateKey}`)}
-			/>
+			{/* Given a little more room than the page's row gap: the habits card
+			    above it is the day's work, and the reflection is a change of
+			    subject rather than the next item in the same list. Wrapped rather
+			    than styled on the card itself, which the Journal tab also uses at
+			    the page's own spacing. */}
+			<View style={styles.reflectionSection}>
+				<DailyReflectionCard
+					prompt={reflectionPromptFor(selectedDateKey)}
+					onPress={() => router.push(`/journal/${selectedDateKey}`)}
+				/>
+			</View>
 
 			{/* Lumo Move gets its own section — NOT a habit card and not a Goodies
 			    row. It is a major feature with its own tab, and burying it in a
@@ -346,28 +352,34 @@ export default function TodayScreen() {
 			) : null}
 
 			{/* Two cards, same shape as the habits card above them. Things you DO
-			    on top, things you read below. */}
-			<View style={styles.toolsSection}>
-				<AppText variant='titleSmall' color={palette.ink} style={styles.sectionTitle}>
-					Goodies
-				</AppText>
-				<Card style={styles.resourceCard}>
-					{TOOLS.map((tool, index) => (
-						<ResourceRow
-							key={tool.slug}
-							accent={tool.accent}
-							icon={tool.icon}
-							label={tool.name}
-							description={tool.tagline}
-							divided={index > 0}
-							disabled={!tool.available}
-							onPress={() => router.push(tool.route as Href)}
-						/>
-					))}
-				</Card>
-			</View>
+			    on top, things you read below. Goodies is off for now — see
+			    GOODIES_ENABLED — which leaves Explore as the only one. */}
+			{GOODIES_ENABLED ? (
+				<View style={[styles.toolsSection, styles.sectionLead]}>
+					<AppText variant='titleSmall' color={palette.ink} style={styles.sectionTitle}>
+						Goodies
+					</AppText>
+					<Card style={styles.resourceCard}>
+						{TOOLS.map((tool, index) => (
+							<ResourceRow
+								key={tool.slug}
+								accent={tool.accent}
+								icon={tool.icon}
+								label={tool.name}
+								description={tool.tagline}
+								divided={index > 0}
+								disabled={!tool.available}
+								onPress={() => router.push(tool.route as Href)}
+							/>
+						))}
+					</Card>
+				</View>
+			) : null}
 
-			<View style={styles.exploreSection}>
+			{/* Carries the break under the day's cards itself while Goodies is
+			    hidden, so the page does not run straight from the last card into a
+			    section heading. */}
+			<View style={[styles.exploreSection, GOODIES_ENABLED ? null : styles.sectionLead]}>
 				<AppText variant='titleSmall' color={palette.ink} style={styles.sectionTitle}>
 					Explore
 				</AppText>
@@ -440,6 +452,9 @@ const styles = StyleSheet.create({
 		borderRadius: radius.pill,
 		overflow: 'hidden',
 	},
+	// Wears the same surface as the date pill it sits beside — the fill and the
+	// shadow's colour come from the palette at the use site, so only the shadow's
+	// geometry is here. See `onArtChrome`.
 	headerButton: {
 		width: 38,
 		height: 38,
@@ -447,6 +462,7 @@ const styles = StyleSheet.create({
 		justifyContent: 'center',
 		borderRadius: radius.pill,
 		borderWidth: StyleSheet.hairlineWidth,
+		...onArtChrome.shadow,
 	},
 	hero: {
 		// Dropped clear of the header so the greeting opens the scene rather
@@ -512,21 +528,32 @@ const styles = StyleSheet.create({
 		width: '36%',
 	},
 	// The same rhythm as Explore and Goodies, so the three read as one column.
+	// On top of the page's CONTENT_GAP rather than instead of it, so the card sits
+	// 16pt under the habits above it — enough to read as its own thing, short of
+	// the section break `sectionLead` marks further down.
+	reflectionSection: {
+		marginTop: spacing.xs,
+	},
 	moveSection: {
 		gap: spacing.sm,
 	},
 	toolsSection: {
 		// Matches Explore's heading gap, so the two sections sit on one rhythm.
 		gap: spacing.ml,
-		// Top is larger than Explore's: this is the first section heading after
-		// the day's cards, so it carries the break between "today's work" and
-		// everything else. The BOTTOM matches Explore exactly.
-		marginTop: spacing.xl,
+		// And its bottom matches Explore's exactly. The TOP comes from
+		// `sectionLead`, which whichever section runs first wears.
 		marginBottom: spacing.md,
 	},
 	exploreSection: {
 		gap: spacing.ml,
 		marginBottom: spacing.md,
+	},
+	// The break between "today's work" and everything below it, larger than the
+	// gap the sections keep from each other. Worn by the FIRST of them — Goodies
+	// normally, Explore while Goodies is hidden — so hiding one never runs the
+	// day's last card straight into a section heading.
+	sectionLead: {
+		marginTop: spacing.xl,
 	},
 	// The rows carry their own vertical padding, so the card only insets
 	// horizontally and adds a hair top and bottom.

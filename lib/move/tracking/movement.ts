@@ -1,4 +1,5 @@
 import { TRACKING_CONFIG } from "@/lib/move/tracking/config";
+import { minimumLegM } from "@/lib/move/tracking/filter";
 import type { GpsQuality, MovementState } from "@/lib/move/tracking/types";
 
 /**
@@ -18,6 +19,11 @@ import type { GpsQuality, MovementState } from "@/lib/move/tracking/types";
  * `resumeAfterMs` before `stopped` lifts. Going the other way, `possiblyStopped`
  * is entered on the first quiet stretch because nothing depends on it — it is
  * the state that decides nothing, and exists so `stopped` can be slow.
+ *
+ * THE 6 s AND 12 s ABOVE ARE FLOORS, NOT FIXED WINDOWS. They are scaled by the
+ * accuracy of the fixes actually arriving, because "quiet" here means "no
+ * accepted leg", and how long a walker takes to produce one is set by the
+ * accuracy-scaled minimum leg. See `movementThresholds`.
  */
 
 export type MovementInput = {
@@ -32,12 +38,54 @@ export type MovementInput = {
    * speed, or steps in the window on a device that counts them.
    */
   moved: boolean;
+  /**
+   * The accuracy the receiver is currently claiming, which sets how long the
+   * detector must wait before quiet means anything. Undefined leaves the flat
+   * floors in place — see `movementThresholds`.
+   */
+  accuracyM?: number | null;
+  /** Whether the pedometer is corroborating, which halves the minimum leg. */
+  stepping?: boolean;
 };
 
 export type MovementOutcome = { state: MovementState; since: number; lastMovementAt: number };
 
+/**
+ * How long quiet has to last, at the accuracy currently on offer.
+ *
+ * The detector hears about movement only through accepted legs, and a leg is
+ * accepted once it clears `minimumLegM` — which grows with the claimed error.
+ * So the wait before quiet is evidence of anything has to grow with it too, or
+ * a walker under trees is called stopped for the crime of being measured badly.
+ * `detectSpeedMs` turns that distance into the time a slow walker needs for one
+ * leg; the flat floors still apply wherever they are the longer of the two.
+ */
+export function movementThresholds(accuracyM?: number | null, stepping = false): { possiblyStoppedAfterMs: number; stoppedAfterMs: number } {
+  const { movement } = TRACKING_CONFIG;
+  /**
+   * A fix outside the accuracy gate gets the FLAT floors, not a stretched one.
+   *
+   * The scaling answers "how long does a walker take to produce a leg this
+   * receiver would accept", and past the gate the answer is never — no leg is
+   * accepted at any length. Reading its claimed error as a longer minimum leg
+   * would stretch the thresholds on the strength of a fix that told us nothing,
+   * so a walk that lost the signal entirely would go on calling itself moving
+   * for the better part of a minute.
+   */
+  const usable = typeof accuracyM === "number" && accuracyM > TRACKING_CONFIG.location.rejectAccuracyAboveM ? null : accuracyM;
+  const detectMs = (minimumLegM(usable, stepping) / movement.detectSpeedMs) * 1000;
+
+  return {
+    possiblyStoppedAfterMs: Math.max(movement.possiblyStoppedAfterMs, detectMs),
+    // Twice the detection window before a stop is called: one missed leg is a
+    // slow patch, two in a row is somebody who has actually stopped walking.
+    stoppedAfterMs: Math.max(movement.stoppedAfterMs, detectMs * 2)
+  };
+}
+
 export function stepMovement(input: MovementInput): MovementOutcome {
   const { movement } = TRACKING_CONFIG;
+  const thresholds = movementThresholds(input.accuracyM, input.stepping === true);
   const lastMovementAt = input.moved ? input.now : input.lastMovementAt;
   const quietFor = input.now - lastMovementAt;
 
@@ -57,13 +105,13 @@ export function stepMovement(input: MovementInput): MovementOutcome {
       : { state: "moving", since: input.now, lastMovementAt };
   }
 
-  if (quietFor >= movement.stoppedAfterMs) {
+  if (quietFor >= thresholds.stoppedAfterMs) {
     return input.state === "stopped"
       ? { state: "stopped", since: input.since, lastMovementAt }
       : { state: "stopped", since: input.now, lastMovementAt };
   }
 
-  if (quietFor >= movement.possiblyStoppedAfterMs) {
+  if (quietFor >= thresholds.possiblyStoppedAfterMs) {
     return input.state === "possiblyStopped"
       ? { state: "possiblyStopped", since: input.since, lastMovementAt }
       : { state: "possiblyStopped", since: input.now, lastMovementAt };
@@ -80,7 +128,19 @@ export function stepMovement(input: MovementInput): MovementOutcome {
  * read as "no opinion": a device without one has to track exactly as well, with
  * only the GPS to go on.
  */
-export function isMovement(input: { legM: number; elapsedMs: number; stepping?: boolean }): boolean {
+export function isMovement(input: { legM: number; elapsedMs: number; stepping?: boolean; platformSpeedMs?: number | null }): boolean {
+  /**
+   * The receiver's own speed wins when it gives one.
+   *
+   * It is Doppler, not position differencing, so it stays near zero while the
+   * position wanders metres a second around a phone on a table — the drift that
+   * otherwise reads as a slow walk and banks distance. iOS reports -1 and
+   * Android null when it has no figure, which falls through to the leg.
+   */
+  if (typeof input.platformSpeedMs === "number" && Number.isFinite(input.platformSpeedMs) && input.platformSpeedMs >= 0) {
+    return input.platformSpeedMs >= TRACKING_CONFIG.movement.stillSpeedMs || (input.stepping === true && input.legM > 0);
+  }
+
   if (input.elapsedMs <= 0) {
     return false;
   }

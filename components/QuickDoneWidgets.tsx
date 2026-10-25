@@ -227,45 +227,33 @@ function WidgetHabitRow({
     // Tapping only adds a completion; undoing a done habit is long-press only
     // (consistent with group activities) so it can't happen by accident.
     if (canAddCompletion) {
-      confirmAddCompletion();
+      addCompletion();
     }
   }
 
-  function confirmAddCompletion() {
+  /**
+   * Ticking a habit happens on the tap. No dialog.
+   *
+   * There used to be one, and the asymmetry it created was the problem: the
+   * whole reason undo is a long press is that it is the destructive direction,
+   * and putting a dialog in FRONT of the safe direction too made the app ask
+   * permission for the one thing it exists to make easy. Ticking four habits
+   * over breakfast was eight taps.
+   *
+   * Nothing is lost by dropping it, because the mistake it guarded against is
+   * already covered: a completion added by accident is undone by a hold and a
+   * confirm, and the haptic on the tap says it landed.
+   */
+  function addCompletion() {
     if (promptOpen.current) {
       return;
     }
 
-    promptOpen.current = true;
+    // A tick is not a prompt, but it still holds the tap guard for a moment —
+    // a double tap on a "3/5 today" row would otherwise log two.
     suppressTapUntil.current = Date.now() + 500;
-    Alert.alert(
-      isMultiple ? "Add a completion?" : "Complete habit?",
-      isMultiple
-        ? `Log one more for ${habit.name} — that makes ${Math.min(count + 1, target)}/${target} today.`
-        : `Mark ${habit.name} as done for today?`,
-      [
-        {
-          text: "Not yet",
-          style: "cancel",
-          onPress: () => {
-            promptOpen.current = false;
-          }
-        },
-        {
-          text: isMultiple ? "Add" : "Complete",
-          onPress: () => {
-            promptOpen.current = false;
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-            completeHabit(habit.id, dateKey);
-          }
-        }
-      ],
-      {
-        onDismiss: () => {
-          promptOpen.current = false;
-        }
-      }
-    );
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    completeHabit(habit.id, dateKey);
   }
 
   function handleUndoCompletion(trigger: "tap" | "longPress" = "tap") {

@@ -10,6 +10,9 @@
       "ios": {
         "simulator": true,
         "image": "latest"
+      },
+      "android": {
+        "buildType": "apk"
       }
     },
     "preview": {
@@ -17,9 +20,12 @@
       "ios": {
         "image": "latest"
       },
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://rwqptcszfafcahoynyyf.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_Y3s8lSlKqpueloXQhz5YdA_DQDKTtzd"
+        "EXPO_PUBLIC_SUPABASE_URL": "https://itnnwdzurljzyfwlbrre.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_3yOollpYIk6_Nc6uM_CiXw_UpUnx1W2"
       }
     },
     "production": {
@@ -27,13 +33,23 @@
       "ios": {
         "image": "macos-tahoe-26.4-xcode-26.4"
       },
+      "android": {
+        "buildType": "app-bundle"
+      },
       "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://rwqptcszfafcahoynyyf.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_Y3s8lSlKqpueloXQhz5YdA_DQDKTtzd"
+        "EXPO_PUBLIC_SUPABASE_URL": "https://itnnwdzurljzyfwlbrre.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_3yOollpYIk6_Nc6uM_CiXw_UpUnx1W2"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./credentials/play-service-account.json",
+        "track": "internal",
+        "releaseStatus": "draft",
+        "changesNotSentForReview": false
+      }
+    }
   }
 }

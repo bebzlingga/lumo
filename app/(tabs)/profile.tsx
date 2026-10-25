@@ -4,7 +4,6 @@ import { Modal, ScrollView, StyleSheet, View, useWindowDimensions } from "react-
 import QRCode from "react-native-qrcode-svg";
 import { Pressable } from "@/components/Pressable";
 import { Avatar } from "@/components/Avatar";
-import { BadgeDialog } from "@/components/BadgeDialog";
 import { BadgeImage } from "@/components/BadgeImage";
 import { Icon, type IconName } from "@/components/Icon";
 import { OverallStatsView } from "@/components/StatisticsViews";
@@ -13,7 +12,7 @@ import { AppText, Screen } from "@/components/ui";
 import { fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { readableOn } from "@/lib/color";
-import { habitBadges, type BadgeProgress } from "@/lib/badges";
+import { habitBadges } from "@/lib/badges";
 import {
   bestCurrentStreakAcrossHabits,
   bestStreakAcrossHabits,
@@ -116,7 +115,6 @@ export default function ProfileScreen() {
   // Badges come off the persisted high-water mark rather than stats.bestStreak,
   // which only sees the habits that still exist.
   const allBadges = React.useMemo(() => habitBadges(settings.bestStreakEver), [settings.bestStreakEver]);
-  const [selectedBadge, setSelectedBadge] = React.useState<BadgeProgress | null>(null);
 
   return (
     <Screen
@@ -180,14 +178,24 @@ export default function ProfileScreen() {
       </View>
 
       {/* Every badge, not just the earned ones — a locked badge you can see is
-          the thing that pulls someone back tomorrow. Tap one for what it takes. */}
+          the thing that pulls someone back tomorrow.
+
+          A tap opens the BADGES PAGE rather than a dialog about the one that was
+          tapped. This strip is a preview of a shelf that exists in full one
+          screen away — with the Move milestones on it, which this strip does not
+          carry — and answering "what does this one take?" in a sheet here left
+          somebody with no way of discovering the rest of them. The page shows the
+          same badges and still opens that dialog when one is tapped there, so
+          nothing is lost by going through it. */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.badgeRow} style={styles.badgeScroll}>
         {allBadges.map((badge) => (
           <Pressable
             key={`${badge.tier}-${badge.threshold}`}
             accessibilityRole="button"
-            accessibilityLabel={`${badge.name}. ${badge.earned ? "Earned" : `Locked, needs a ${badge.threshold} day streak`}`}
-            onPress={() => setSelectedBadge(badge)}
+            accessibilityLabel={`${badge.name}. ${
+              badge.earned ? "Earned" : `Locked, needs a ${badge.threshold} day streak`
+            }. Opens all badges.`}
+            onPress={() => router.push("/badges")}
             style={({ pressed }) => [styles.badgeItem, { opacity: pressed ? 0.7 : 1 }]}
           >
             {/* The illustration stands on the canvas — no card, no tinted
@@ -279,7 +287,6 @@ export default function ProfileScreen() {
           every habit at once, rather than one habit at a time. */}
       <OverallStatsView habits={habits} />
 
-      <BadgeDialog badge={selectedBadge} onClose={() => setSelectedBadge(null)} />
 
       <Modal visible={qrVisible} transparent animationType="fade" onRequestClose={() => setQrVisible(false)}>
         <View style={styles.qrOverlay}>

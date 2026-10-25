@@ -25,12 +25,22 @@ export function MoveProgressBar({
   accent,
   /** Announced to a screen reader in place of the raw ratio. */
   label,
+  /**
+   * What the unfilled part is painted.
+   *
+   * Defaults to the hairline wash every inline bar uses. A bar carrying a page
+   * on its own passes a tint of its own accent instead: at nought per cent the
+   * track IS the readout, and a grey rule reads as a divider rather than as a
+   * distance nobody has walked yet.
+   */
+  track,
   height = 8,
   style
 }: {
   ratio: number;
   accent: string;
   label?: string;
+  track?: string;
   height?: number;
   style?: object;
 }) {
@@ -42,7 +52,7 @@ export function MoveProgressBar({
       accessible
       accessibilityRole="progressbar"
       accessibilityValue={{ min: 0, max: 100, now: percent, text: label }}
-      style={[styles.track, { height, borderRadius: height, backgroundColor: alpha(palette.hairline, "80") }, style]}
+      style={[styles.track, { height, borderRadius: height, backgroundColor: track ?? alpha(palette.hairline, "80") }, style]}
     >
       <View style={[styles.fill, { width: `${percent}%`, backgroundColor: accent, borderRadius: height }]} />
     </View>
@@ -82,7 +92,24 @@ export function MoveProgressRow({
 }
 
 const styles = StyleSheet.create({
+  /**
+   * `alignSelf: stretch`, and it is not decoration — without it the bar can
+   * vanish outright.
+   *
+   * The track has no width of its own: it is a row of one child whose width is
+   * a PERCENTAGE of it. In a column that stretches its children — which is
+   * every ordinary card — that resolves fine. Inside a container that centres
+   * them, the track falls back to hugging its content, the fill has no parent
+   * width to be a percentage of, and the whole bar lays out at zero wide. It
+   * does not misdraw, it is simply not there, which is a hard thing to see in a
+   * component whose empty state is a faint wash.
+   *
+   * Stretching here rather than at each call site because there is no case for
+   * a bar that hugs its fill, and a caller that genuinely wants a narrower one
+   * still overrides it with `style`.
+   */
   track: {
+    alignSelf: "stretch",
     overflow: "hidden"
   },
   fill: {

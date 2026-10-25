@@ -5,6 +5,7 @@ import {
   Alert,
   Animated,
   AppState,
+  Linking,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -19,6 +20,8 @@ import { Avatar } from "@/components/Avatar";
 import { MoveBadge } from "@/components/move/MoveBadge";
 import { MoveInviteCard } from "@/components/move/MoveInviteCard";
 import { WalkInviteCard } from "@/components/move/WalkInviteCard";
+import { MoveActivityChart } from "@/components/move/MoveActivityChart";
+import { MoveGoalBar } from "@/components/move/MoveGoalBar";
 import { MoveScopeTabs, type MoveScope } from "@/components/move/MoveScopeTabs";
 import { Pressable } from "@/components/Pressable";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -33,8 +36,10 @@ import { addDays, formatRelativeDate, toDateKey } from "@/lib/date";
 import { hasMilestone } from "@/lib/move/achievements";
 import { trackMove } from "@/lib/move/analytics";
 import { START_REFUSAL_COPY } from "@/lib/move/activeChallenge";
+import { notificationsPermitted, requestNotificationPermissions } from "@/lib/notifications";
 import { challengeClient, onMoveInvitesChanged, type MoveInvite, type WalkInvite } from "@/lib/move/challengeClient";
 import { MOVE_FAMILIES } from "@/lib/move/challengeDefs";
+import { MOVE_WITH_FRIENDS_ENABLED } from "@/lib/move/gating";
 import { clearWalkSession, loadWalkSession, saveWalkSession } from "@/lib/move/walkSession";
 import { formatKilometres, formatMinutes, formatSteps } from "@/lib/move/movement";
 import { MovePermissionCard } from "@/components/move/MoveCards";
@@ -75,6 +80,15 @@ const ACTIVE_SCENE_LIFT = 20;
 const OVERALL_SCENE_LIFT = 20;
 
 /**
+ * How many days the activity line covers.
+ *
+ * A fortnight: long enough to have a shape rather than being the day list in
+ * another form, short enough that the days stay far enough apart to read. See
+ * `MoveActivityChart`, which is where that judgement is argued out.
+ */
+const ACTIVITY_WINDOW_DAYS = 14;
+
+/**
  * What a walk gives back, in five.
  *
  * The full list runs to a dozen; a dozen chips is a leaflet, and nobody reads a
@@ -103,7 +117,7 @@ const BENEFITS: { icon: IconName; label: string }[] = [
  */
 export default function MoveScreen() {
   const router = useRouter();
-  const { palette } = useLumo();
+  const { palette, isDark } = useLumo();
   const accent = useMoveAccent();
   const move = useMove();
 
@@ -145,6 +159,14 @@ export default function MoveScreen() {
    * backgrounded, and a relaunch — see `lib/move/walkSession.ts`.
    */
   const [joinedSession, setJoinedSession] = React.useState<{ sessionId: string | null; withName?: string } | null>(null);
+  /**
+   * Whether this device will show a banner when an invitation lands.
+   *
+   * Checked because the failure is otherwise invisible: the row is written, the
+   * realtime event arrives, and nothing appears — indistinguishable from the feature
+   * being broken. Null while unknown, so nothing is claimed before the answer.
+   */
+  const [notifyOn, setNotifyOn] = React.useState<boolean | null>(null);
   /** Both kinds at once — the carousel shows them in one deck. */
   const invitationCount = invites.length + walkInvites.length;
   const { width: screenWidth } = useWindowDimensions();
@@ -265,29 +287,19 @@ export default function MoveScreen() {
    * somebody is most likely to look.
    */
   /**
-   * Everything recorded on a given day, from BOTH sources.
+   * Everything recorded on a given day, from both sources — health data and
+   * tracked walks, reconciled.
    *
-   * Health data covers every step taken, phone in hand or not, and is the right
-   * figure whenever it is available. A tracked walk is the only figure when it
-   * is NOT — no health permission, or no health module in the build — and
-   * without this the list called a day with a recorded walk on it "No activity",
-   * which is how this was found.
+   * Taken from the CONTEXT rather than worked out here. It used to be computed
+   * on this screen, and the goal — which is worked out in the context — did its
+   * own simpler thing off `summaries` alone. The two then disagreed exactly
+   * where it hurt: a walk recorded an hour ago showed on this list and was
+   * invisible to the goal, because with health permission granted a tracked walk
+   * reaches `summaries` only once the platform reports it back.
    *
-   * `max`, not a sum: with health permission granted the walk is already inside
-   * the day's health figure, so adding them would count the same kilometres
-   * twice. The same rule `move.creditActivity` uses for challenges.
+   * One implementation, one answer. See `dayDistance` in `MoveContext`.
    */
-  const dayDistance = React.useCallback(
-    (dateKey: string) => {
-      const health = move.state.summaries.find((entry) => entry.date === dateKey)?.distanceMeters ?? 0;
-      const tracked = walkHistory
-        .filter((record) => toDateKey(new Date(record.startedAt)) === dateKey)
-        .reduce((total, record) => total + Math.max(0, record.distanceM), 0);
-
-      return Math.max(health, tracked);
-    },
-    [move.state.summaries, walkHistory]
-  );
+  const dayDistance = move.dayDistance;
 
   const periodTotals = React.useMemo(() => {
     const sum = (days: number) =>
@@ -298,6 +310,32 @@ export default function MoveScreen() {
 
     return { today: dayDistance(move.todayKey), week: sum(7), month: sum(30) };
   }, [move.todayKey, dayDistance]);
+
+  /**
+   * The fortnight behind the chart, OLDEST first.
+   *
+   * Reversed against `lastSevenDays`, which is a list and reads newest at the
+   * top; a line reads left to right in time, and a chart drawn backwards is a
+   * chart that says the opposite of what it shows.
+   */
+  const activityWindow = React.useMemo(
+    () =>
+      Array.from({ length: ACTIVITY_WINDOW_DAYS }, (_, index) => {
+        const dateKey = addDays(move.todayKey, -(ACTIVITY_WINDOW_DAYS - 1 - index));
+
+        return { dateKey, metres: dayDistance(dateKey) };
+      }),
+    [move.todayKey, dayDistance]
+  );
+  /**
+   * Whether the chart is worth drawing at all.
+   *
+   * A fortnight of rest days is a flat line on the floor, which reads as a
+   * broken chart rather than as an honest zero — and the account that has it is
+   * the one least helped by being shown a trend. The list below still spells out
+   * every one of those days.
+   */
+  const hasActivity = activityWindow.some((entry) => entry.metres > 0);
 
   const lastSevenDays = React.useMemo(() => {
     return Array.from({ length: 7 }, (_, index) => {
@@ -353,6 +391,18 @@ export default function MoveScreen() {
    */
   const loadInvites = React.useCallback(async () => {
     /**
+     * Company switched off — see `MOVE_WITH_FRIENDS_ENABLED`.
+     *
+     * Cut here rather than at each of the four render sites: both lists stay
+     * empty, so the carousel, the two kinds of card and the count above them all
+     * collapse to nothing on their own. The rows may well exist in the database,
+     * sent from a build that still has the feature; this one simply does not ask.
+     */
+    if (!MOVE_WITH_FRIENDS_ENABLED) {
+      return;
+    }
+
+    /**
      * The two lists are loaded INDEPENDENTLY, not in one `Promise.all` under one
      * catch.
      *
@@ -405,14 +455,24 @@ export default function MoveScreen() {
 
       void loadInvites();
 
-      // The session survives this screen, so it is re-read on every visit rather
-      // than trusted from the last one: it may have been started, finished or gone
-      // stale on the track screen since.
-      loadWalkSession().then((stored) => {
+      void notificationsPermitted().then((granted) => {
         if (active) {
-          setJoinedSession(stored ? { sessionId: stored.sessionId, withName: stored.withName } : null);
+          setNotifyOn(granted);
         }
       });
+
+      // The session survives this screen, so it is re-read on every visit rather
+      // than trusted from the last one: it may have been started, finished or gone
+      // stale on the track screen since. Left null while company is off — a joined
+      // session is a walk with somebody, and it is what turns the one button on
+      // this page into "Move with Naj".
+      if (MOVE_WITH_FRIENDS_ENABLED) {
+        loadWalkSession().then((stored) => {
+          if (active) {
+            setJoinedSession(stored ? { sessionId: stored.sessionId, withName: stored.withName } : null);
+          }
+        });
+      }
 
       return () => {
         active = false;
@@ -431,6 +491,12 @@ export default function MoveScreen() {
    * and no event was ever delivered.
    */
   React.useEffect(() => {
+    // No socket at all while company is off: the listener exists to ring for an
+    // invitation, and there is nowhere for one to appear.
+    if (!MOVE_WITH_FRIENDS_ENABLED) {
+      return;
+    }
+
     const stopListening = onMoveInvitesChanged(() => void loadInvites());
     const subscription = AppState.addEventListener("change", (status) => {
       if (status === "active") {
@@ -612,6 +678,26 @@ export default function MoveScreen() {
     }
   }
 
+  /**
+   * Asks for notification permission, or sends somebody to where they can grant it.
+   *
+   * iOS only shows the system prompt ONCE per install. After that a request returns
+   * "denied" immediately and silently, so a button that only ever called request
+   * would do nothing at all for exactly the people who need it — hence the fall
+   * through to Settings.
+   */
+  async function enableNotifications() {
+    const status = await requestNotificationPermissions();
+
+    if (status === "granted") {
+      setNotifyOn(true);
+
+      return;
+    }
+
+    void Linking.openSettings().catch(() => undefined);
+  }
+
   async function handleConnect() {
     setConnecting(true);
 
@@ -624,6 +710,11 @@ export default function MoveScreen() {
 
   return (
     <Screen
+      // One of the three screens that keeps its bar pinned — see `pinHeader`.
+      // This is a tab you scroll up and down and come back to, and the scope
+      // pill in the middle of the bar is how you move between its two halves,
+      // which is not something to have to scroll back up for.
+      pinHeader
       contentStyle={styles.content}
       backgroundVariant={null}
       backgroundNode={<WalkBackground plate="walking" scrollY={scrollY} />}
@@ -631,6 +722,9 @@ export default function MoveScreen() {
       refreshControl={<RefreshControl refreshing={move.syncing} tintColor={accent.glyph} onRefresh={() => void move.refresh()} />}
     >
       <ScreenHeader
+        // This bar stands on the walking plate, not on canvas, so its buttons
+        // wear the same fill as the pill between them. See `onArtChrome`.
+        buttonSurface="pill"
         centerContent={<MoveScopeTabs value={scope} onChange={setScope} hitSlop={8} />}
         leftAction={{
           icon: "trophy",
@@ -689,6 +783,39 @@ export default function MoveScreen() {
           only thing on this screen with somebody else waiting on the other end.
           The inviter's name and face come from the friend list: the server keeps
           no copy of either. */}
+      {/* Nothing will arrive until this is on, and until now the app had no way to
+          say so — it asks for notification permission once at launch, as a side
+          effect of fetching a push token, and a device that answered no (or was
+          never asked) had no route back. Shown only to somebody with friends: an
+          account with nobody in it has nothing to be notified about, and a
+          permission prompt for that is the kind that gets refused out of reflex.
+
+          `openSettings` when iOS will not ask twice — a second request returns
+          "denied" without showing anything, so the button has to lead somewhere
+          that can actually change the answer. */}
+      {notifyOn === false && friends.length > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Turn on notifications for invitations"
+          onPress={() => void enableNotifications()}
+          style={({ pressed }) => [
+            styles.notifyPrompt,
+            { backgroundColor: alpha(palette.accent, isDark ? "26" : "1A"), opacity: pressed ? 0.75 : 1 }
+          ]}
+        >
+          <Icon name="notifications" size={18} color={palette.ink} weight="bulk" />
+          <View style={styles.notifyText}>
+            <AppText variant="caption" color={palette.ink} style={styles.notifyTitle}>
+              Notifications are off
+            </AppText>
+            <AppText variant="caption" color={palette.subtle} numberOfLines={2}>
+              Turn them on to hear when a friend invites you to move or asks you along.
+            </AppText>
+          </View>
+          <Icon name="forward" size={15} color={palette.subtle} weight="bold" />
+        </Pressable>
+      ) : null}
+
       {/* THE FALLBACK PLACEMENT, and only that.
           
           Invitations live in the carousel further down, where the benefits chips
@@ -749,6 +876,33 @@ export default function MoveScreen() {
                   { icon: "walk", label: `${formatKilometres(today?.distanceMeters ?? 0)} today` }
                 ]}
               />
+
+              {/* THE GOAL, WHILE A CHALLENGE HOLDS THE TOP.
+
+                  Both can run — they measure different things from the same
+                  walk, and a goal is a renewing pace rather than a second rung
+                  competing with this one. What they cannot both be is the
+                  headline, and this branch is where the challenge is it. So the
+                  goal comes down to a row: the period, the pair of figures, and
+                  a thin bar.
+
+                  Here rather than lower down, because it is the same question
+                  the deck above just answered — how far along am I — and the two
+                  are worth reading in one glance. Below the button it would be a
+                  footnote nobody scrolls to.
+
+                  Tappable through to the goal's own screen, which is where the
+                  figure, the day chart and the way out of it live. */}
+              {move.goalProgress ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open your goal"
+                  onPress={() => router.push("/move/goal")}
+                  style={({ pressed }) => [styles.challengeGoal, { opacity: pressed ? 0.6 : 1 }]}
+                >
+                  <MoveGoalBar progress={move.goalProgress} todayKey={move.todayKey} compact />
+                </Pressable>
+              ) : null}
 
               {move.progress.variant.kind === "team" ? (
                 <TeamContributions
@@ -884,12 +1038,35 @@ export default function MoveScreen() {
                the case for walking rather than reporting a number nobody set —
                framed as everyday progress, not exercise. */
             <View style={styles.invite}>
-              <AppText color={palette.ink} style={styles.inviteTitle}>
-                Walk a little. Feel a little better.
-              </AppText>
-              <AppText variant="bodySmall" color={palette.subtle} style={styles.inviteBlurb}>
-                Every step supports your energy, mood, heart and sleep — and small walks turn into a routine that lasts.
-              </AppText>
+              {/* A GOAL TAKES THIS SPACE when one is set.
+                  
+                  The headline and the chips below it are an ARGUMENT for
+                  walking, written for somebody with no reason to go out yet.
+                  Anybody who has set themselves 100 km a week has already been
+                  persuaded, and being sold the idea again — over the top of the
+                  figure that would actually get them out of the door — is the
+                  screen talking past its reader. So the goal takes the slot the
+                  pitch had, and says the one thing that matters instead: how far
+                  in, and how far left. */}
+              {move.goalProgress ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open your goal"
+                  onPress={() => router.push("/move/goal")}
+                  style={({ pressed }) => [styles.inviteGoal, { opacity: pressed ? 0.85 : 1 }]}
+                >
+                  <MoveGoalBar progress={move.goalProgress} todayKey={move.todayKey} />
+                </Pressable>
+              ) : (
+                <>
+                  <AppText color={palette.ink} style={styles.inviteTitle}>
+                    Walk a little. Feel a little better.
+                  </AppText>
+                  <AppText variant="bodySmall" color={palette.subtle} style={styles.inviteBlurb}>
+                    Every step supports your energy, mood, heart and sleep — and small walks turn into a routine that lasts.
+                  </AppText>
+                </>
+              )}
 
               {/* INVITATIONS TAKE THIS SPACE when there are any.
                   
@@ -962,7 +1139,9 @@ export default function MoveScreen() {
                     </AppText>
                   ) : null}
                 </View>
-              ) : (
+              ) : move.goalProgress ? null : (
+                // Part of the pitch, and gone with it — see the note above the
+                // goal bar. An invitation still wins the slot over both.
                 <View style={styles.benefits}>
                   {BENEFITS.map((benefit) => (
                     <View key={benefit.label} style={[styles.benefit, { backgroundColor: accent.soft }]}>
@@ -1063,6 +1242,23 @@ export default function MoveScreen() {
             ))}
           </View>
 
+          {/* HOW IT HAS BEEN GOING — the one question the figures above cannot
+              answer, since a total says nothing about its own direction.
+
+              Between the totals and the day list on purpose: it is the bridge
+              between them, reading the same days the list spells out. Hidden
+              outright on an account with a blank fortnight — see `hasActivity`. */}
+          {hasActivity ? (
+            <View style={styles.section}>
+              <AppText variant="bodySmall" color={palette.ink} style={[styles.sectionTitle, styles.centred]}>
+                Daily distance
+              </AppText>
+              <View style={styles.chartFrame}>
+                <MoveActivityChart points={activityWindow} color={accent.glyph} todayKey={move.todayKey} />
+              </View>
+            </View>
+          ) : null}
+
           {/* The last seven days, ending today — not the calendar week, which
               says almost nothing on a Monday morning.
 
@@ -1119,8 +1315,13 @@ export default function MoveScreen() {
                         </AppText>
                       </View>
                     ) : (
-                      <View style={[styles.dayBadge, { backgroundColor: alpha(palette.danger, "1F") }]}>
-                        <AppText variant="caption" color={palette.danger} style={styles.dayBadgeLabel}>
+                      // Smaller than the badge beside it on a day that HAS
+                      // figures, and deliberately so: that one is a reading, this
+                      // one is the absence of a reading. At the same size a week
+                      // of rest days read as a column of alerts, when the point of
+                      // listing them is only that the gap can be seen.
+                      <View style={[styles.dayBadge, styles.dayBadgeQuiet, { backgroundColor: alpha(palette.danger, "1F") }]}>
+                        <AppText variant="caption" color={palette.danger} style={[styles.dayBadgeLabel, styles.dayBadgeQuietLabel]}>
                           No activity
                         </AppText>
                       </View>
@@ -1316,6 +1517,24 @@ const styles = StyleSheet.create({
    * short final row, `space-between` would push those two to opposite edges of
    * the screen with a hole between them.
    */
+  // A row, not a card: it is chrome about the app rather than content, and a raised
+  // panel would give a permission notice the weight of an invitation.
+  notifyPrompt: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.card
+  },
+  notifyText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1
+  },
+  notifyTitle: {
+    fontFamily: fontFamilies.lexendSemiBold
+  },
   inviteCarousel: {
     gap: spacing.xs,
     /**
@@ -1441,6 +1660,14 @@ const styles = StyleSheet.create({
   centred: {
     textAlign: "center"
   },
+  // The same 88% the day list takes, so the line's left end and the dates under
+  // it start on one vertical — a chart at full width above an inset list reads as
+  // two blocks that happen to be near each other.
+  chartFrame: {
+    width: "88%",
+    alignSelf: "center",
+    paddingTop: spacing.xxs
+  },
   days: {
     // Inset off both edges: the week is a note under the headline figure, and
     // at full width it competed with it. Wide enough that a full date and its
@@ -1466,6 +1693,41 @@ const styles = StyleSheet.create({
   },
   dayBadgeLabel: {
     fontFamily: fontFamilies.lexendSemiBold
+  },
+  // The rest-day badge, one step down on both axes — see the note at its use
+  // site. 4/1 against 8/2, and 10.5pt against `caption`'s 12: enough that it
+  // reads as the quieter of the two without the pill collapsing onto its label.
+  dayBadgeQuiet: {
+    paddingHorizontal: spacing.xxs,
+    paddingVertical: 1
+  },
+  dayBadgeQuietLabel: {
+    fontSize: 10.5,
+    lineHeight: 14
+  },
+  /**
+   * The goal in the pitch's slot, at the width the Stats charts use.
+   *
+   * The same 88% as `chartFrame` and the day list, and for the same reason: two
+   * charts of daily distance on one screen that start at different verticals
+   * read as two blocks that happen to be near each other. Full width also put
+   * the goal's columns wider than any other reading on the page, which made a
+   * quiet figure look like the loudest thing on it.
+   *
+   * A little air under it, since what follows is either an invitation carousel
+   * or the one button on the page — and the block brings none of its own at the
+   * bottom.
+   */
+  inviteGoal: {
+    width: "88%",
+    alignSelf: "center",
+    paddingBottom: spacing.xs
+  },
+  // The same 88% the goal takes when it has the page to itself, so the two
+  // states of one reading start on the same vertical.
+  challengeGoal: {
+    width: "88%",
+    alignSelf: "center"
   },
   // Four to a row, centred, so a short last row sits in the middle rather than
   // stranded against one edge.

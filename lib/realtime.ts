@@ -1,3 +1,4 @@
+import { GROUP_CHAT_ENABLED } from "@/lib/friends";
 import { notifyMoveInvitesChanged } from "@/lib/move/challengeClient";
 import { findVariant } from "@/lib/move/challengeDefs";
 import { presentLocalNotification } from "@/lib/notifications";
@@ -161,6 +162,32 @@ export function subscribeToUserNotifications(userId: string, onChange?: () => vo
         onChange?.();
       }
     )
+    /**
+     * A message in a group you are in.
+     *
+     * UNFILTERED, unlike everything above it — a message names a group, not a
+     * recipient, so there is no column to match on. RLS does the work: the select
+     * policy on `group_messages` is `is_group_member`, so a client is only sent
+     * messages from groups it belongs to.
+     *
+     * Which means the one thing this must do itself is drop its OWN messages. They
+     * arrive down the same channel, and a banner for the sentence you just typed is
+     * the most annoying notification an app can produce.
+     */
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "group_messages" }, async (payload) => {
+      const row = payload.new as { group_id: string; author: string };
+
+      // Hidden feature, silent notification: a banner that opens a screen with no
+      // way into it would be the app contradicting itself. See GROUP_CHAT_ENABLED.
+      if (!GROUP_CHAT_ENABLED || row.author === userId) {
+        return;
+      }
+
+      const [name, groupName] = await Promise.all([nicknameFor(row.author), groupNameFor(row.group_id)]);
+
+      presentLocalNotification(groupName, `${name} sent a message.`, { route: `/group/chat?id=${row.group_id}` });
+      onChange?.();
+    })
     .subscribe();
 
   return () => {

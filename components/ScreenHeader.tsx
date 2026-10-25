@@ -1,7 +1,8 @@
 import React, { ReactNode } from "react";
 import { StyleProp, StyleSheet, View, ViewStyle } from "react-native"
-import { badgeAccent, badgeAccentText, fontFamilies, radius, spacing } from "@/constants/theme";
+import { badgeAccent, badgeAccentText, fontFamilies, onArtChrome, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
+import { alpha } from "@/lib/color";
 import { Icon, IconName, IconWeight } from "./Icon";
 import { AppText } from "./ui";
 import { Pressable } from "@/components/Pressable"
@@ -58,9 +59,28 @@ type ScreenHeaderAction = {
   render?: ReactNode;
 };
 
-function HeaderButton({ action }: { action: ScreenHeaderAction }) {
-  const { palette } = useLumo();
+/**
+ * What the round buttons stand on.
+ *
+ * `outline` is the app's default — a bare ring on flat canvas, so the controls
+ * read as chrome rather than as actions competing with the page's own cards.
+ *
+ * `pill` is for the pages whose bar sits on backdrop ARTWORK: Home, Move and
+ * Friends. On a painted sky a bare ring has nothing behind it, so the glyph is
+ * read against whatever the plate happens to be doing at that spot — and the
+ * buttons ended up looking fainter than the date pill or tab pill between them,
+ * which were already wearing a fill. This gives all three of them the same
+ * surface, which is the point: they sit in one bar and should read as one set.
+ */
+type HeaderButtonSurface = "outline" | "pill";
+
+function HeaderButton({ action, surface }: { action: ScreenHeaderAction; surface: HeaderButtonSurface }) {
+  const { palette, isDark } = useLumo();
   const badge = action.badge ?? 0;
+  // Not behind `render`: that suppresses the outline because the content brings
+  // its own shape, and a fill behind an avatar or a badge is either invisible or
+  // a second disc around a disc.
+  const filled = surface === "pill" && !action.render;
 
   return (
     <Pressable
@@ -72,6 +92,15 @@ function HeaderButton({ action }: { action: ScreenHeaderAction }) {
       hitSlop={10}
       style={({ pressed }) => [
         styles.button,
+        filled ? styles.buttonFilled : null,
+        filled
+          ? {
+              backgroundColor: alpha(palette.card, onArtChrome.fill),
+              // Dropped in dark mode, exactly as the pills do it: the navy has
+              // nothing for a soft shadow to catch, so it only muddies the edge.
+              shadowColor: isDark ? "transparent" : palette.shadow
+            }
+          : null,
         { borderColor: action.render ? "transparent" : (action.borderColor ?? palette.hairline), opacity: pressed ? 0.6 : 1 }
       ]}
     >
@@ -111,6 +140,7 @@ export function ScreenHeader({
   leftAction,
   rightAction,
   rightActions,
+  buttonSurface = "outline",
   style
 }: {
   /** Standard centred page title. Ignored when `centerContent` is given. */
@@ -121,6 +151,8 @@ export function ScreenHeader({
   leftAction?: ScreenHeaderAction;
   rightAction?: ScreenHeaderAction;
   rightActions?: ScreenHeaderAction[];
+  /** What the round buttons stand on — see `HeaderButtonSurface`. */
+  buttonSurface?: HeaderButtonSurface;
   style?: StyleProp<ViewStyle>;
 }) {
   const { palette } = useLumo();
@@ -141,7 +173,9 @@ export function ScreenHeader({
 
   return (
     <View style={[styles.header, style]}>
-      <View style={[styles.sideSlot, { width: sideWidth }]}>{leftAction ? <HeaderButton action={leftAction} /> : null}</View>
+      <View style={[styles.sideSlot, { width: sideWidth }]}>
+        {leftAction ? <HeaderButton action={leftAction} surface={buttonSurface} /> : null}
+      </View>
       {onCenterPress ? (
         <Pressable
           accessibilityRole="button"
@@ -167,7 +201,7 @@ export function ScreenHeader({
       )}
       <View style={[styles.sideSlot, styles.rightSlot, { width: sideWidth }]}>
         {resolvedRightActions.map((action) => (
-          <HeaderButton key={action.label} action={action} />
+          <HeaderButton key={action.label} action={action} surface={buttonSurface} />
         ))}
       </View>
     </View>
@@ -211,7 +245,8 @@ const styles = StyleSheet.create({
     lineHeight: 25
   },
   // Outlined circle — no fill, so it reads as chrome rather than an action
-  // competing with the page's own cards.
+  // competing with the page's own cards. The `pill` surface adds one, for the
+  // pages whose bar stands on artwork; see `HeaderButtonSurface`.
   button: {
     width: BUTTON_SIZE,
     height: BUTTON_SIZE,
@@ -220,6 +255,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth
   },
+  // Geometry only — the fill and the shadow's colour come from the palette at
+  // the use site, which is also where dark mode drops the shadow.
+  buttonFilled: onArtChrome.shadow,
   // Overhangs the circle deliberately — tucked inside, it reads as part of the
   // glyph rather than as a count attached to the button.
   // Same corner as the counted pip, without the room for a number — so a screen

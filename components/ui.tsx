@@ -55,7 +55,7 @@ export function Screen({
   resetScrollOnFocus = true,
   gestureHandlers,
   stickyHeader,
-  pinHeader = true
+  pinHeader = false
 }: {
   children: ReactNode;
   scroll?: boolean;
@@ -101,10 +101,20 @@ export function Screen({
   /**
    * Whether a `ScreenHeader` written as this screen's first child is pinned.
    *
-   * True everywhere by default — a page bar that scrolls away takes the way out
-   * of the screen with it, and every screen in the app wants the same answer to
-   * that. Pass `false` for the rare page whose header is meant to travel with
-   * the content.
+   * FALSE by default: the bar travels with the content, and scrolling down takes
+   * it away.
+   *
+   * It was true everywhere, on the reasoning that a page bar which scrolls away
+   * takes the way out of the screen with it. That is worth a permanent strip of
+   * chrome on a page you LIVE in — one of the main tab screens, which you scroll
+   * up and down and come back to. It is not worth it on a page you opened,
+   * read, and will leave by the back gesture or the button you can scroll a
+   * finger's width to reach: there the pinned bar was a band of empty canvas
+   * over a page that had nothing else to justify it.
+   *
+   * So the four screens that pin say so. Friends and Habits (and the journal)
+   * pass their bar as an explicit `stickyHeader`, which pins regardless of this;
+   * Move passes `pinHeader`.
    */
   pinHeader?: boolean;
 }) {
@@ -289,7 +299,20 @@ export function Card({
         styles.card,
         {
           backgroundColor,
-          shadowColor: isDark ? "transparent" : palette.shadow
+          /**
+           * A shadow in light, an EDGE in dark — and one of the two is always
+           * drawn, which is the point.
+           *
+           * A shadow is a dark shape cast onto a light ground; on a dark one
+           * there is nothing for it to darken, so it was correctly switched off
+           * here and nothing took its place. The card lift alone is deliberately
+           * subtle — enough for a panel, not enough for a short row — so the
+           * hairline finishes the job. Both cues are off in the mode that does
+           * not use them, so neither shows up as a stray line on cream.
+           */
+          shadowColor: isDark ? "transparent" : palette.shadow,
+          borderWidth: isDark ? StyleSheet.hairlineWidth : 0,
+          borderColor: isDark ? palette.hairline : "transparent"
         },
         style
       ]}

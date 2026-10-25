@@ -116,11 +116,16 @@ export function filterLocationPoint(input: FilterInput): FilterVerdict {
   /**
    * Under the minimum leg: real, but too small to tell from drift.
    *
-   * The one thing that overrides it is the pedometer. Steps in the window mean
-   * the person is walking, so a short leg is a slow walker rather than a phone
-   * on a table — which is the case a distance floor alone gets wrong.
+   * The pedometer softens this rather than switching it off. Steps in the window
+   * are good evidence somebody is walking, so a short leg is more likely a slow
+   * walker than a phone on a table — but they say nothing about WHERE, and a
+   * four-metre hop measured at ±30 m is drift whether or not its owner happens
+   * to be walking. Halving the floor keeps the case the pedometer exists for
+   * (the slow walker with a decent fix) without handing a bad fix a free pass.
    */
-  if (legM < TRACKING_CONFIG.distance.minLegM && input.steppingRecently !== true) {
+  const floorM = minimumLegM(point.horizontalAccuracy, input.steppingRecently === true);
+
+  if (legM < floorM) {
     return { accepted: false, reason: "jitter", distanceM: 0 };
   }
 
@@ -135,6 +140,27 @@ export function filterLocationPoint(input: FilterInput): FilterVerdict {
   }
 
   return { accepted: true, distanceM: legM };
+}
+
+/**
+ * The shortest leg this fix is allowed to count, given what it admits about
+ * itself.
+ *
+ * The flat minimum when the receiver is confident or says nothing at all
+ * (Android leaves accuracy null, and a missing number must never be read as a
+ * bad one); scaled up with the claimed error otherwise, capped so the gate can
+ * never shut on a real walk. See `accuracyLegFactor` for the whole argument.
+ */
+export function minimumLegM(accuracyM: number | null | undefined, stepping = false): number {
+  const { distance } = TRACKING_CONFIG;
+
+  if (typeof accuracyM !== "number" || !Number.isFinite(accuracyM)) {
+    return distance.minLegM;
+  }
+
+  const scaled = Math.min(distance.accuracyLegMaxM, accuracyM * distance.accuracyLegFactor);
+
+  return Math.max(distance.minLegM, stepping ? scaled / 2 : scaled);
 }
 
 /** Whether this leg should end the segment it belongs to. */

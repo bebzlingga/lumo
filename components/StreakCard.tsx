@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { fontFamilies, radius, spacing } from "@/constants/theme";
@@ -8,6 +9,7 @@ import { currentActivityStreak, dayCompletionState, type DayCompletionState } fr
 import { Habit } from "@/types/habit";
 import { FireIcon, FIRE_COLOR } from "./FireIcon";
 import { Icon } from "./Icon";
+import { Pressable } from "./Pressable";
 import { AppText } from "./ui";
 
 /** Monday-first initials, to match the strip's Monday-first week. */
@@ -108,6 +110,7 @@ function WeekDot({
  */
 export function StreakCard({ habits, dateKey }: { habits: Habit[]; dateKey: string }) {
   const { palette, isDark } = useLumo();
+  const router = useRouter();
   const todayKey = toDateKey();
   const streak = React.useMemo(() => currentActivityStreak(habits, todayKey), [habits, todayKey]);
   const message = streakLine(streak);
@@ -115,7 +118,15 @@ export function StreakCard({ habits, dateKey }: { habits: Habit[]; dateKey: stri
   const weekStates = React.useMemo(() => week.map((dayKey) => dayCompletionState(habits, dayKey)), [habits, week]);
 
   return (
-    <View style={[styles.card, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Current streak ${streak} ${streak === 1 ? "day" : "days"}. Open analytics`}
+      onPress={() => router.push("/analytics")}
+      style={({ pressed }) => [
+        styles.card,
+        { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow, opacity: pressed ? 0.8 : 1 }
+      ]}
+    >
       <View style={styles.streakSide}>
         <AppText variant="caption" color={palette.subtle} numberOfLines={1} style={styles.eyebrow}>
           CURRENT STREAK
@@ -162,7 +173,7 @@ export function StreakCard({ habits, dateKey }: { habits: Habit[]; dateKey: stri
           />
         ))}
       </View>
-    </View>
+    </Pressable>
   );
 }
 

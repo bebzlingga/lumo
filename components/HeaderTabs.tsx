@@ -2,7 +2,7 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Pressable } from "@/components/Pressable";
 import { AppText } from "@/components/ui";
-import { fontFamilies, radius, spacing } from "@/constants/theme";
+import { fontFamilies, onArtChrome, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 
@@ -64,7 +64,7 @@ export function HeaderTabs<T extends string>({
       style={[
         styles.track,
         {
-          backgroundColor: alpha(palette.card, "A6"),
+          backgroundColor: alpha(palette.card, onArtChrome.fill),
           borderColor: palette.hairline,
           shadowColor: isDark ? "transparent" : palette.shadow
         }
@@ -115,10 +115,9 @@ const styles = StyleSheet.create({
     padding: TRACK_PADDING,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2
+    // The same surface the date pill and the header buttons wear — see
+    // `onArtChrome`. Shared rather than copied: these sit in the same bar.
+    ...onArtChrome.shadow
   },
   segment: {
     alignItems: "center",

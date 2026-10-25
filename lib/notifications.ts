@@ -62,8 +62,35 @@ export async function getExpoPushToken(): Promise<string | null> {
 export async function presentLocalNotification(title: string, body: string, data?: Record<string, unknown>): Promise<void> {
   try {
     await Notifications.scheduleNotificationAsync({ content: { title, body, data }, trigger: null });
+  } catch (error) {
+    /**
+     * Ignored in a release build: a banner is a nicety, and there is nothing useful
+     * to tell somebody whose phone will not show one.
+     *
+     * NOT ignored in development, which is the change. This function fails silently
+     * for one very common reason — notification permission was never granted, or was
+     * refused once months ago — and a silent failure here looks exactly like "the
+     * feature does not work": the row is written, the realtime event arrives, the
+     * handler runs, and nothing appears. Hours can go into the wrong layer.
+     */
+    if (__DEV__) {
+      // eslint-disable-next-line no-console
+      console.warn("[presentLocalNotification] not shown — permission or module", error);
+    }
+  }
+}
+
+/**
+ * Whether this device will actually show a banner.
+ *
+ * Exposed so a screen can say "notifications are off" rather than leaving somebody
+ * to work out why nothing arrives. Never throws; false is the safe answer.
+ */
+export async function notificationsPermitted(): Promise<boolean> {
+  try {
+    return (await Notifications.getPermissionsAsync()).status === "granted";
   } catch {
-    // Notifications unavailable / not permitted — ignore.
+    return false;
   }
 }
 

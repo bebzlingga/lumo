@@ -4,7 +4,7 @@ import { Alert, Animated, StyleSheet, View, type NativeScrollEvent, type NativeS
 import { Icon, type IconName } from "@/components/Icon";
 import { Pressable } from "@/components/Pressable";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { WalkBackground, useWalkSceneInset } from "@/components/WalkBackground";
+import { WalkBackground } from "@/components/WalkBackground";
 import { WalkMap } from "@/components/WalkMap";
 import { AppText, Screen } from "@/components/ui";
 import { WALK_ACCENT } from "@/constants/tools";
@@ -45,12 +45,14 @@ function whenLabel(startedAt: number, endedAt: number): string {
   return `${date} · ${from} – ${to}`;
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent: string }) {
+function Stat({ label, value }: { label: string; value: string }) {
   const { palette } = useLumo();
 
   return (
     <View style={styles.stat}>
-      <AppText color={accent} style={styles.statValue} numberOfLines={1}>
+      {/* Ink rather than the walk accent: four green numbers in a row read as
+          four links, and the route on the map is already carrying the colour. */}
+      <AppText color={palette.ink} style={styles.statValue} numberOfLines={1}>
         {value}
       </AppText>
       <AppText variant="caption" color={palette.subtle} numberOfLines={1}>
@@ -88,7 +90,6 @@ export default function WalkDetailScreen() {
   }, [params.id]);
 
   const accent = readableOn(WALK_ACCENT, palette.white, 4.5);
-  const sceneInset = useWalkSceneInset("walkDone");
   /**
    * Drives the backdrop's fade. A plain `Animated.Value` written from a scroll
    * listener rather than `useNativeDriver` — opacity on an image behind a
@@ -149,18 +150,25 @@ export default function WalkDetailScreen() {
         rightAction={{ icon: "trash", label: "Delete this", onPress: handleDelete }}
       />
 
-      <AppText variant="bodySmall" color={palette.subtle} style={[styles.when, { marginTop: sceneInset }]}>
+      <AppText variant="bodySmall" color={palette.subtle} style={styles.when}>
         {whenLabel(record.startedAt, record.endedAt)}
       </AppText>
 
-      <View style={[styles.card, { backgroundColor: palette.card, shadowColor: isDark ? "transparent" : palette.shadow }]}>
-        {record.route.length > 1 ? <WalkMap route={record.route} accent={accent} showRecenter={false} style={styles.map} /> : null}
+      {/* No card behind this: the map draws its own rounded frame, and a white
+          plate around it only boxed in the one element that needs no boxing. */}
+      <View style={styles.card}>
+        {record.route.length > 1 ? (
+          // No wash over the tiles: nothing is laid over this map, so the only
+          // thing quietening the streets would do is make the route harder to
+          // place. This IS the page.
+          <WalkMap route={record.route} accent={accent} showRecenter={false} scrim={false} style={styles.map} />
+        ) : null}
 
         <View style={styles.statRow}>
-          <Stat label="Time" value={formatDuration(record.activeMs)} accent={accent} />
-          <Stat label="Distance" value={formatDistance(record.distanceM)} accent={accent} />
-          <Stat label="Pace" value={formatPace(calculatePace(record.distanceM, record.activeMs))} accent={accent} />
-          <Stat label="Steps" value={formatSteps(record.steps)} accent={accent} />
+          <Stat label="Time" value={formatDuration(record.activeMs)} />
+          <Stat label="Distance" value={formatDistance(record.distanceM)} />
+          <Stat label="Pace" value={formatPace(calculatePace(record.distanceM, record.activeMs))} />
+          <Stat label="Steps" value={formatSteps(record.steps)} />
         </View>
       </View>
 
@@ -218,11 +226,6 @@ export default function WalkDetailScreen() {
         </View>
       ) : null}
 
-      {!record.synced ? (
-        <AppText variant="caption" color={palette.subtle} style={styles.centered}>
-          Saved on this device.
-        </AppText>
-      ) : null}
     </Screen>
   );
 }
@@ -242,13 +245,7 @@ const styles = StyleSheet.create({
     textAlign: "center"
   },
   card: {
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radius.card,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 2
+    gap: spacing.md
   },
   map: {
     height: 220

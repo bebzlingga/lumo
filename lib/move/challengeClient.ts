@@ -61,7 +61,8 @@ export type MoveInvite = {
   endsAt: string | null;
   teamGoal: TeamGoal;
   /** The challenge sits on a Plus rung, so joining needs the invitee's own. */
-  needsPlus: boolean;
+  /** A 25K-and-above rung: joining it takes the joiner's own Pro purchase. */
+  needsPro: boolean;
   invitedAt: string;
 };
 
@@ -193,6 +194,11 @@ export const challengeClient = {
       .maybeSingle();
 
     if (error || !data) {
+      if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.warn("[challengeClient.create] failed — no server challenge, so no invites", error);
+      }
+
       return null;
     }
 
@@ -235,18 +241,41 @@ export const challengeClient = {
       return;
     }
 
-    await supabase.from("move_challenge_invites").upsert(
-      friendIds
-        .filter((id) => id && id !== userId)
-        .map((id) => ({
-          challenge_id: challengeId,
-          invitee: id,
-          inviter: userId,
-          status: "pending",
-          responded_at: null
-        })),
-      { onConflict: "challenge_id,invitee" }
+    const invitees = friendIds.filter((id) => id && id !== userId);
+
+    if (invitees.length === 0) {
+      return;
+    }
+
+    /**
+     * A PLAIN INSERT, and this is load-bearing.
+     *
+     * It was an upsert on `(challenge_id, invitee)`, which PostgREST compiles to
+     * `insert ... on conflict do update` — and Postgres requires the UPDATE policy
+     * to be satisfiable for that statement, not just the insert one. The UPDATE
+     * policy here is `invitee = auth.uid()`, because answering an invite is the
+     * invitee's act. The INVITER can never satisfy it, so RLS refused the write
+     * outright: the challenge was created, the friends were never invited, and
+     * nothing said why.
+     *
+     * The only thing the upsert bought was re-inviting the same friend to the same
+     * challenge, which the duplicate below handles just as well.
+     */
+    const { error } = await supabase.from("move_challenge_invites").insert(
+      invitees.map((id) => ({
+        challenge_id: challengeId,
+        invitee: id,
+        inviter: userId,
+        status: "pending"
+      }))
     );
+
+    // 23505 is a unique violation: this friend already holds an invite to this
+    // challenge, which is the outcome the call wanted anyway.
+    if (error && error.code !== "23505" && __DEV__) {
+      // eslint-disable-next-line no-console
+      console.warn("[challengeClient.invite] failed", error);
+    }
   },
 
   /**
@@ -684,7 +713,7 @@ export const challengeClient = {
           startedAt: challenge.started_at,
           endsAt: challenge.ends_at,
           teamGoal: challenge.team_goal === "shared" ? "shared" : "each",
-          needsPlus: Boolean(challenge.is_pro),
+          needsPro: Boolean(challenge.is_pro),
           invitedAt: row.created_at
         }
       ];

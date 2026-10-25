@@ -57,11 +57,12 @@ function challenge(over: Partial<ActiveMoveChallenge> = {}): ActiveMoveChallenge
 }
 
 describe('challenge definitions', () => {
-	it('gives every milestone three variants, all reaching the same badge', () => {
+	it('gives every milestone its routes, all reaching the same badge', () => {
 		expect(MOVE_FAMILIES.map((entry) => entry.id)).toEqual(['1k', '5k', '10k', '25k', '50k', '100k', '300k'])
 
 		for (const entry of MOVE_FAMILIES) {
-			expect(entry.variants).toHaveLength(3)
+			// Three from 25K up, two below it — the short rungs have no team route.
+			expect(entry.variants).toHaveLength(entry.distanceM >= 25_000 ? 3 : 2)
 
 			// The badge belongs to the MILESTONE, not the variant — every route
 			// through a family has to land on the same one.
@@ -78,10 +79,28 @@ describe('challenge definitions', () => {
 		expect(new Set(ids).size).toBe(ids.length)
 	})
 
-	it('offers exactly one open, one timed and one team route per family', () => {
+	it('offers exactly one open and one timed route per family', () => {
 		for (const entry of MOVE_FAMILIES) {
 			expect(entry.variants.filter((variant) => variant.durationDays === null)).toHaveLength(1)
-			expect(entry.variants.filter((variant) => variant.kind === 'team')).toHaveLength(1)
+			expect(entry.variants.filter((variant) => variant.kind === 'solo')).toHaveLength(2)
+		}
+	})
+
+	// A kilometre is not a thing you assemble a group for, and every rung below
+	// 25K is somebody's first week. See MOVE_FAMILIES.
+	it('offers a team route only from 25 km up', () => {
+		for (const entry of MOVE_FAMILIES) {
+			expect(entry.variants.filter((variant) => variant.kind === 'team')).toHaveLength(
+				entry.distanceM >= 25_000 ? 1 : 0,
+			)
+		}
+	})
+
+	// `teamPlusSolo` reads "every team route AND a solo one", which is unsatisfiable
+	// with no team route to finish — the badge could never be earned.
+	it('never asks for a team route a family does not have', () => {
+		for (const entry of MOVE_FAMILIES.filter((family) => family.unlock === 'teamPlusSolo')) {
+			expect(entry.variants.some((variant) => variant.kind === 'team')).toBe(true)
 		}
 	})
 
@@ -204,23 +223,23 @@ describe('challenge progress', () => {
 	// the badge someone else earned walking the lot.
 	it('is not complete until everyone has reached the target', () => {
 		const nearly = challenge({
-			variantId: '10k-team',
+			variantId: '25k-team',
 			participants: [
-				{ userId: 'me', name: 'You', contributionM: 10_000, leftAt: null },
-				{ userId: 'a', name: 'Abdul', contributionM: 9500, leftAt: null },
+				{ userId: 'me', name: 'You', contributionM: 25_000, leftAt: null },
+				{ userId: 'a', name: 'Abdul', contributionM: 24_000, leftAt: null },
 			],
 		})
 
-		expect(challengeProgress({ challenge: nearly, summaries: [day('2026-08-11', 10_000)], ...base })?.complete).toBe(false)
+		expect(challengeProgress({ challenge: nearly, summaries: [day('2026-08-11', 25_000)], ...base })?.complete).toBe(false)
 
 		const done = challenge({
-			variantId: '10k-team',
+			variantId: '25k-team',
 			participants: [
-				{ userId: 'me', name: 'You', contributionM: 10_000, leftAt: null },
-				{ userId: 'a', name: 'Abdul', contributionM: 10_400, leftAt: null },
+				{ userId: 'me', name: 'You', contributionM: 25_000, leftAt: null },
+				{ userId: 'a', name: 'Abdul', contributionM: 25_400, leftAt: null },
 			],
 		})
-		const progress = challengeProgress({ challenge: done, summaries: [day('2026-08-11', 10_000)], ...base })
+		const progress = challengeProgress({ challenge: done, summaries: [day('2026-08-11', 25_000)], ...base })
 
 		expect(progress?.complete).toBe(true)
 		expect(progress?.teamDone).toBe(2)
@@ -230,7 +249,7 @@ describe('challenge progress', () => {
 		// The other way to run a team route: one pot, filled together.
 		const shared = (contributions: number[]) =>
 			challenge({
-				variantId: '10k-team',
+				variantId: '25k-team',
 				teamGoal: 'shared',
 				participants: contributions.map((metres, index) => ({
 					userId: index === 0 ? 'me' : `f${index}`,
@@ -241,35 +260,35 @@ describe('challenge progress', () => {
 			})
 
 		it('measures the pool rather than your own legs', () => {
-			const progress = challengeProgress({ challenge: shared([4000, 3000]), summaries: [day('2026-08-11', 4000)], ...base })
+			const progress = challengeProgress({ challenge: shared([10_000, 7500]), summaries: [day('2026-08-11', 10_000)], ...base })
 
-			// `currentM` is the team's total here, not the 4 km this device walked.
-			expect(progress?.currentM).toBe(7000)
-			expect(progress?.targetM).toBe(10_000)
-			expect(progress?.remainingM).toBe(3000)
+			// `currentM` is the team's total here, not the 10 km this device walked.
+			expect(progress?.currentM).toBe(17_500)
+			expect(progress?.targetM).toBe(25_000)
+			expect(progress?.remainingM).toBe(7500)
 		})
 
 		it('splits the target across whoever is still taking part', () => {
-			expect(challengeProgress({ challenge: shared([0, 0]), summaries: [], ...base })?.shareM).toBe(5000)
-			expect(challengeProgress({ challenge: shared([0, 0, 0, 0]), summaries: [], ...base })?.shareM).toBe(2500)
+			expect(challengeProgress({ challenge: shared([0, 0]), summaries: [], ...base })?.shareM).toBe(12_500)
+			expect(challengeProgress({ challenge: shared([0, 0, 0, 0]), summaries: [], ...base })?.shareM).toBe(6250)
 		})
 
 		it('counts somebody done once they have covered their share, not the whole target', () => {
-			// 5 km each on a 10 km pot: one there, one not.
-			const progress = challengeProgress({ challenge: shared([5200, 1000]), summaries: [day('2026-08-11', 5200)], ...base })
+			// 12.5 km each on a 25 km pot: one there, one not.
+			const progress = challengeProgress({ challenge: shared([13_000, 2000]), summaries: [day('2026-08-11', 13_000)], ...base })
 
 			expect(progress?.teamDone).toBe(1)
 		})
 
 		it('completes when the pool reaches the target, however it was divided', () => {
-			// Lopsided on purpose: 9 km and 1.2 km still fills a 10 km pot.
-			const progress = challengeProgress({ challenge: shared([9000, 1200]), summaries: [day('2026-08-11', 9000)], ...base })
+			// Lopsided on purpose: 22 km and 3 km still fills a 25 km pot.
+			const progress = challengeProgress({ challenge: shared([22_000, 3000]), summaries: [day('2026-08-11', 22_000)], ...base })
 
 			expect(progress?.complete).toBe(true)
 		})
 
 		it('is short while the pool is short, however far one person walked', () => {
-			const progress = challengeProgress({ challenge: shared([9000, 500]), summaries: [day('2026-08-11', 9000)], ...base })
+			const progress = challengeProgress({ challenge: shared([22_000, 1000]), summaries: [day('2026-08-11', 22_000)], ...base })
 
 			expect(progress?.complete).toBe(false)
 		})
@@ -278,19 +297,19 @@ describe('challenge progress', () => {
 		// so walking off cannot make a challenge easier for the people left.
 		it('re-splits the target when somebody leaves', () => {
 			const left = challenge({
-				variantId: '10k-team',
+				variantId: '25k-team',
 				teamGoal: 'shared',
 				participants: [
-					{ userId: 'me', name: 'You', contributionM: 3000, leftAt: null },
-					{ userId: 'a', name: 'Abdul', contributionM: 3000, leftAt: null },
-					{ userId: 'g', name: 'Gone', contributionM: 2000, leftAt: iso(T0 + DAY) },
+					{ userId: 'me', name: 'You', contributionM: 7500, leftAt: null },
+					{ userId: 'a', name: 'Abdul', contributionM: 7500, leftAt: null },
+					{ userId: 'g', name: 'Gone', contributionM: 5000, leftAt: iso(T0 + DAY) },
 				],
 			})
 			const progress = challengeProgress({ challenge: left, summaries: [], ...base })
 
-			expect(progress?.shareM).toBe(5000)
+			expect(progress?.shareM).toBe(12_500)
 			// The leaver's metres go with them, so the pot is the two who remain.
-			expect(progress?.currentM).toBe(6000)
+			expect(progress?.currentM).toBe(15_000)
 		})
 	})
 
@@ -298,18 +317,18 @@ describe('challenge progress', () => {
 	// otherwise one person leaving would hold the rest hostage forever.
 	it('drops a leaver from the roster', () => {
 		const team = challenge({
-			variantId: '10k-team',
+			variantId: '25k-team',
 			participants: [
-				{ userId: 'me', name: 'You', contributionM: 10_000, leftAt: null },
+				{ userId: 'me', name: 'You', contributionM: 25_000, leftAt: null },
 				{ userId: 'a', name: 'Abdul', contributionM: 3000, leftAt: iso(T0 + DAY) },
 			],
 		})
-		const progress = challengeProgress({ challenge: team, summaries: [day('2026-08-11', 10_000)], ...base })
+		const progress = challengeProgress({ challenge: team, summaries: [day('2026-08-11', 25_000)], ...base })
 
 		expect(progress?.teamSize).toBe(1)
 		expect(progress?.complete).toBe(true)
 		expect(activeParticipants(team).map((entry) => entry.userId)).toEqual(['me'])
-		expect(myContribution(team, 'me')).toBe(10_000)
+		expect(myContribution(team, 'me')).toBe(25_000)
 		expect(myContribution(team, 'nobody')).toBe(0)
 	})
 
@@ -423,17 +442,19 @@ describe('pausing', () => {
 
 describe('achievements', () => {
 	const solo = achievementFor({ variantId: '10k-open', startedAt: iso(T0), completedAt: iso(T0 + 5 * DAY) })
+	// 25K is the shortest rung with a team route on it — see MOVE_FAMILIES.
 	const team = achievementFor({
-		variantId: '10k-team',
+		variantId: '25k-team',
 		startedAt: iso(T0),
 		completedAt: iso(T0 + 6 * DAY),
 		withUserIds: ['a', 's', 'l', 'a'],
 	})
+	const teamSolo = achievementFor({ variantId: '25k-open', startedAt: iso(T0), completedAt: iso(T0 + 2 * DAY) })
 
 	// Every route files against the same milestone; the badge needs all of them.
 	it('files the same milestone whichever route was run', () => {
-		expect(solo?.milestoneId).toBe('10k')
-		expect(team?.milestoneId).toBe('10k')
+		expect(teamSolo?.milestoneId).toBe('25k')
+		expect(team?.milestoneId).toBe('25k')
 	})
 
 	it('records how it was done', () => {
@@ -455,10 +476,15 @@ describe('achievements', () => {
 		expect(achievementFor({ variantId: '1k-open', startedAt: iso(T0), completedAt: iso(T0 + 3600_000) })?.days).toBe(1)
 	})
 
-	/** Every route of a family, finished. */
+	/**
+	 * Every route of a family, finished.
+	 *
+	 * Read off the family rather than from a fixed open/timed/team list, because
+	 * the rungs below 25K have no team route to finish.
+	 */
 	const allRoutes = (familyId: string) =>
-		['open', 'timed', 'team'].map(
-			(route) => achievementFor({ variantId: `${familyId}-${route}`, startedAt: iso(T0), completedAt: iso(T0 + DAY) })!
+		MOVE_FAMILIES.find((entry) => entry.id === familyId)!.variants.map(
+			(variant) => achievementFor({ variantId: variant.id, startedAt: iso(T0), completedAt: iso(T0 + DAY) })!
 		)
 
 	// Re-running a route must not overwrite the day it was first finished, but a
@@ -471,10 +497,10 @@ describe('achievements', () => {
 	})
 
 	it('files a second route alongside the first', () => {
-		const both = withAchievement(withAchievement([], solo as MoveAchievement), team as MoveAchievement)
+		const both = withAchievement(withAchievement([], teamSolo as MoveAchievement), team as MoveAchievement)
 
 		expect(both).toHaveLength(2)
-		expect(familyProgress(both, MOVE_FAMILIES.find((entry) => entry.id === '10k')!)).toEqual({ done: 2, total: 3 })
+		expect(familyProgress(both, MOVE_FAMILIES.find((entry) => entry.id === '25k')!)).toEqual({ done: 2, total: 3 })
 	})
 
 	// The early rungs are where somebody decides whether Move is for them, so a
@@ -554,9 +580,10 @@ describe('achievements', () => {
 	})
 
 	it('still counts routes finished after the badge was earned', () => {
-		const family = MOVE_FAMILIES.find((entry) => entry.id === '10k')!
+		// 25K: three routes, and the badge is won on the first of them.
+		const family = MOVE_FAMILIES.find((entry) => entry.id === '25k')!
 
-		expect(familyProgress(allRoutes('10k'), family)).toEqual({ done: 3, total: 3 })
+		expect(familyProgress(allRoutes('25k'), family)).toEqual({ done: 3, total: 3 })
 	})
 
 	describe('reading back from storage', () => {

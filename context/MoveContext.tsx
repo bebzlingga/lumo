@@ -19,11 +19,21 @@ import { trackMove } from "@/lib/move/analytics";
 import { challengeClient, type MoveInvite } from "@/lib/move/challengeClient";
 import { findFamily, findVariant, type MoveMilestoneFamily } from "@/lib/move/challengeDefs";
 import { journeyPosition } from "@/lib/move/journey";
+import {
+  goalProgress as computeGoalProgress,
+  periodKeyFor,
+  withPeriodHit,
+  type MoveGoal,
+  type MoveGoalPeriod,
+  type MoveGoalProgress
+} from "@/lib/move/goal";
 import { displayedTotalDistance, mergeSummaries, movementStreak } from "@/lib/move/movement";
 import { canReadMovement, movementProvider, type MovementPermission } from "@/lib/move/movementProvider";
 import { emptyMoveState, trimSummaries, type MoveState } from "@/lib/move/state";
 import { loadMoveState, saveMoveState, syncMovement } from "@/lib/move/store";
 import type { MovementSummary } from "@/lib/move/types";
+import type { WalkRecord } from "@/lib/walk";
+import { loadWalkState, onWalksChanged } from "@/lib/walkStorage";
 
 /**
  * Move's state, kept apart from `LumoContext`.
@@ -95,6 +105,29 @@ type MoveContextValue = {
 
   celebration: MoveCelebration | null;
   dismissCelebration: () => void;
+
+  /**
+   * The reader's own renewing distance target, and where it stands right now.
+   *
+   * `goalProgress` is null exactly when `goal` is — one condition, so a screen
+   * cannot end up drawing a bar for a goal that is not set. Both are derived on
+   * every read, like `progress` above and for the same reason: a health platform
+   * revising yesterday changes the figure with nothing cached to go stale.
+   */
+  goal: MoveGoal | null;
+  goalProgress: MoveGoalProgress | null;
+  /**
+   * What a given day is worth, health data and tracked walks reconciled.
+   *
+   * Exposed rather than kept private because the Move tab needs the SAME answer
+   * for its day list, its chart and its rolling totals — and the goal reading a
+   * different figure than the list under it is precisely the bug this replaced.
+   */
+  dayDistance: (dateKey: string) => number;
+  /** Sets or replaces the goal. Replacing starts its history over. */
+  setGoal: (target: { targetM: number; period: MoveGoalPeriod }) => void;
+  /** Ends it. There is no other way out — a goal never expires on its own. */
+  clearGoal: () => void;
 
   connect: () => Promise<MovementPermission>;
   refresh: () => Promise<void>;
@@ -303,6 +336,118 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
       now
     });
   }, [state.active, state.summaries, todayKey, now]);
+
+  /**
+   * Tracked walks, for reconciling against health data below.
+   *
+   * The context needs them because it is where the goal is worked out, and a
+   * goal that could not see a walk somebody had just recorded is a goal that
+   * does not count the walk they took to fill it.
+   *
+   * Re-read on the store's own change signal rather than on a screen's focus:
+   * this is not a screen, and the walk that matters most is the one saved
+   * seconds ago on the tracking screen. AppState covers a walk finished on
+   * another device and synced while this one was asleep.
+   */
+  const [walkRecords, setWalkRecords] = React.useState<WalkRecord[]>([]);
+
+  React.useEffect(() => {
+    let active = true;
+
+    const reload = () => {
+      void loadWalkState().then((stored) => {
+        if (active) {
+          setWalkRecords(stored.history);
+        }
+      });
+    };
+
+    reload();
+
+    const stopListening = onWalksChanged(reload);
+    const subscription = AppState.addEventListener("change", (status) => {
+      if (status === "active") {
+        reload();
+      }
+    });
+
+    return () => {
+      active = false;
+      stopListening();
+      subscription.remove();
+    };
+  }, []);
+
+  /**
+   * A day's distance, from BOTH sources.
+   *
+   * `max`, never a sum. With health permission granted the walk is already
+   * inside the day's health figure, so adding them would count the same
+   * kilometres twice; without it, `creditActivity` writes the tracked walk into
+   * `summaries` and health contributes nothing. Either way the larger of the two
+   * is the true figure.
+   *
+   * WHY THIS EXISTS AT ALL, rather than reading `summaries` straight: with
+   * health permission granted, `creditActivity` deliberately writes NOTHING, and
+   * a GPS-tracked walk reaches `summaries` only once the health platform reports
+   * it back. That lag is real — it is why the day list on the Move tab does the
+   * same reconciliation, and why a walk taken an hour ago could sit at 0.1 km on
+   * a goal while the walk screen showed three.
+   */
+  const dayDistance = React.useCallback(
+    (dateKey: string) => {
+      const health = state.summaries.find((entry) => entry.date === dateKey)?.distanceMeters ?? 0;
+      const tracked = walkRecords
+        .filter((record) => toDateKey(new Date(record.startedAt)) === dateKey)
+        .reduce((total, record) => total + Math.max(0, record.distanceM), 0);
+
+      return Math.max(health, tracked);
+    },
+    [state.summaries, walkRecords]
+  );
+
+  /**
+   * Where the reader's own goal stands, in the period containing today.
+   *
+   * Derived, never stored — the same call `progress` makes above. A goal is a
+   * question asked of the daily record, and the daily record is the one thing
+   * that gets corrected underneath it.
+   */
+  const goalProgress = React.useMemo(() => {
+    if (!state.goal) {
+      return null;
+    }
+
+    return computeGoalProgress(state.goal, todayKey, dayDistance);
+  }, [state.goal, todayKey, dayDistance]);
+
+  /**
+   * Marks the period reached, once, the moment the figure crosses the target.
+   *
+   * An effect rather than part of the memo above: deriving is a read and this is
+   * a WRITE, and a memo that persisted state would fire again on every re-render
+   * that recomputed it. `withPeriodHit` returns the same object when the period
+   * is already recorded, so the guard below settles after exactly one write.
+   *
+   * The goal is NOT ended here — see rule 2 in `lib/move/goal.ts`. All this does
+   * is remember that the week was made, so the figure can keep climbing without
+   * re-announcing it.
+   */
+  React.useEffect(() => {
+    if (!goalProgress || !goalProgress.hit) {
+      return;
+    }
+
+    setState((current) => {
+      if (!current.goal) {
+        return current;
+      }
+
+      const next = withPeriodHit(current.goal, periodKeyFor(current.goal.period, todayKey));
+
+      return next === current.goal ? current : { ...current, goal: next };
+    });
+  }, [goalProgress, todayKey, setState]);
 
   /**
    * Keeps a team challenge in step with the server.
@@ -531,6 +676,26 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
       journey,
       celebration,
       dismissCelebration: () => setCelebration(null),
+      goal: state.goal,
+      goalProgress,
+      dayDistance,
+      setGoal({ targetM, period }) {
+        /**
+         * Replacing starts the history over.
+         *
+         * A goal's `hitPeriods` is the record of THAT target — five weeks of
+         * 40 km says nothing about a 100 km week, and carrying the run across
+         * would credit the new goal with periods it was never set for. Changing
+         * your mind is allowed; inheriting someone else's streak is not.
+         */
+        setState((current) => ({
+          ...current,
+          goal: { targetM, period, startedAt: new Date().toISOString(), hitPeriods: [] }
+        }));
+      },
+      clearGoal() {
+        setState((current) => (current.goal ? { ...current, goal: null } : current));
+      },
       connect,
       refresh: runSync,
       creditActivity(distanceMeters) {
@@ -720,6 +885,8 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
       totalDistanceM,
       streakDays,
       progress,
+      goalProgress,
+      dayDistance,
       next,
       journey,
       celebration,

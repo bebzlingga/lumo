@@ -179,6 +179,14 @@ export function normalizeActivity(value: unknown): ActivityTrackingState | null 
     // comes back.
     gpsQuality: "unavailable",
     lastAccuracyM: null,
+    // Ditto: how long ago the last fix was says nothing about the signal now,
+    // and `restoreActivity` restarts this clock the moment tracking resumes.
+    lastLocatedAt: Number.isFinite(raw.lastTickAt) ? (raw.lastTickAt as number) : (raw.startedAt as number),
+    // Dropped rather than restored, like the signal readings above: an estimate
+    // is about where the phone was a moment ago, and after a crash and a cold
+    // start that is the one thing it cannot still be. The first fix back seeds
+    // a fresh one.
+    smoothing: undefined,
     segments: normalizeSegments(raw.segments),
     rawPoints: Array.isArray(raw.rawPoints) ? raw.rawPoints.filter(isPoint) : [],
     companions: Array.isArray(raw.companions)

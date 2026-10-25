@@ -15,11 +15,20 @@ import type { ActivityFacts, WalkPoint, WalkRecord } from "@/lib/walk";
  * finishes. Nothing downstream of it needs to know the tracker changed.
  */
 
-/** Accepted fixes only, in the shape the map and route drawing take. */
+/**
+ * Accepted fixes only, in the shape the map and route drawing take.
+ *
+ * Drawn at the SMOOTHED position where there is one. This is the only place the
+ * choice is made, and it is made here because it is a drawing decision: every
+ * figure — distance, pace, the challenge's credit — is worked out upstream from
+ * the raw fixes and is not touched by it. A point recorded before smoothing
+ * existed, or one whose estimate was withheld, falls back to what the receiver
+ * said.
+ */
 export function toWalkPoints(state: ActivityTrackingState): WalkPoint[] {
   return routePoints(state).map((point) => ({
-    lat: point.latitude,
-    lon: point.longitude,
+    lat: point.drawLatitude ?? point.latitude,
+    lon: point.drawLongitude ?? point.longitude,
     at: point.timestamp,
     accuracy: point.horizontalAccuracy ?? 0,
     speed: point.speed ?? undefined,
