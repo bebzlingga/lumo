@@ -53,18 +53,33 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_expo._tcp</string>
+	</array>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Lumo reads your steps, walking and running distance, and active minutes so your movement counts toward your Move goals, badges and challenges automatically.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Lumo never adds anything to Health — it only reads your steps, distance and active minutes. This appears because the Health framework Lumo uses is able to write, not because Lumo does.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Expo Dev Launcher uses the local network to discover and connect to development servers running on your computer.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Lumo keeps recording your walk while the screen is off, so your route and distance stay accurate when the phone is in your pocket.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Allow $(PRODUCT_NAME) to access your location</string>
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>ExpoLocationFullAccuracy</key>
+		<string>Allow $(PRODUCT_NAME) to access your precise location</string>
+	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Lumo uses your location to trace the route of a walk and measure how far you went.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Lumo needs the microphone to dictate your journal.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Lumo reads your step count so a walk can show how many steps it took.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Allow $(PRODUCT_NAME) to save photos</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Lumo needs photo access to attach images to your journal, and to put one of your photos behind a walk when you share it.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
@@ -73,10 +88,32 @@
 	<array>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>
 	</array>
+	<key>RCTMetroPort</key>
+	<string>$(RCT_METRO_PORT)</string>
+	<key>RCTNewArchEnabled</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
 		<string>location</string>
+		<string>fetch</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>SplashScreen</string>
@@ -89,13 +126,6 @@
 	<key>UIStatusBarStyle</key>
 	<string>UIStatusBarStyleDefault</string>
 	<key>UISupportedInterfaceOrientations</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>

@@ -28,7 +28,8 @@
         "com.apple.security.application-groups": [
           "group.com.lumo.habits"
         ],
-        "aps-environment": "production"
+        "aps-environment": "production",
+        "com.apple.developer.healthkit": true
       },
       "appleTeamId": "77DS2PBMYS"
     },
