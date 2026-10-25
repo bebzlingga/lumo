@@ -132,7 +132,10 @@ function usePlateHeight(lift: number) {
  * lift the backdrop is drawn with, or the content and the art part company.
  */
 export function useGroupBackdropSubjectBottom(lift: number = GROUP_PLATE_LIFT) {
-  return usePlateHeight(lift) * (SUBJECT_END - lift);
+  const { settings } = useLumo();
+  const plateHeight = usePlateHeight(lift);
+  // Minimal mode draws no backdrop, so there is no scene to clear.
+  return settings.minimalMode ? 0 : plateHeight * (SUBJECT_END - lift);
 }
 
 /**
@@ -178,7 +181,7 @@ export function GroupBackdrop({
   /** How strongly the plate is drawn before scrolling — see `REST_OPACITY`. */
   weight?: GroupBackdropWeight;
 }) {
-  const { isDark, palette } = useLumo();
+  const { isDark, palette, settings } = useLumo();
   const { width, height } = useWindowDimensions();
   // Centred: the plate is drawn wider than the screen and the overhang is
   // trimmed evenly off both sides, so the scene sits in the middle of the page
@@ -207,6 +210,8 @@ export function GroupBackdrop({
    */
   const sceneEnd = Math.min(0.6, (plateHeight * (SUBJECT_END - lift)) / Math.max(1, height));
 
+  // Minimal mode (Settings): no illustrated backdrop. After every hook, so flipping it never changes the hook order.
+  if (settings.minimalMode) return null;
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <Animated.Image

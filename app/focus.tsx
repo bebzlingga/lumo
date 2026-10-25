@@ -11,7 +11,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { StatusBar } from "expo-status-bar";
 import { AppText, LumoInput, Screen } from "@/components/ui";
 import { FOCUS_ACTIVITIES, activityAccent, focusActivity } from "@/constants/focusActivities";
-import { CTA_FILL, fontFamilies, getPalette, habitAccent, layout, radius, spacing, tileRadius } from "@/constants/theme";
+import { ctaFill, fontFamilies, getPalette, habitAccent, layout, radius, spacing, tileRadius } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha, contrastRatio, readableOn, shadeWithBlack } from "@/lib/color";
 import { toDateKey } from "@/lib/date";
@@ -147,9 +147,9 @@ function FocusInfoDialog({ visible, onClose }: { visible: boolean; onClose: () =
             accessibilityRole="button"
             accessibilityLabel="Close"
             onPress={onClose}
-            style={({ pressed }) => [styles.sheetClose, { backgroundColor: CTA_FILL, opacity: pressed ? 0.88 : 1 }]}
+            style={({ pressed }) => [styles.sheetClose, { backgroundColor: ctaFill(isDark), opacity: pressed ? 0.88 : 1 }]}
           >
-            <AppText variant="button" color={palette.white}>
+            <AppText variant="button" color={palette.onGreen}>
               Got it
             </AppText>
           </Pressable>

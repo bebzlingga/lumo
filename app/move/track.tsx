@@ -16,7 +16,7 @@ import { AppText, Screen } from "@/components/ui";
 import { WalkBackground, useWalkSceneInset } from "@/components/WalkBackground";
 import { WalkMap } from "@/components/WalkMap";
 import { WalkRoute } from "@/components/WalkRoute";
-import { CTA_FILL, fontFamilies, layout, radius, spacing } from "@/constants/theme";
+import { ctaFill, fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { MOVE_ROUTE_ACCENT } from "@/constants/tools";
 import { useLumo } from "@/context/LumoContext";
 import { useMove } from "@/context/MoveContext";
@@ -1208,10 +1208,10 @@ export default function MoveTrackScreen() {
             <Icon
               name="check"
               size={16}
-              color={paused ? palette.danger : readableOn(CTA_FILL, palette.card, 4.5)}
+              color={paused ? palette.danger : readableOn(ctaFill(isDark), palette.card, 4.5)}
               weight="bold"
             />
-            <AppText variant="button" color={paused ? palette.danger : readableOn(CTA_FILL, palette.card, 4.5)}>
+            <AppText variant="button" color={paused ? palette.danger : readableOn(ctaFill(isDark), palette.card, 4.5)}>
               Finish
             </AppText>
           </Pressable>

@@ -78,7 +78,7 @@ export default function MoveBadgesScreen() {
                   unlocked,
                   unlockedAt: null
                 }}
-                size={104}
+                size={92}
               />
               <AppText variant="caption" color={unlocked ? palette.ink : palette.muted} numberOfLines={1} style={styles.cellName}>
                 {family.title}
@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.lexendBold,
     letterSpacing: 0.4
   },
-  // Centred, not space-between. Seven badges two to a row leaves a lone last
+  // Centred, not space-between. Seven badges three to a row leaves a lone last
   // one, and space-between stranded it against the left edge as if a partner
   // had failed to load.
   grid: {
@@ -132,12 +132,11 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     justifyContent: "center"
   },
-  // Two to a row: at 104pt three no longer fit, and a badge is the thing this
-  // page is for — bigger and fewer beats smaller and tidier.
+  // Three to a row at 92pt — fits a 360pt-wide phone with room for the name.
   cell: {
     alignItems: "center",
     gap: spacing.xxs,
-    width: "48%",
+    width: "33.33%",
     paddingVertical: spacing.sm
   },
   cellName: {

@@ -8,7 +8,7 @@ import { Icon, type IconName } from "@/components/Icon";
 import { categoryIconOptions } from "@/components/IconPicker";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Field, FieldLabel, LumoInput, Screen } from "@/components/ui";
-import { CTA_FILL, defaultHabitColor, fontFamilies, habitAccent, habitColorPickerOptions, layout, radius, spacing, tileRadius } from "@/constants/theme";
+import { ctaFill, defaultHabitColor, fontFamilies, habitAccent, habitColorPickerOptions, layout, radius, spacing, tileRadius } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha, readableOn } from "@/lib/color";
 import { dayLabels, dayNames } from "@/lib/date";
@@ -303,9 +303,9 @@ export default function GroupActivityScreen() {
         onPress={save}
         onPressIn={() => setSavePressed(true)}
         onPressOut={() => setSavePressed(false)}
-        style={[styles.cta, { backgroundColor: CTA_FILL, opacity: !canSave ? 0.45 : savePressed ? 0.85 : 1 }]}
+        style={[styles.cta, { backgroundColor: ctaFill(isDark), opacity: !canSave ? 0.45 : savePressed ? 0.85 : 1 }]}
       >
-        <AppText variant="button" color={palette.white} style={styles.ctaLabel}>
+        <AppText variant="button" color={palette.onGreen} style={styles.ctaLabel}>
           {editing ? "Save Activity" : "Add Activity"}
         </AppText>
       </Pressable>

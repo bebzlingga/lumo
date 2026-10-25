@@ -22,10 +22,14 @@ const ART_SHIFT_X = 28;
  * today's entry.
  */
 export function DailyReflectionCard({ prompt, onPress }: { prompt: string; onPress: () => void }) {
-  const { palette, isDark } = useLumo();
+  const { palette, isDark, settings } = useLumo();
   const { width } = useWindowDimensions();
   const bannerWidth = width - layout.screenPaddingX * 2;
   const bannerHeight = Math.min(BANNER_MAX_HEIGHT, bannerWidth / BANNER_ASPECT);
+  // Fixed brand ink only sits on the cream art; without it (dark cut, or minimal) the palette's.
+  const onArt = !isDark && !settings.minimalMode;
+  const inkColor = onArt ? brand.navy : palette.ink;
+  const promptColor = onArt ? alpha(brand.navy, "B8") : palette.body;
 
   return (
     <Pressable
@@ -48,23 +52,26 @@ export function DailyReflectionCard({ prompt, onPress }: { prompt: string; onPre
         {/* Drawn wider than the card and pinned to the left edge: everything in
             the plate — Lumo included — lands further right, and the overhang is
             clipped off the right rather than opening a gap on the left. */}
-        <Image
-          source={sceneAsset("journalAdd").source}
-          style={[styles.art, { width: bannerWidth + ART_SHIFT_X, height: bannerHeight }]}
-          resizeMode="cover"
-        />
+        {settings.minimalMode ? null : (
+          <Image
+            source={sceneAsset("journalAdd", isDark).source}
+            style={[styles.art, { width: bannerWidth + ART_SHIFT_X, height: bannerHeight }]}
+            resizeMode="cover"
+          />
+        )}
       </View>
 
-      {/* Fixed brand ink, not the palette's: the plate is cream in either
-          theme, so ink that flipped white in dark mode would vanish on it. */}
-      <View style={styles.copy}>
+      {/* Light mode keeps fixed brand ink on the cream plate; dark mode has its
+          own near-black cut of the plate, so the copy takes the palette's. */}
+      {/* Minimal mode has no Lumo on the right to stop short of. */}
+      <View style={[styles.copy, settings.minimalMode && styles.copyFull]}>
         <View style={styles.titleRow}>
-          <Icon name="messageEdit" size={15} color={brand.navy} weight="bulk" />
-          <AppText color={brand.navy} numberOfLines={1} style={styles.title}>
+          <Icon name="messageEdit" size={15} color={inkColor} weight="bulk" />
+          <AppText color={inkColor} numberOfLines={1} style={styles.title}>
             Daily Reflection
           </AppText>
         </View>
-        <AppText color={alpha(brand.navy, "B8")} numberOfLines={3} style={styles.prompt}>
+        <AppText color={promptColor} numberOfLines={3} style={styles.prompt}>
           {prompt}
         </AppText>
       </View>
@@ -99,6 +106,9 @@ const styles = StyleSheet.create({
     right: "42%",
     justifyContent: "center",
     gap: spacing.xxs
+  },
+  copyFull: {
+    right: spacing.ml
   },
   titleRow: {
     flexDirection: "row",

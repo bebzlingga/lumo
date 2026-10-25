@@ -65,7 +65,9 @@ export function MoveBadge({ progress, size = 62 }: { progress: MoveMilestoneProg
        */
       style={[
         styles.wrap,
-        { width: size, height: size, shadowOffset: { width: 0, height: size * 0.04 }, shadowRadius: size * 0.09 }
+        { width: size, height: size, shadowOffset: { width: 0, height: size * 0.04 }, shadowRadius: size * 0.09 },
+        // Locked badges recede so the earned ones lead the shelf.
+        !progress.unlocked && styles.locked
       ]}
     >
       <Image source={art} style={styles.image} resizeMode="contain" />
@@ -80,6 +82,9 @@ const styles = StyleSheet.create({
     shadowColor: "#000000",
     shadowOpacity: 0.18,
     elevation: 0
+  },
+  locked: {
+    opacity: 0.45
   },
   image: {
     width: "100%",

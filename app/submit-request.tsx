@@ -5,7 +5,7 @@ import { Alert, Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensi
 import { Icon, type IconName } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Button, FieldLabel, LoadingState, LumoInput, Screen } from "@/components/ui";
-import { CTA_FILL, fontFamilies, layout, radius, spacing } from "@/constants/theme";
+import { ctaFill, fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { featureBoardService } from "@/lib/featureBoard";
@@ -223,7 +223,7 @@ export default function SubmitRequestScreen() {
               <View style={[styles.typeIcon, { backgroundColor: selected ? palette.greenDark : alpha(palette.greenDark, "12") }]}>
                 {/* In dark mode greenDark is a light tint, so the selected
                     icon needs the dark onAccent ink instead of white. */}
-                <Icon name={option.icon} size={20} color={selected ? (isDark ? palette.onAccent : palette.white) : palette.greenDark} weight="bulk" />
+                <Icon name={option.icon} size={20} color={selected ? palette.onGreen : palette.greenDark} weight="bulk" />
               </View>
               <AppText variant="titleSmall" color={palette.ink} style={styles.typeLabel}>
                 {option.label}
@@ -287,14 +287,14 @@ export default function SubmitRequestScreen() {
         )}
       </View>
 
-      <View style={[styles.ctaShell, { backgroundColor: CTA_FILL, shadowColor: isDark ? "transparent" : palette.greenDark }]}>
+      <View style={[styles.ctaShell, { backgroundColor: ctaFill(isDark), shadowColor: isDark ? "transparent" : palette.greenDark }]}>
         <Button
           label={submitting ? (editId ? "Saving…" : "Sending…") : editId ? "Save changes" : copy.cta}
           variant="primary"
           disabled={!title.trim() || submitting}
           onPress={submit}
           className="min-h-[52px] w-full flex-row items-center justify-center rounded-full px-4 py-2"
-          style={{ backgroundColor: CTA_FILL, borderRadius: radius.pill, borderWidth: 0 }}
+          style={{ backgroundColor: ctaFill(isDark), borderRadius: radius.pill, borderWidth: 0 }}
           labelStyle={{ fontSize: 16 }}
         />
       </View>

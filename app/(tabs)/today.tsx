@@ -38,24 +38,7 @@ const CONTENT_GAP = spacing.xs
 const HERO_TOP_GAP = CONTENT_GAP + spacing.xl
 
 /**
- * One hue per destination, sampled from that screen's own art.
- *
- * Deliberately NOT palette tokens and NOT theme-dependent — the same call
- * `badgeAccent` makes. These are wayfinding: the gold tile means Badges the way
- * a sign's colour means a line on a map, and a tile that changed hue with the
- * theme would stop being the thing you learned to reach for. Each is walked to
- * 3:1 against the current card before it is drawn, so they stay legible in
- * every theme without giving up the identity.
- */
-const EXPLORE_ACCENT = {
-	tips: '#74BC97',
-	faqs: '#B390F3',
-	badges: '#FAD686',
-	featureBoard: '#AE8FFB',
-} as const
-
-/**
- * One row in a Goodies or Explore card.
+ * One row in the Goodies card.
  *
  * Both sections use this, so they read as the same kind of list and cannot
  * drift apart. `divided` draws the hairline above — every row but the first.
@@ -130,7 +113,7 @@ export default function TodayScreen() {
 	const router = useRouter()
 	const { width } = useWindowDimensions()
 	const insets = useSafeAreaInsets()
-	const { habits, isReady, nickname, palette, isDark, avatar } = useLumo()
+	const { habits, isReady, nickname, palette, isDark, avatar, settings } = useLumo()
 	/**
 	 * Move's own state, read straight from its provider.
 	 *
@@ -172,7 +155,8 @@ export default function TodayScreen() {
 	// padding, the header, the gap under it) comes off the reserve. No floor
 	// beyond zero: the greeting's own three lines are taller than this on a
 	// normal phone, and a floor above them would only push the cards back down.
-	const heroMinHeight = Math.max(0, homeSceneBottom(width, period) - insets.top - spacing.lg - HEADER_HEIGHT - HERO_TOP_GAP)
+	// Minimal mode draws no scene, so there is nothing for the greeting to clear.
+	const heroMinHeight = settings.minimalMode ? 0 : Math.max(0, homeSceneBottom(width, period) - insets.top - spacing.lg - HEADER_HEIGHT - HERO_TOP_GAP)
 
 	// Home no longer lists the user's groups, but a habit that belongs to one
 	// still carries a small marker on its row — so the ids are all this screen
@@ -351,9 +335,8 @@ export default function TodayScreen() {
 				</View>
 			) : null}
 
-			{/* Two cards, same shape as the habits card above them. Things you DO
-			    on top, things you read below. Goodies is off for now — see
-			    GOODIES_ENABLED — which leaves Explore as the only one. */}
+			{/* Goodies is off for now — see GOODIES_ENABLED. Explore moved to
+			    Settings (Help card). */}
 			{GOODIES_ENABLED ? (
 				<View style={[styles.toolsSection, styles.sectionLead]}>
 					<AppText variant='titleSmall' color={palette.ink} style={styles.sectionTitle}>
@@ -376,22 +359,6 @@ export default function TodayScreen() {
 				</View>
 			) : null}
 
-			{/* Carries the break under the day's cards itself while Goodies is
-			    hidden, so the page does not run straight from the last card into a
-			    section heading. */}
-			<View style={[styles.exploreSection, GOODIES_ENABLED ? null : styles.sectionLead]}>
-				<AppText variant='titleSmall' color={palette.ink} style={styles.sectionTitle}>
-					Explore
-				</AppText>
-				<Card style={styles.resourceCard}>
-					<ResourceRow accent={EXPLORE_ACCENT.tips} icon='sparkle' label='Habit Journey' description='Habit science, made simple' divided={false} onPress={() => router.push('/tips')} />
-					<ResourceRow accent={EXPLORE_ACCENT.faqs} icon='note' label='FAQs' description='Quick answers about Lumo' divided onPress={() => router.push('/faqs')} />
-					<ResourceRow accent={EXPLORE_ACCENT.badges} icon='award' label='Badges' description='Celebrate your milestones' divided onPress={() => router.push('/badges')} />
-					{/* Feature Board entry hidden for now — restore when the feature ships.
-					<ResourceRow accent={EXPLORE_ACCENT.featureBoard} icon='star' label="What's next" description='Vote on what we build' divided onPress={() => router.push('/feature-soon')} />
-					*/}
-				</Card>
-			</View>
 
 			{showConfetti ? (
 				<View
@@ -542,10 +509,6 @@ const styles = StyleSheet.create({
 		gap: spacing.ml,
 		// And its bottom matches Explore's exactly. The TOP comes from
 		// `sectionLead`, which whichever section runs first wears.
-		marginBottom: spacing.md,
-	},
-	exploreSection: {
-		gap: spacing.ml,
 		marginBottom: spacing.md,
 	},
 	// The break between "today's work" and everything below it, larger than the

@@ -136,7 +136,7 @@ export function MoveOptionRow({
               : { borderColor: palette.hairline }
           ]}
         >
-          {selected ? <Icon name="check" size={11} color={palette.white} weight="bold" /> : null}
+          {selected ? <Icon name="check" size={11} color={palette.onGreen} weight="bold" /> : null}
         </View>
       )}
     </Pressable>

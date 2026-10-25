@@ -204,6 +204,7 @@ export default function SettingsScreen() {
     setAutoBackupEnabled,
     setBackupFrequency,
     setTextSize,
+    setMinimalMode,
     exportData,
     createDataBackup,
     importData
@@ -360,7 +361,7 @@ export default function SettingsScreen() {
       >
         <Avatar config={avatar} size={116} backgroundColor={palette.greenSoft} />
         <View style={[styles.avatarEdit, { backgroundColor: isDark ? palette.green : palette.greenDark, borderColor: palette.canvas }]}>
-          <Icon name="edit" size={14} color={palette.white} weight="bulk" />
+          <Icon name="edit" size={14} color={palette.onGreen} weight="bulk" />
         </View>
       </Pressable>
 
@@ -407,7 +408,7 @@ export default function SettingsScreen() {
                   <AppText color={palette.ink} style={styles.appearanceTitle}>
                     Theme
                   </AppText>
-                  <AppText variant="bodySmall" color={palette.subtle}>
+                  <AppText variant="caption" color={palette.subtle} style={styles.rowBody}>
                     The colour Lumo wears.
                   </AppText>
                 </View>
@@ -421,7 +422,7 @@ export default function SettingsScreen() {
               <AppText color={palette.ink} style={styles.appearanceTitle}>
                 Appearance
               </AppText>
-              <AppText variant="bodySmall" color={palette.subtle}>
+              <AppText variant="caption" color={palette.subtle} style={styles.rowBody}>
                 Use the warmer low-light palette after dark.
               </AppText>
             </View>
@@ -429,6 +430,22 @@ export default function SettingsScreen() {
           </View>
         </SettingsGroup>
       ) : null}
+
+      <SettingsGroup>
+        <SettingsRow
+          icon="eyeSlash"
+          title="Minimal"
+          body="Hide the illustrations and Lumo for a plainer look"
+          right={
+            <SettingsSwitch
+              checked={settings.minimalMode}
+              accessibilityLabel="Minimal look"
+              onPress={() => setMinimalMode(!settings.minimalMode)}
+            />
+          }
+          last
+        />
+      </SettingsGroup>
 
       <SettingsGroup>
         <SettingsRow
@@ -550,6 +567,8 @@ export default function SettingsScreen() {
       <SettingsGroup>
         <SettingsRow icon="messages" title="Help & Support" body="FAQs, guides, and contact us" onPress={() => router.push("/faqs")} />
         <SettingsRow icon="book" title="Tips & Guides" body="Short reads on making habits stick" onPress={() => router.push("/tips")} />
+        {/* Moved from Home's Explore card; its other two rows were these two above. */}
+        <SettingsRow icon="award" title="Badges" body="Celebrate your milestones" onPress={() => router.push("/badges")} />
         {/* Feature Board hidden for now — restore when the board ships.
         <SettingsRow
           icon="star"
@@ -633,7 +652,7 @@ export default function SettingsScreen() {
                   { backgroundColor: isDark ? palette.green : palette.greenDark, opacity: pressed ? 0.88 : 1 }
                 ]}
               >
-                <AppText variant="button" color={palette.white} style={styles.pickerDoneLabel}>
+                <AppText variant="button" color={palette.onGreen} style={styles.pickerDoneLabel}>
                   Done
                 </AppText>
               </Pressable>

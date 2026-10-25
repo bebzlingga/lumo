@@ -27,7 +27,7 @@ function InviteRowButton({ name, invited, onPress }: { name: string; invited: bo
         }
       ]}
     >
-      <AppText variant="caption" color={invited ? palette.greenDark : palette.white} style={styles.rowButtonText}>
+      <AppText variant="caption" color={invited ? palette.greenDark : palette.onGreen} style={styles.rowButtonText}>
         {invited ? "Invited" : "Invite"}
       </AppText>
     </Pressable>
@@ -108,7 +108,7 @@ export function GroupInviteModal({
             onPress={onClose}
             style={({ pressed }) => [styles.done, { backgroundColor: isDark ? palette.green : palette.greenDark, opacity: pressed ? 0.85 : 1 }]}
           >
-            <AppText variant="button" color={palette.white}>
+            <AppText variant="button" color={palette.onGreen}>
               Done
             </AppText>
           </Pressable>

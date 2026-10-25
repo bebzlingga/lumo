@@ -19,7 +19,11 @@ export default function JournalEditorScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ date: string; id?: string; new?: string }>();
   const { journals, isReady, isDark, palette, saveJournal, canCreateJournal } = useLumo();
-  const textColor = isDark ? palette.ink : "#1C1B19";
+  // Dark mode: the title keeps full ink, but long-form writing uses the softer
+  // `body` tone — paragraphs of near-white on near-black glare.
+  const titleColor = isDark ? palette.ink : "#1C1B19";
+  const textColor = isDark ? palette.body : "#1C1B19";
+  const placeholderColor = isDark ? palette.muted : `${palette.body}59`;
 
   const openedDateKey = typeof params.date === "string" ? params.date : toDateKey();
 
@@ -237,10 +241,10 @@ export default function JournalEditorScreen() {
             value={title}
             onChangeText={setTitle}
             placeholder="Give today a title"
-            placeholderTextColor={`${palette.body}59`}
+            placeholderTextColor={placeholderColor}
             multiline
             autoFocus={!existing}
-            style={[styles.titleInput, { color: textColor }]}
+            style={[styles.titleInput, { color: titleColor }]}
           />
           <Pressable
             accessibilityRole="button"
@@ -259,7 +263,7 @@ export default function JournalEditorScreen() {
             value={content}
             onChangeText={setContent}
             placeholder="Write your thoughts…"
-            placeholderTextColor={`${palette.body}59`}
+            placeholderTextColor={placeholderColor}
             multiline
             textAlignVertical="top"
             style={[styles.bodyInput, { color: textColor }]}
@@ -293,7 +297,7 @@ export default function JournalEditorScreen() {
                   { backgroundColor: palette.green, opacity: !dayIsOpen(draftDate) ? 0.45 : pressed ? 0.88 : 1 }
                 ]}
               >
-                <AppText variant="button" color={palette.white} style={styles.pickerDoneLabel}>
+                <AppText variant="button" color={palette.onGreen} style={styles.pickerDoneLabel}>
                   Done
                 </AppText>
               </Pressable>

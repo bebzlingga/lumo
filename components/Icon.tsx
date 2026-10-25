@@ -331,6 +331,8 @@ const weightMap: Record<IconWeight, PhosphorWeight> = {
 };
 
 const DUOTONE_OPACITY = 0.3;
+/** A 0.3 back layer all but vanishes on the near-black canvas. */
+const DUOTONE_OPACITY_DARK = 0.45;
 
 export function Icon({
   name,
@@ -348,7 +350,11 @@ export function Icon({
   // Icons move with the reader's text size, so a row's glyph never shrinks
   // against the label beside it. Only numeric sizes are liftable — a percentage
   // string is already relative to its container.
-  const { settings } = useLumo();
+  const { settings, isDark, palette } = useLumo();
+  // Dark mode lifts the two dim greys a step — muted → subtle, subtle → body —
+  // here rather than at ~40 call sites; a grey glyph on near-black reads dimmer
+  // than grey text of the same value.
+  const tone = isDark ? (color === palette.muted ? palette.subtle : color === palette.subtle ? palette.body : color) : color;
   const bump = TEXT_SIZE_BUMP[settings.textSize] ?? 0;
   const sized = typeof size === "number" ? size + bump : size;
 
@@ -361,11 +367,11 @@ export function Icon({
 
   return (
     <Component
-      color={color}
+      color={tone}
       size={sized}
       weight={phosphorWeight}
       style={style}
-      duotoneOpacity={phosphorWeight === "duotone" ? DUOTONE_OPACITY : undefined}
+      duotoneOpacity={phosphorWeight === "duotone" ? (isDark ? DUOTONE_OPACITY_DARK : DUOTONE_OPACITY) : undefined}
     />
   );
 }

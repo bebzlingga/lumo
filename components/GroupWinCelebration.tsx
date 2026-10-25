@@ -128,7 +128,7 @@ export function GroupWinCelebration({
                 </AppText>
               </View>
               <View style={styles.actions}>
-                <CelebrationButton label="Share the win" background={palette.green} color={palette.white} onPress={share} />
+                <CelebrationButton label="Share the win" background={palette.green} color={palette.onGreen} onPress={share} />
                 <CelebrationButton label="Nice!" background={palette.greenSoft} color={palette.greenDark} onPress={close} />
               </View>
             </View>

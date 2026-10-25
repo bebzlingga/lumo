@@ -944,8 +944,8 @@ export default function MoveScreen() {
                 }
                 style={({ pressed }) => [styles.trackWalk, { backgroundColor: accent.primary, opacity: pressed ? 0.85 : 1 }]}
               >
-                <Icon name="walk" size={16} color={palette.white} weight="bulk" />
-                <AppText variant="button" color={palette.white}>
+                <Icon name="walk" size={16} color={palette.onGreen} weight="bulk" />
+                <AppText variant="button" color={palette.onGreen}>
                   {/* One at a time: starting a second recording is not possible,
                       so during one this is the way back to it. */}
                   {moving
@@ -1190,8 +1190,8 @@ export default function MoveScreen() {
                   }
                   style={({ pressed }) => [styles.inviteAction, { backgroundColor: accent.primary, opacity: pressed ? 0.85 : 1 }]}
                 >
-                  <Icon name="walk" size={16} color={palette.white} weight="bulk" />
-                  <AppText variant="button" color={palette.white} numberOfLines={1}>
+                  <Icon name="walk" size={16} color={palette.onGreen} weight="bulk" />
+                  <AppText variant="button" color={palette.onGreen} numberOfLines={1}>
                     Move Now
                   </AppText>
                 </Pressable>

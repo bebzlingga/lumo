@@ -154,9 +154,11 @@ export function useWalkSceneInset(plate: WalkPlate): number {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
+  const { settings } = useLumo();
   const fit = PLATE_FIT[plate];
   const plateHeight = (width * fit.scale) / fit.aspect;
 
+  if (settings.minimalMode) return 0;
   return Math.max(0, Math.round(plateHeight * (fit.sceneBottom + (fit.shiftDown ?? 0))) - (insets.top + HEADER_BAND));
 }
 
@@ -173,7 +175,7 @@ const FADE_DISTANCE = 260;
 const FADED_OPACITY = 0.35;
 
 export function WalkBackground({ plate, scrollY }: { plate: WalkPlate; scrollY?: Animated.Value }) {
-  const { isDark, themeId } = useLumo();
+  const { isDark, themeId, settings } = useLumo();
   const { width } = useWindowDimensions();
 
   const fit = PLATE_FIT[plate];
@@ -205,6 +207,8 @@ export function WalkBackground({ plate, scrollY }: { plate: WalkPlate; scrollY?:
       })
     : restOpacity;
 
+  // Minimal mode (Settings): no illustrated backdrop. After every hook, so flipping it never changes the hook order.
+  if (settings.minimalMode) return null;
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {/* The plate's own colour, under it and at its opacity — see PLATE_TINT.

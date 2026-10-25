@@ -48,7 +48,7 @@ export function LumoBackground({
 	variant: BackgroundVariant
 	intensity?: BackgroundIntensity
 }) {
-	const { isDark, palette, themeId } = useLumo()
+	const { isDark, palette, themeId, settings } = useLumo()
 	const { width } = useWindowDimensions()
 	// The plates are drawn for the cream canvas, so a theme whose canvas sits
 	// further away holds them further back — unless it ships its own art for this
@@ -62,6 +62,8 @@ export function LumoBackground({
 	const opacity = darkPlate ? 1 : INTENSITY_OPACITY[intensity] * (isDark ? 0.35 : 1) * themeFade
 	const plateHeight = width / BACKGROUND_ASPECT
 
+	// Minimal mode (Settings): no illustrated backdrop. After every hook, so flipping it never changes the hook order.
+	if (settings.minimalMode) return null
 	return (
 		<View style={StyleSheet.absoluteFill} pointerEvents='none'>
 			<Image

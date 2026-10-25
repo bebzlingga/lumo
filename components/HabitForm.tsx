@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Modal, ScrollView, StyleProp, StyleSheet, View, ViewStyle } from "react-native"
 import { WheelTimePicker } from "./WheelTimePicker";
-import { CTA_FILL, defaultHabitColor, fontFamilies, habitAccent, habitColorPickerOptions, layout, radius, spacing, tileRadius } from "@/constants/theme";
+import { ctaFill as ctaFillFor, defaultHabitColor, fontFamilies, habitAccent, habitColorPickerOptions, layout, radius, spacing, tileRadius } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha, readableOn } from "@/lib/color";
 import { dayLabels, dayNames, parseDateKey, toDateKey } from "@/lib/date";
@@ -307,7 +307,7 @@ export function HabitForm({
   // picker accents cannot carry a white label at 4.5:1, so tinting it per habit
   // would leave the primary button unreadable for most choices. `CTA_FILL` is
   // the app-wide answer.
-  const ctaFill = CTA_FILL;
+  const ctaFill = ctaFillFor(isDark);
   const saveLabel = habit ? "Save changes" : "Create habit";
 
   const multipleCount = draft.goal.type === "multiple" ? Math.max(2, Number(goalAmount) || 2) : 1;
@@ -761,7 +761,7 @@ export function HabitForm({
                 onPress={() => setPickerTarget(null)}
                 style={({ pressed }) => [styles.pickerDoneButton, { backgroundColor: ctaFill, opacity: pressed ? 0.88 : 1 }]}
               >
-                <AppText variant="button" color={palette.white} style={styles.pickerDoneLabel}>
+                <AppText variant="button" color={palette.onGreen} style={styles.pickerDoneLabel}>
                   Done
                 </AppText>
               </Pressable>
@@ -776,7 +776,7 @@ export function HabitForm({
         onPress={save}
         style={({ pressed }) => [styles.cta, { backgroundColor: ctaFill, opacity: pressed ? 0.88 : 1 }]}
       >
-        <AppText variant="button" color="#FFFFFF">
+        <AppText variant="button" color={palette.onGreen}>
           {saveLabel}
         </AppText>
       </Pressable>

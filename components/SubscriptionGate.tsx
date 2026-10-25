@@ -6,7 +6,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, Screen } from "@/components/ui";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BACKGROUND_ASPECT } from "@/constants/backgroundAssets";
-import { CTA_FILL, fontFamilies, radius, spacing, tileRadius } from "@/constants/theme";
+import { ctaFill, fontFamilies, radius, spacing, tileRadius } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha } from "@/lib/color";
 import { useTabBarVisibility } from "@/context/TabBarVisibility";
@@ -164,7 +164,7 @@ export function SubscriptionGate({ product = "friends" }: { product?: PaywallPro
   const router = useRouter();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { palette, purchasePro, purchaseUnlimited, restorePurchases } = useLumo();
+  const { palette, isDark, purchasePro, purchaseUnlimited, restorePurchases } = useLumo();
   const copy = PRODUCTS[product];
   const tabBar = useTabBarVisibility();
 
@@ -349,13 +349,13 @@ export function SubscriptionGate({ product = "friends" }: { product?: PaywallPro
         onPress={handleSubscribe}
         onPressIn={() => setCtaPressed(true)}
         onPressOut={() => setCtaPressed(false)}
-        style={[styles.subscribeCta, { backgroundColor: CTA_FILL, opacity: ctaPressed ? 0.88 : 1 }]}
+        style={[styles.subscribeCta, { backgroundColor: ctaFill(isDark), opacity: ctaPressed ? 0.88 : 1 }]}
       >
         {busy ? (
-          <ActivityIndicator color={palette.white} />
+          <ActivityIndicator color={palette.onGreen} />
         ) : (
           <>
-            <AppText variant="button" color={palette.white} style={styles.subscribeLabel}>
+            <AppText variant="button" color={palette.onGreen} style={styles.subscribeLabel}>
               {copy.cta(priceLabel)}
             </AppText>
             <AppText variant="caption" color="rgba(255,255,255,0.85)">

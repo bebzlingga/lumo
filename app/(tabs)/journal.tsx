@@ -7,7 +7,7 @@ import { Icon } from "@/components/Icon";
 import { AppText, LoadingState, Screen } from "@/components/ui";
 import { DailyReflectionCard } from "@/components/DailyReflectionCard";
 import { sceneAsset } from "@/constants/mascotAssets";
-import { control, CTA_FILL, fontFamilies, layout, radius, spacing } from "@/constants/theme";
+import { control, ctaFill, fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { useTabBarVisibility } from "@/context/TabBarVisibility";
 import { alpha } from "@/lib/color";
@@ -276,8 +276,8 @@ export default function JournalScreen() {
 function TodayEmptyState({ onWrite, onBrowse }: { onWrite: () => void; onBrowse: () => void }) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
-  const scene = sceneAsset("journalToday");
-  const { palette } = useLumo();
+  const { palette, isDark, settings } = useLumo();
+  const scene = sceneAsset("journalToday", isDark);
   // Natural proportions at a chosen width, rather than blown up to fill a
   // screen that is taller than the art is — that coupled size to position.
   const artWidth = window.width * SCENE_SCALE;
@@ -294,22 +294,26 @@ function TodayEmptyState({ onWrite, onBrowse }: { onWrite: () => void; onBrowse:
     <Screen scroll={false} contentStyle={styles.sceneContent} edges={[]} backgroundVariant={null} background={palette.canvas}>
       {/* Sized explicitly — left to `absoluteFill` the art lays out at its
           intrinsic 941×1672 and spills off the right of the screen. */}
-      <Image
-        source={scene.source}
-        style={[styles.sceneArt, { top: SCENE_TOP, left: artLeft, width: artWidth, height: artHeight }]}
-        resizeMode="cover"
-      />
-      <Svg width={window.width} height={SCENE_FADE} style={[styles.sceneArt, { top: artBottom - SCENE_FADE }]} pointerEvents="none">
-        <Defs>
-          {/* Fades the art's bottom edge into whatever the canvas now is, so the
-              illustration ends without a seam in every theme. */}
-          <LinearGradient id="journalSceneFade" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={palette.canvas} stopOpacity="0" />
-            <Stop offset="1" stopColor={palette.canvas} stopOpacity="1" />
-          </LinearGradient>
-        </Defs>
-        <Rect x="0" y="0" width={window.width} height={SCENE_FADE} fill="url(#journalSceneFade)" />
-      </Svg>
+      {settings.minimalMode ? null : (
+        <>
+          <Image
+            source={scene.source}
+            style={[styles.sceneArt, { top: SCENE_TOP, left: artLeft, width: artWidth, height: artHeight }]}
+            resizeMode="cover"
+          />
+          <Svg width={window.width} height={SCENE_FADE} style={[styles.sceneArt, { top: artBottom - SCENE_FADE }]} pointerEvents="none">
+            <Defs>
+              {/* Fades the art's bottom edge into whatever the canvas now is, so the
+                  illustration ends without a seam in every theme. */}
+              <LinearGradient id="journalSceneFade" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor={palette.canvas} stopOpacity="0" />
+                <Stop offset="1" stopColor={palette.canvas} stopOpacity="1" />
+              </LinearGradient>
+            </Defs>
+            <Rect x="0" y="0" width={window.width} height={SCENE_FADE} fill="url(#journalSceneFade)" />
+          </Svg>
+        </>
+      )}
 
       <View style={[styles.sceneCopy, { paddingBottom: bottomClearance }]}>
         {/* Broken by hand so the second half always lands on its own line. */}
@@ -333,12 +337,11 @@ function TodayEmptyState({ onWrite, onBrowse }: { onWrite: () => void; onBrowse:
           accessibilityRole="button"
           accessibilityLabel="Write today's entry"
           onPress={onWrite}
-          style={({ pressed }) => [styles.sceneCta, styles.sceneCtaLead, { backgroundColor: CTA_FILL, opacity: pressed ? 0.88 : 1 }]}
+          style={({ pressed }) => [styles.sceneCta, styles.sceneCtaLead, { backgroundColor: ctaFill(isDark), opacity: pressed ? 0.88 : 1 }]}
         >
-          {/* `white`, not `ink`: this is a filled primary button, and its label
-              has to clear the fill in every theme — which the palette's own
-              onAccent pairing does not cover, since that one is for the gold. */}
-          <AppText variant="button" color={palette.white}>
+          {/* `onGreen`, not `ink`: the label of the primary fill — white on
+              sage, dark ink on dark mode's gold. */}
+          <AppText variant="button" color={palette.onGreen}>
             Write Your Journal Today
           </AppText>
         </Pressable>

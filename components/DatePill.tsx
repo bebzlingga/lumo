@@ -104,7 +104,7 @@ export function DatePill({
                   onPress={() => confirm(draft)}
                   style={({ pressed }) => [styles.sheetButton, { backgroundColor: palette.green, opacity: pressed ? 0.88 : 1 }]}
                 >
-                  <AppText variant="button" color={palette.white}>
+                  <AppText variant="button" color={palette.onGreen}>
                     Done
                   </AppText>
                 </Pressable>

@@ -69,7 +69,7 @@ function StateShell({
 						{ backgroundColor: isDark ? palette.green : palette.greenDark, opacity: pressed ? 0.85 : 1 },
 					]}
 				>
-					<AppText variant='button' color={palette.white}>
+					<AppText variant='button' color={palette.onGreen}>
 						{action.label}
 					</AppText>
 				</Pressable>

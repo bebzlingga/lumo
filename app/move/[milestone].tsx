@@ -293,7 +293,7 @@ export default function MilestoneScreen() {
             onPress={() => setPaywallOpen(true)}
             style={({ pressed }) => [styles.blockedButton, { backgroundColor: accent.primary, opacity: pressed ? 0.85 : 1 }]}
           >
-            <AppText color={palette.white} style={styles.blockedButtonLabel}>
+            <AppText color={palette.onGreen} style={styles.blockedButtonLabel}>
               See Lumo Pro
             </AppText>
           </Pressable>
@@ -590,7 +590,7 @@ export default function MilestoneScreen() {
               { backgroundColor: ready ? accent.primary : palette.surface, opacity: pressed && ready ? 0.85 : 1 }
             ]}
           >
-            <AppText color={ready ? palette.white : palette.muted} style={styles.ctaLabel}>
+            <AppText color={ready ? palette.onGreen : palette.muted} style={styles.ctaLabel}>
               {ready ? "Start Challenge" : `Invite ${short} more ${short === 1 ? "friend" : "friends"}`}
             </AppText>
           </Pressable>

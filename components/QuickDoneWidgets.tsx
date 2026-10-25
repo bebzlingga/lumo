@@ -184,7 +184,7 @@ function WidgetHabitRow({
   // the tick stays legible on every option. Habits saved before colour themes
   // fall back to the app's greens.
   const checkFill = habitColor ? habitColor.color : palette.greenDark;
-  const checkGlyph = habitColor ? habitColor.onColor : palette.white;
+  const checkGlyph = habitColor ? habitColor.onColor : palette.onGreen;
   // Empty, but tinted: the ring says which habit it belongs to before it is
   // ticked, without reading as already filled.
   const checkEmptyBorder = habitAccentColor ? alpha(habitAccentColor, "4D") : palette.hairline;

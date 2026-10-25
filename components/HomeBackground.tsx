@@ -54,7 +54,7 @@ const FADE_DISTANCE = 300
 const FADED_OPACITY = 0.3
 
 export function HomeBackground({ period, scrollY }: { period: HomePeriod; scrollY?: Animated.Value }) {
-	const { isDark, themeId } = useLumo()
+	const { isDark, themeId, settings } = useLumo()
 	const { width } = useWindowDimensions()
 	const fit = HOME_PLATE_FIT[period]
 	const plateWidth = width * fit.scale
@@ -82,6 +82,8 @@ export function HomeBackground({ period, scrollY }: { period: HomePeriod; scroll
 			})
 		: restOpacity
 
+	// Minimal mode (Settings): no illustrated backdrop. After every hook, so flipping it never changes the hook order.
+	if (settings.minimalMode) return null
 	return (
 		<View style={StyleSheet.absoluteFill} pointerEvents='none'>
 			<Animated.Image

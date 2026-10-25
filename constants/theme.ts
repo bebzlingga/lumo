@@ -120,6 +120,8 @@ export const lightPalette = {
   accent: brand.gold,
   accentBorder: "#E5A21F",
   onAccent: brand.navy,
+  /** Label/glyph on a `green`/`greenDark` fill: white on sage, dark ink on dark mode's gold. */
+  onGreen: "#FFFFFF",
   danger: brand.error,
   /** Danger as a FILL. `danger` itself only carries a white label at 3.25:1,
    * so a filled destructive button uses this deeper red (4.8:1) instead. */
@@ -129,7 +131,9 @@ export const lightPalette = {
 };
 
 /**
- * Deep navy/charcoal — never pure black — with muted pastel accents.
+ * Near-black with a faint warm cast — not navy, which read blue against the
+ * gold and sage — and warm off-white text. Never pure #000: true black smears
+ * on OLED when scrolling and leaves no room below the canvas for depth.
  *
  * ## Elevation is LIGHT here, not shadow
  *
@@ -148,20 +152,25 @@ export const lightPalette = {
  * forty points tall.
  */
 export const darkPalette: LumoPalette = {
-  canvas: "#1A2130",
-  surface: "#202838",
-  surfaceStrong: "#263049",
-  card: "#232C3E",
-  ink: "#F7F8FA",
-  body: "#C3C8D0",
-  muted: "#98A2B3",
-  subtle: "#A8AEB9",
-  hairline: "#354059",
-  hairlineStrong: "#55648A",
-  green: "#8FB47A",
-  greenActive: "#A8C892",
-  greenDark: "#A8C892",
-  greenSoft: "#22301F",
+  canvas: "#111010",
+  // Card sits just a shade off the canvas (1.06:1) — the hairline (1.5:1 on
+  // card) carries its edge, so the page reads as one surface, not tiles.
+  surface: "#151413",
+  surfaceStrong: "#222120",
+  card: "#181716",
+  ink: "#F5F2ED",
+  body: "#D6D1C9",
+  muted: "#8A847B",
+  subtle: "#ABA59C",
+  hairline: "#3A3835",
+  hairlineStrong: "#55514C",
+  // Primary is gold, not sage, in dark mode: on near-black the brand's yellow
+  // reads as Lumo's own light, where sage read muddy. Labels on it take
+  // `onGreen` (dark ink) — white on gold is under 2:1.
+  green: brand.gold,
+  greenActive: "#F7C552",
+  greenDark: "#F7C552",
+  greenSoft: "#2E2611",
   /**
    * The empty part of a ring or a bar.
    *
@@ -171,13 +180,14 @@ export const darkPalette: LumoPalette = {
    * (`chartTrackColor`, the settings switch, the segmented control). A token
    * nobody can use as-is is not a token.
    */
-  chartTrack: "#39455F",
+  chartTrack: "#43403C",
   chartPartial: brand.gold,
   glow: brand.gold,
-  glowSoft: "#3A2F17",
+  glowSoft: "#33290F",
   accent: brand.gold,
   accentBorder: "#E5A21F",
   onAccent: brand.navy,
+  onGreen: brand.navy,
   danger: "#F08A80",
   // Dark canvas: the label on a filled destructive button is the deep ink, so
   // the fill stays bright rather than darkening.
@@ -263,6 +273,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       accent: "#E8A33D",
       accentBorder: "#D08E28",
       onAccent: "#23301C",
+      onGreen: "#FFFFFF",
       danger: "#D9614F",
       dangerFill: "#A94636",
       white: "#FFFFFF",
@@ -290,6 +301,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       accent: "#E8A33D",
       accentBorder: "#D08E28",
       onAccent: "#23301C",
+      onGreen: "#23301C",
       danger: "#EE8878",
       // Dark canvas: a filled destructive button carries the deep ink as its
       // label, so the fill stays bright rather than darkening. Same reasoning
@@ -327,6 +339,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       accent: "#E9A83C",
       accentBorder: "#D0912A",
       onAccent: "#16303D",
+      onGreen: "#FFFFFF",
       danger: "#DE6257",
       dangerFill: "#AD4739",
       white: "#FFFFFF",
@@ -354,6 +367,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       accent: "#E9A83C",
       accentBorder: "#D0912A",
       onAccent: "#16303D",
+      onGreen: "#16303D",
       danger: "#EF8B7E",
       dangerFill: "#EF8B7E",
       white: "#FFFFFF",
@@ -389,6 +403,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       accent: "#E2A32F",
       accentBorder: "#C88C1F",
       onAccent: "#3F2029",
+      onGreen: "#FFFFFF",
       danger: "#D6544F",
       dangerFill: "#A83C37",
       white: "#FFFFFF",
@@ -416,6 +431,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       accent: "#E2A32F",
       accentBorder: "#C88C1F",
       onAccent: "#3F2029",
+      onGreen: "#3F2029",
       danger: "#EE8078",
       dangerFill: "#EE8078",
       white: "#FFFFFF",
@@ -535,6 +551,11 @@ export const spacing = {
  * button while the label stays fully opaque. Matches onboarding's CtaButton.
  */
 export const CTA_FILL = `${brand.sageStrong}CC`;
+
+/** The CTA fill per mode: `CTA_FILL` sage in light, opaque gold in dark. Its label is `palette.onGreen`. */
+export function ctaFill(isDark: boolean) {
+  return isDark ? darkPalette.green : CTA_FILL;
+}
 
 const floatingTabBarHeight = 72;
 

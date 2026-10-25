@@ -8,7 +8,7 @@ import { PlusBadge } from "@/components/PlusBadge";
 import { Pressable } from "@/components/Pressable";
 import { AppText } from "@/components/ui";
 import { MOVE_ACCENT } from "@/constants/tools";
-import { CTA_FILL, fontFamilies, radius, rowRadius, spacing } from "@/constants/theme";
+import { ctaFill, fontFamilies, radius, rowRadius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { ME } from "@/context/MoveContext";
 import { alpha, readableOn } from "@/lib/color";
@@ -36,10 +36,10 @@ import type { AvatarConfig } from "@/lib/avatar";
 
 /** Move's colours. `primary` is every filled button; the rest are for data. */
 export function useMoveAccent() {
-  const { palette } = useLumo();
+  const { palette, isDark } = useLumo();
 
   return {
-    primary: CTA_FILL,
+    primary: ctaFill(isDark),
     fill: readableOn(MOVE_ACCENT, palette.white, 4.5),
     glyph: readableOn(MOVE_ACCENT, palette.card, 3),
     soft: alpha(MOVE_ACCENT, "1F")

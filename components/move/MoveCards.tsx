@@ -57,7 +57,7 @@ export function MovePermissionCard({ onConnect, onDismiss, busy }: { onConnect: 
           disabled={busy}
           style={({ pressed }) => [styles.primary, { backgroundColor: accent.primary, opacity: pressed || busy ? 0.85 : 1 }]}
         >
-          <AppText color={palette.white} style={styles.primaryLabel}>
+          <AppText color={palette.onGreen} style={styles.primaryLabel}>
             {busy ? "Connecting\u2026" : "Connect"}
           </AppText>
         </Pressable>

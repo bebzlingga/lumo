@@ -186,7 +186,7 @@ export function GroupActivityRow({
   // own hue as the fill, its paired `onColor` for the tick so it stays legible
   // on the pale swatches too, and a soft wash of the accent for the empty ring.
   const checkFill = colorOption ? colorOption.color : palette.greenDark;
-  const checkGlyph = colorOption ? colorOption.onColor : palette.white;
+  const checkGlyph = colorOption ? colorOption.onColor : palette.onGreen;
   const checkEmptyBorder = alpha(accentColor, "4D");
   /**
    * The unfilled state for every meter on the row: the share bar's track and

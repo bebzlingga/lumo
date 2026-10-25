@@ -190,6 +190,7 @@ type LumoContextValue = StoredState & {
   setAutoBackupEnabled: (enabled: boolean) => Promise<void>;
   setBackupFrequency: (frequency: BackupFrequency) => void;
   setTextSize: (size: TextSize) => void;
+  setMinimalMode: (enabled: boolean) => void;
   refreshNotificationStatus: () => Promise<void>;
   requestNotifications: () => Promise<void>;
   createHabit: (draft: HabitDraft) => Promise<Habit>;
@@ -224,6 +225,7 @@ const defaultSettings: AppSettings = {
   autoBackupEnabled: false,
   backupFrequency: "weekly",
   textSize: "default",
+  minimalMode: false,
   isPro: false,
   isUnlimited: false,
   bestStreakEver: 0,
@@ -1170,6 +1172,12 @@ export function LumoProvider({ children }: { children: ReactNode }) {
         setState((current) => ({
           ...current,
           settings: { ...current.settings, textSize: size }
+        }));
+      },
+      setMinimalMode(enabled) {
+        setState((current) => ({
+          ...current,
+          settings: { ...current.settings, minimalMode: enabled }
         }));
       },
       async createHabit(draft) {

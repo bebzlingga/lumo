@@ -193,6 +193,8 @@ export type AppSettings = {
   themeId: "cream" | "forest" | "ocean" | "sunset";
   /** Points added to every type and icon size. See TEXT_SIZE_BUMP. */
   textSize: TextSize;
+  /** Minimal look: no illustrated backgrounds and no mascot — just the canvas and content. */
+  minimalMode: boolean;
   notificationStatus: "unknown" | "granted" | "denied" | "undetermined";
   notificationsEnabled: boolean;
   autoBackupEnabled: boolean;

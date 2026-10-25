@@ -309,7 +309,7 @@ function GroupHabitRow({
               }
             ]}
           >
-            {done ? <Icon name="check" size={12} color={swatch?.onColor ?? palette.white} weight="bold" /> : null}
+            {done ? <Icon name="check" size={12} color={swatch?.onColor ?? palette.onGreen} weight="bold" /> : null}
           </View>
         )}
         {canUndo ? (
@@ -1451,9 +1451,9 @@ export default function FriendsScreen() {
               ]}
             >
               {sendingInvite ? (
-                <ActivityIndicator color={palette.white} />
+                <ActivityIndicator color={palette.onGreen} />
               ) : (
-                <AppText variant="button" color={palette.white}>
+                <AppText variant="button" color={palette.onGreen}>
                   Send invite
                 </AppText>
               )}

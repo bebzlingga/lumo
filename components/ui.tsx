@@ -302,19 +302,12 @@ export function Card({
         {
           backgroundColor,
           /**
-           * A shadow in light, an EDGE in dark — and one of the two is always
-           * drawn, which is the point.
-           *
-           * A shadow is a dark shape cast onto a light ground; on a dark one
-           * there is nothing for it to darken, so it was correctly switched off
-           * here and nothing took its place. The card lift alone is deliberately
-           * subtle — enough for a panel, not enough for a short row — so the
-           * hairline finishes the job. Both cues are off in the mode that does
-           * not use them, so neither shows up as a stray line on cream.
+           * A shadow in light; in dark, no edge at all — the user asked for
+           * borderless cards, so the card's slight lift off the canvas is the
+           * only cue. (A shadow has nothing to darken on a dark ground.)
            */
           shadowColor: isDark ? "transparent" : palette.shadow,
-          borderWidth: isDark ? StyleSheet.hairlineWidth : 0,
-          borderColor: isDark ? palette.hairline : "transparent"
+          borderWidth: 0
         },
         style
       ]}
@@ -390,7 +383,9 @@ export function Button({
   const surfaceBorderRadius = customStyle?.borderRadius ?? radius.pill;
   const surfaceBorderWidth = customStyle?.borderWidth ?? StyleSheet.hairlineWidth;
   const color =
-    variant === "primary" || variant === "danger"
+    variant === "primary"
+      ? palette.onGreen
+      : variant === "danger"
       ? palette.white
       : variant === "glow" || variant === "accent"
         ? palette.onAccent

@@ -1,3 +1,4 @@
+import { useLumo } from '@/context/LumoContext'
 import React from 'react'
 import { AccessibilityInfo, Animated, Easing, Image, StyleProp, ViewStyle } from 'react-native'
 import { mascotAspect, mascotAsset, mascotSizes, type MascotMood, type MascotSize } from '@/constants/mascotAssets'
@@ -27,6 +28,7 @@ export function LumoMascot({
 	/** Defaults to decorative (hidden from screen readers). */
 	accessibilityLabel?: string
 }) {
+	const { settings } = useLumo()
 	const renderWidth = width ?? mascotSizes[size]
 	// Height follows THIS mood's artwork, not a shared constant — poses are
 	// exported at different orientations.
@@ -69,6 +71,8 @@ export function LumoMascot({
 
 	const translateY = float.interpolate({ inputRange: [0, 1], outputRange: [0, -8] })
 
+	// Minimal mode (Settings): no mascot. After every hook, so flipping it never changes the hook order.
+	if (settings.minimalMode) return null
 	return (
 		<Animated.View style={[{ transform: [{ translateY }] }, style]} pointerEvents='none'>
 			<Image

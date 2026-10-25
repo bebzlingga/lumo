@@ -155,7 +155,7 @@ export function MoveFriendPicker({
                               isPicked ? { backgroundColor: palette.greenDark, borderColor: palette.greenDark } : { borderColor: palette.hairline }
                             ]}
                           >
-                            {isPicked ? <Icon name="check" size={11} color={palette.white} weight="bold" /> : null}
+                            {isPicked ? <Icon name="check" size={11} color={palette.onGreen} weight="bold" /> : null}
                           </View>
                         )
                       }
@@ -172,7 +172,7 @@ export function MoveFriendPicker({
             onPress={() => onDone(draft)}
             style={({ pressed }) => [styles.done, { backgroundColor: accent.primary, opacity: pressed ? 0.85 : 1 }]}
           >
-            <AppText variant="button" color={palette.white}>
+            <AppText variant="button" color={palette.onGreen}>
               Done
             </AppText>
           </Pressable>

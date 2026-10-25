@@ -70,7 +70,7 @@ export function DateStrip({
 	const statusGreen = isDark ? palette.greenDark : palette.greenDark
 	const noStatusColor = isDark ? palette.surfaceStrong : palette.subtle
 	const disabledText = alpha(palette.subtle, isDark ? '5C' : '66')
-	const selectedText = isDark ? palette.onAccent : palette.white
+	const selectedText = palette.onGreen
 	const statusColors: Record<DateProgressStatus, string> = {
 		none: 'transparent',
 		complete: statusGreen,

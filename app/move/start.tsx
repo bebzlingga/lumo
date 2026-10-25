@@ -475,7 +475,7 @@ export default function MoveStartScreen() {
           { backgroundColor: ready ? accent.primary : palette.surface, opacity: pressed && ready ? 0.85 : 1 }
         ]}
       >
-        <AppText color={ready ? palette.white : palette.muted} style={styles.ctaLabel}>
+        <AppText color={ready ? palette.onGreen : palette.muted} style={styles.ctaLabel}>
           Start Moving
         </AppText>
       </Pressable>

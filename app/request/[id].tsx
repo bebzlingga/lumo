@@ -5,7 +5,7 @@ import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AppText, LoadingState, LumoInput, Screen } from "@/components/ui";
-import { CTA_FILL, fontFamilies, layout, radius, spacing } from "@/constants/theme";
+import { ctaFill, fontFamilies, layout, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { defaultAvatar } from "@/lib/avatar";
 import { alpha } from "@/lib/color";
@@ -330,9 +330,9 @@ export default function RequestDetailScreen() {
               accessibilityRole="button"
               accessibilityLabel="Post update"
               onPress={postUpdate}
-              style={[styles.editButton, styles.postButton, { backgroundColor: CTA_FILL, opacity: !updateDraft.trim() || postingUpdate ? 0.5 : 1 }]}
+              style={[styles.editButton, styles.postButton, { backgroundColor: ctaFill(isDark), opacity: !updateDraft.trim() || postingUpdate ? 0.5 : 1 }]}
             >
-              <AppText variant="button" color={palette.white}>
+              <AppText variant="button" color={palette.onGreen}>
                 {postingUpdate ? "Posting…" : "Post update"}
               </AppText>
             </Pressable>
@@ -350,14 +350,14 @@ export default function RequestDetailScreen() {
             style={[
               styles.voteCta,
               {
-                backgroundColor: request.votedByMe ? CTA_FILL : alpha(palette.greenDark, "10"),
+                backgroundColor: request.votedByMe ? ctaFill(isDark) : alpha(palette.greenDark, "10"),
                 opacity: votePressed ? 0.8 : 1
               }
             ]}
           >
             <AppText
               variant="button"
-              color={request.votedByMe ? palette.white : palette.greenDark}
+              color={request.votedByMe ? palette.onGreen : palette.greenDark}
               style={styles.voteLabel}
             >
               {request.votedByMe ? "Voted" : "Vote"} · {request.votes}

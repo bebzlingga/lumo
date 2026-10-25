@@ -19,9 +19,9 @@ import { Pressable } from "@/components/Pressable"
  * Routes that live in the tabs navigator — so the bar stays visible while
  * they are open — but hold no slot in it.
  *
- * This is an explicit list rather than a check on `href: null`: Expo Router
- * consumes `href` itself, so it never reaches `descriptors[...].options` and a
- * filter on it silently matches nothing.
+ * This list is the ONLY thing hiding them. Do not add `href: null`: since
+ * expo-router 58 that marks the tab `hidden`, and the navigator redirects away
+ * from a focused hidden tab — Settings and Profile could not be opened at all.
  */
 const HIDDEN_TABS = new Set(["settings", "profile"]);
 
@@ -99,10 +99,13 @@ function FloatingTabBar({ state, descriptors, emitter, navigateToTab, insets }: 
   }, [state.index, tabBar]);
   // Light warm shell to match the onboarding surfaces, rather than a solid
   // green slab — the sage now reads as the ACTIVE state instead of the chrome.
-  const shellBackground = isDark ? palette.surface : palette.card;
+  // Dark: the shell takes `surfaceStrong` so the bar stands off the near-black
+  // page. The active pill is a neutral light wash, not a gold tint — gold at low
+  // alpha on near-black reads muddy brown; the gold icon carries the colour.
+  const shellBackground = isDark ? palette.surfaceStrong : palette.card;
   const activeColor = isDark ? palette.greenActive : palette.greenDark;
   const inactiveColor = palette.muted;
-  const activeBackground = isDark ? alpha(palette.greenActive, "1F") : palette.greenSoft;
+  const activeBackground = isDark ? alpha(palette.ink, "1F") : palette.greenSoft;
 
   function renderRoute(route: (typeof state.routes)[number]) {
     const index = state.routes.findIndex((item) => item.key === route.key);
@@ -293,19 +296,13 @@ export default function TabLayout() {
             stranded by taking the slot away. */}
         <Tabs.Screen
           name="profile"
-          options={{
-            href: null,
-            title: "Profile"
-          }}
+          options={{ title: "Profile" }}
         />
         {/* Hidden from the tab bar, but kept in the tabs navigator so the bottom
             navigation pane still shows while the Settings screen is open. */}
         <Tabs.Screen
           name="settings"
-          options={{
-            href: null,
-            title: "Settings"
-          }}
+          options={{ title: "Settings" }}
         />
       </Tabs>
     </TabBarVisibilityProvider>

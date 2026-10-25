@@ -1,7 +1,7 @@
 """
 Dark cuts of the background plates, with Lumo left exactly as painted.
 
-The scene is graded down onto the dark canvas (cream maps to #1A2130, every
+The scene is graded down onto the dark canvas (cream maps to #111010, every
 darker detail to a darker shade of it), a soft warm glow is laid behind Lumo,
 and Lumo's own pixels are composited back on top untouched.
 
@@ -23,7 +23,7 @@ from PIL import Image
 from scipy import ndimage as nd
 
 ROOT = Path(__file__).resolve().parent.parent / "assets"
-CANVAS = np.array([0x1A, 0x21, 0x30], float)  # darkPalette.canvas
+CANVAS = np.array([0x11, 0x10, 0x10], float)  # darkPalette.canvas
 GLOW = np.array([0xF4, 0xB6, 0x32], float)  # brand gold
 
 # (x0, y0, x1, y1) around every Lumo in the plate, in source pixels.
@@ -35,12 +35,16 @@ BOXES = {
     "bg-home/LumoLateAfternoon": [(460, 265, 765, 725)],
     "bg-home/LumoEvening": [(470, 250, 770, 705)],
     "walk/LumoWalking": [(330, 270, 560, 545)],
+    # Journal scenes (constants/mascotAssets.ts sceneArt), not plates.
+    "mascot/Lumo_JournalAdd 1": [(1440, 10, 1920, 580)],
+    # The book splits off both feet, so each is its own blob.
+    "mascot/Lumo_JournalToday": [(285, 395, 725, 1005), (405, 880, 500, 1005), (545, 880, 650, 1005)],
 }
 
 # Lumo's yellow starts around this hue. 38 suits most plates; where wood or a
 # glow beside him sits at 36-42 the floor goes up, but not on warm-lit plates,
 # where his own shading drops into that band.
-HUE_FLOOR = {"bg-home/LumoLunch": 43}
+HUE_FLOOR = {"bg-home/LumoLunch": 43, "mascot/Lumo_JournalToday": 30}
 
 # Hedge in his own yellow that touches him along a wide edge, which nothing
 # above can tell apart from him. Cut by hand, same coordinates as BOXES.
@@ -49,6 +53,8 @@ HUE_FLOOR = {"bg-home/LumoLunch": 43}
 # grass could not be cut cleanly, so the group screen keeps its dimmed plate.
 EXCLUDE = {
     "bg-home/LumoMorning": [(505, 460, 538, 512)],
+    # The cushion he sits on, let in by that plate's lower hue floor.
+    "mascot/Lumo_JournalToday": [(280, 870, 405, 1005), (642, 880, 725, 1005)],
 }
 
 # Landscape washes with no Lumo in them.
