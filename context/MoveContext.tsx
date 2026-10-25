@@ -18,7 +18,6 @@ import {
 import { trackMove } from "@/lib/move/analytics";
 import { challengeClient, type MoveInvite } from "@/lib/move/challengeClient";
 import { findFamily, findVariant, type MoveMilestoneFamily } from "@/lib/move/challengeDefs";
-import { journeyPosition } from "@/lib/move/journey";
 import {
   goalProgress as computeGoalProgress,
   periodKeyFor,
@@ -101,7 +100,6 @@ type MoveContextValue = {
   achievements: MoveAchievement[];
   /** The next rung to aim at, or null once every one is behind you. */
   next: MoveMilestoneFamily | null;
-  journey: ReturnType<typeof journeyPosition>;
 
   celebration: MoveCelebration | null;
   dismissCelebration: () => void;
@@ -566,7 +564,6 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
   }, [isReady, state.active?.id, state.active?.status, progress?.currentM, variantKind]);
 
   const next = React.useMemo(() => nextFamily(state.achievements), [state.achievements]);
-  const journey = React.useMemo(() => journeyPosition(totalDistanceM), [totalDistanceM]);
 
   /**
    * Files a finished challenge, once.
@@ -673,7 +670,6 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
       progress,
       achievements: state.achievements,
       next,
-      journey,
       celebration,
       dismissCelebration: () => setCelebration(null),
       goal: state.goal,
@@ -888,7 +884,6 @@ export function MoveProvider({ children }: { children: React.ReactNode }) {
       goalProgress,
       dayDistance,
       next,
-      journey,
       celebration,
       connect,
       runSync
