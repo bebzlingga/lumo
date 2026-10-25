@@ -23,7 +23,7 @@ export default function JournalEditorScreen() {
   // `body` tone — paragraphs of near-white on near-black glare.
   const titleColor = isDark ? palette.ink : "#1C1B19";
   const textColor = isDark ? palette.body : "#1C1B19";
-  const placeholderColor = isDark ? palette.muted : `${palette.body}59`;
+  const placeholderColor = palette.muted;
 
   const openedDateKey = typeof params.date === "string" ? params.date : toDateKey();
 

@@ -39,6 +39,8 @@ BOXES = {
     "mascot/Lumo_JournalAdd 1": [(1440, 10, 1920, 580)],
     # The book splits off both feet, so each is its own blob.
     "mascot/Lumo_JournalToday": [(285, 395, 725, 1005), (405, 880, 500, 1005), (545, 880, 650, 1005)],
+    # The launch splash (PNG — the splash must stay PNG). Lumo plus his waving hand.
+    "Splash": [(265, 855, 790, 1450)],
 }
 
 # Lumo's yellow starts around this hue. 38 suits most plates; where wood or a
@@ -126,6 +128,8 @@ def darken(rgb):
 
 def make(name, boxes):
     src = ROOT / f"{name}.webp"
+    if not src.exists():
+        src = src.with_suffix(".png")
     rgb = np.array(Image.open(src).convert("RGB"), float)
     out = darken(rgb)
 

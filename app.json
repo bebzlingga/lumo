@@ -98,9 +98,9 @@
           "resizeMode": "cover",
           "backgroundColor": "#FCF4E4",
           "dark": {
-            "image": "./assets/Splash.png",
+            "image": "./assets/SplashDark.png",
             "resizeMode": "cover",
-            "backgroundColor": "#FCF4E4"
+            "backgroundColor": "#111010"
           }
         }
       ],
