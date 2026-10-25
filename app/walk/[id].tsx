@@ -11,15 +11,9 @@ import { WALK_ACCENT } from "@/constants/tools";
 import { fontFamilies, habitAccent, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha, readableOn } from "@/lib/color";
-import {
-  calculatePace,
-  formatDistance,
-  formatDuration,
-  formatPace,
-  formatSteps,
-  type WalkMood,
-  type WalkRecord
-} from "@/lib/walk";
+import { formatDistance, formatSteps } from "@/lib/move/movement";
+import { averagePace, formatDuration, formatPace } from "@/lib/move/tracking/pace";
+import type { WalkMood, WalkRecord } from "@/lib/walk";
 import { deleteWalk, loadWalkState } from "@/lib/walkStorage";
 import { forgetWalk } from "@/lib/walkSyncRunner";
 
@@ -167,7 +161,7 @@ export default function WalkDetailScreen() {
         <View style={styles.statRow}>
           <Stat label="Time" value={formatDuration(record.activeMs)} />
           <Stat label="Distance" value={formatDistance(record.distanceM)} />
-          <Stat label="Pace" value={formatPace(calculatePace(record.distanceM, record.activeMs))} />
+          <Stat label="Pace" value={paceLabel(averagePace(record.distanceM, record.activeMs))} />
           <Stat label="Steps" value={formatSteps(record.steps)} />
         </View>
       </View>
@@ -287,3 +281,8 @@ const styles = StyleSheet.create({
     elevation: 2
   }
 });
+
+/** A finished walk with too little distance for a pace reads as a dash, not "0:00". */
+function paceLabel(pace: number | null): string {
+  return pace === null ? "—" : formatPace(pace);
+}

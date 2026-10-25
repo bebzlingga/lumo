@@ -55,21 +55,6 @@ export function calculateDistance(a: { lat: number; lon: number }, b: { lat: num
 }
 
 /**
- * Milliseconds per kilometre — the "13:45 /km" on the walk screen.
- *
- * Returns null under 10 metres rather than a number: pace over a distance that
- * short is dominated by GPS noise, and a wildly wrong figure at the start of
- * every walk is worse than a dash.
- */
-export function calculatePace(distanceM: number, activeMs: number): number | null {
-  if (distanceM < 10 || activeMs <= 0) {
-    return null;
-  }
-
-  return activeMs / (distanceM / 1000);
-}
-
-/**
  * Thins a route for drawing — Ramer–Douglas–Peucker.
  *
  * A half-hour walk is a few hundred points, and handing all of them to a map
@@ -140,48 +125,6 @@ function perpendicularDistance(point: WalkPoint, start: WalkPoint, end: WalkPoin
 // --- the session ------------------------------------------------------------
 
 // --- formatting -------------------------------------------------------------
-
-/** "18:42", or "1:04:18" once a walk passes an hour. */
-export function formatDuration(ms: number): string {
-  const totalSeconds = Math.floor(Math.max(0, ms) / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  }
-
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
-/** "2.34 km" over a kilometre, "840 m" under it. */
-export function formatDistance(metres: number): string {
-  const safe = Math.max(0, metres);
-
-  if (safe < 1000) {
-    return `${Math.round(safe)} m`;
-  }
-
-  return `${(safe / 1000).toFixed(2)} km`;
-}
-
-export function formatPace(paceMsPerKm: number | null): string {
-  if (paceMsPerKm === null || !Number.isFinite(paceMsPerKm)) {
-    return "—";
-  }
-
-  const totalSeconds = Math.round(paceMsPerKm / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  return `${minutes}:${String(seconds).padStart(2, "0")} /km`;
-}
-
-/** Steps with a thousands separator, or a dash when the device has no counter. */
-export function formatSteps(steps: number | null): string {
-  return steps === null ? "—" : steps.toLocaleString();
-}
 
 // --- the store --------------------------------------------------------------
 

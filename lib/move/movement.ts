@@ -284,8 +284,9 @@ export function formatKilometres(meters: number): string {
 }
 
 /** "4,321" — steps always read as a whole count. */
-export function formatSteps(steps: number): string {
-  return Math.round(Math.max(0, steps)).toLocaleString();
+/** Steps with a thousands separator, or a dash when the device has no counter. */
+export function formatSteps(steps: number | null): string {
+  return steps === null ? "—" : Math.round(Math.max(0, steps)).toLocaleString();
 }
 
 /** "38 min", "1h 12m". */

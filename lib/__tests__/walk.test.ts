@@ -1,10 +1,5 @@
 import {
 	calculateDistance,
-	calculatePace,
-	formatDistance,
-	formatDuration,
-	formatPace,
-	formatSteps,
 	simplifyRouteForDisplay,
 	WALK_HISTORY_LIMIT,
 	emptyWalkState,
@@ -17,6 +12,8 @@ import {
 	type WalkPoint,
 	type WalkRecord,
 } from '../walk'
+import { formatDistance, formatSteps } from '../move/movement'
+import { averagePace as calculatePace, formatDuration, formatPace } from '../move/tracking/pace'
 
 // Every test passes `now` explicitly — the module never reads the clock itself,
 // which is what keeps this suite free of fake timers.
@@ -136,14 +133,14 @@ describe('formatting', () => {
 	it('switches from metres to kilometres at 1 km', () => {
 		expect(formatDistance(0)).toBe('0 m')
 		expect(formatDistance(840)).toBe('840 m')
-		expect(formatDistance(1000)).toBe('1.00 km')
-		expect(formatDistance(2340)).toBe('2.34 km')
+		expect(formatDistance(1000)).toBe('1 km')
+		expect(formatDistance(2340)).toBe('2.3 km')
 	})
 
-	it('formats pace, and a dash when there is none', () => {
+	it('formats pace, and 0:00 before there is one (the walk screen shows a dash)', () => {
 		expect(formatPace(13 * MIN + 45_000)).toBe('13:45 /km')
-		expect(formatPace(null)).toBe('—')
-		expect(formatPace(Number.POSITIVE_INFINITY)).toBe('—')
+		expect(formatPace(null)).toBe('0:00')
+		expect(formatPace(Number.POSITIVE_INFINITY)).toBe('0:00')
 	})
 
 	// The distinction the whole `steps: number | null` design exists to keep.

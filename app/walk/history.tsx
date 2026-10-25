@@ -10,7 +10,9 @@ import { WALK_ACCENT } from "@/constants/tools";
 import { fontFamilies, radius, spacing } from "@/constants/theme";
 import { useLumo } from "@/context/LumoContext";
 import { alpha, readableOn } from "@/lib/color";
-import { formatDistance, formatDuration, totalsSince, type WalkRecord } from "@/lib/walk";
+import { formatDistance } from "@/lib/move/movement";
+import { formatDuration } from "@/lib/move/tracking/pace";
+import { totalsSince, type WalkRecord } from "@/lib/walk";
 import { loadWalkState } from "@/lib/walkStorage";
 
 /**
