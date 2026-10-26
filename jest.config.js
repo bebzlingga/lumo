@@ -10,7 +10,7 @@ module.exports = {
 	testMatch: ['**/?(*.)+(spec|test).[jt]s?(x)'],
 	testPathIgnorePatterns: ['/node_modules/', '/habit-journey/', '/.expo/'],
 	transformIgnorePatterns: [
-		'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|@kingstinct/react-native-healthkit|react-native-health-connect|react-native-nitro-modules|react-native-maps|iconsax-react-native|nativewind|react-native-css-interop)',
+		'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|@kingstinct/react-native-healthkit|react-native-health-connect|react-native-nitro-modules|react-native-maps|iconsax-react-native|nativewind|react-native-css-interop|phosphor-react-native|standard-navigation)',
 	],
 	collectCoverageFrom: ['lib/**/*.ts', 'constants/**/*.ts', '!**/node_modules/**'],
 }
