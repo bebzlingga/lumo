@@ -232,6 +232,8 @@ PODS:
     - ExpoModulesCore
   - ExpoStatusBar (58.0.4):
     - ExpoModulesCore
+  - ExpoSystemUI (58.0.6):
+    - ExpoModulesCore
   - ExpoTaskManager (58.0.12):
     - ExpoModulesCore
     - UMAppLoader
@@ -2631,6 +2633,7 @@ DEPENDENCIES:
   - ExpoSpeechRecognition (from `../node_modules/expo-speech-recognition/ios`)
   - ExpoSplashScreen (from `../node_modules/expo-splash-screen/ios`)
   - ExpoStatusBar (from `../node_modules/expo-status-bar/ios`)
+  - ExpoSystemUI (from `../node_modules/expo-system-ui/ios`)
   - ExpoTaskManager (from `../node_modules/expo-task-manager/ios`)
   - "ExtensionStorage (from `../node_modules/@bacons/apple-targets/ios`)"
   - EXUpdatesInterface (from `../node_modules/expo-updates-interface/ios`)
@@ -2817,6 +2820,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-splash-screen/ios"
   ExpoStatusBar:
     :path: "../node_modules/expo-status-bar/ios"
+  ExpoSystemUI:
+    :path: "../node_modules/expo-system-ui/ios"
   ExpoTaskManager:
     :path: "../node_modules/expo-task-manager/ios"
   ExtensionStorage:
@@ -3064,6 +3069,7 @@ SPEC CHECKSUMS:
   ExpoSpeechRecognition: c4191ef9dabf4aa1fd02a0316c1d69ed5c16fb33
   ExpoSplashScreen: 4a16996856aeceb61b1c253c5fc9b43208705fa5
   ExpoStatusBar: 56aa9746e1bee4d8adbab12f4d7efc97000ac49f
+  ExpoSystemUI: 7f794f868bd10f62788f85bf169bc8ca45fbe736
   ExpoTaskManager: a9a9c3ccecdf3e0b76d11c35893a5ee0989ccd7a
   ExtensionStorage: 5796de20bf181317c376d693fedb64c6781a33ba
   EXUpdatesInterface: 1c6a522d0eb0485f4de3fa55d0316288763b3f10
