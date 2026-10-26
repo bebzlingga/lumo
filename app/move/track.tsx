@@ -14,11 +14,12 @@ import { MOVE_ROUTE_ACCENT } from "@/constants/tools";
 import { useLumo } from "@/context/LumoContext";
 import { useMove } from "@/context/MoveContext";
 import { readableOn } from "@/lib/color";
+import { toDateKey } from "@/lib/date";
 import { findFamily } from "@/lib/move/challengeDefs";
 import { checkIntegrity, toWalkRecordFromActivity } from "@/lib/move/tracking/bridge";
 import { useActivityTracker } from "@/lib/move/tracking/useActivityTracker";
 import { clearWalkSession } from "@/lib/move/walkSession";
-import { recordWalk } from "@/lib/walk";
+import { habitsReachedByWalks, recordWalk } from "@/lib/walk";
 import { loadWalkState, saveWalkState } from "@/lib/walkStorage";
 import { enqueueWalk } from "@/lib/walkSyncRunner";
 
@@ -38,7 +39,7 @@ const ENTER_MS = 320;
  */
 export default function MoveTrackScreen() {
   const router = useRouter();
-  const { palette, habits } = useLumo();
+  const { palette, habits, completeHabit } = useLumo();
   const move = useMove();
   const { state, prepare, averagePace, controller } = useActivityTracker();
   const [saving, setSaving] = React.useState(false);
@@ -205,8 +206,22 @@ export default function MoveTrackScreen() {
       return;
     }
 
-    await saveWalkState(recordWalk(await loadWalkState(), record));
+    const saved = recordWalk(await loadWalkState(), record);
+
+    await saveWalkState(saved);
     await enqueueWalk(record.id).catch(() => undefined);
+
+    // A walk that carries a measured habit over its target completes it for the
+    // walk's own day — once; a habit already done that day is left alone.
+    const day = new Date(record.startedAt);
+    const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+    // Next midnight, not +24h: a daylight-saving day is 23 or 25 hours long.
+    const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime();
+    const dayKey = toDateKey(day);
+
+    for (const habitId of habitsReachedByWalks(saved.history, habits, dayKey, dayStart, dayEnd)) {
+      completeHabit(habitId, dayKey);
+    }
 
     // The engine decides what happened; `checkIntegrity` decides whether it is
     // plausible enough to count. A failure keeps the walk and withholds the claim.

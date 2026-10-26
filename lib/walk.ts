@@ -7,6 +7,9 @@
  * engine that used to live here is gone — nothing recorded through it anymore.
  */
 
+import { isDoneOnDate } from "@/lib/habitMath";
+import type { Habit } from "@/types/habit";
+
 export type WalkPoint = {
   lat: number;
   lon: number;
@@ -287,6 +290,25 @@ export function measurementProgress(
 }
 
 /** "18 / 30 min", "1.2 / 3 km", "4,100 / 5,000" — one line for a chip. */
+/**
+ * The habits a day's walks have just carried over their target and that are not
+ * yet done that day — what saving a walk completes.
+ *
+ * Skipping a habit already done is what makes it once only: a second walk the
+ * same day, or re-saving, finds it done and leaves it alone.
+ */
+export function habitsReachedByWalks(history: WalkRecord[], habits: Habit[], dateKey: string, dayStartMs: number, dayEndMs: number): string[] {
+  return habits
+    .filter(
+      (habit) =>
+        habit.status === "active" &&
+        habit.measurement !== undefined &&
+        !isDoneOnDate(habit, dateKey) &&
+        measurementProgress(history, habit.id, habit.measurement, dayStartMs, dayEndMs).reached
+    )
+    .map((habit) => habit.id);
+}
+
 export function formatMeasurement(kind: MeasurementKind, total: number, target: number): string {
   if (kind === "duration") {
     return `${Math.floor(total / 60_000)} / ${Math.round(target / 60_000)} min`;

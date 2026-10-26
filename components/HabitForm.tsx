@@ -6,7 +6,7 @@ import { ctaFill as ctaFillFor, defaultHabitColor, fontFamilies, habitAccent, ha
 import { useLumo } from "@/context/LumoContext";
 import { alpha, readableOn } from "@/lib/color";
 import { dayLabels, dayNames, parseDateKey, toDateKey } from "@/lib/date";
-import { Habit, HabitDraft, GoalType, RepeatSchedule, Weekday, habitCategories } from "@/types/habit";
+import { Habit, HabitDraft, GoalType, HabitMeasurement, RepeatSchedule, Weekday, habitCategories } from "@/types/habit";
 import { categoryIcons, categoryNamePlaceholders, categorySuggestions } from "./CategoryChips";
 import { FloatingDropdown } from "./FloatingDropdown";
 import { categoryIconOptions } from "./IconPicker";
@@ -42,6 +42,19 @@ function createDefaultDraft(): HabitDraft {
 // "20× a month") are inexpressible by construction. "Times per day" applies
 // only to the day-bound choices.
 export type HabitCadence = RepeatSchedule["type"] | "weekly" | "monthly";
+
+/**
+ * Counting Lumo Move walks toward a habit. Stored in base units (metres,
+ * milliseconds, steps); edited in the units people think in.
+ */
+type MeasureKind = HabitMeasurement["kind"];
+const MEASURE_OPTIONS: { label: string; value: MeasureKind }[] = [
+  { label: "Distance (km)", value: "distance" },
+  { label: "Time (minutes)", value: "duration" },
+  { label: "Steps", value: "steps" }
+];
+const MEASURE_UNIT: Record<MeasureKind, number> = { distance: 1000, duration: 60_000, steps: 1 };
+const MEASURE_DEFAULT: Record<MeasureKind, string> = { distance: "2", duration: "30", steps: "5000" };
 
 const cadenceOptions: { label: string; value: HabitCadence }[] = [
   { label: "Every day", value: "daily" },
@@ -266,6 +279,30 @@ export function HabitForm({
   const [customInterval, setCustomInterval] = useState(() => {
     return draft.repeatSchedule.type === "interval" ? String(draft.repeatSchedule.every) : "2";
   });
+  const [walkTarget, setWalkTarget] = useState(() =>
+    draft.measurement ? String(+(draft.measurement.target / MEASURE_UNIT[draft.measurement.kind]).toFixed(2)) : MEASURE_DEFAULT.distance
+  );
+
+  function setMeasurement(kind: MeasureKind, text: string) {
+    setWalkTarget(text);
+    const amount = Number(text.replace(",", "."));
+
+    // An empty or zero field keeps the previous target rather than clearing it.
+    if (amount > 0) {
+      setDraft((current) => ({ ...current, measurement: { kind, target: Math.round(amount * MEASURE_UNIT[kind]) } }));
+    }
+  }
+
+  function toggleWalkCounting(on: boolean) {
+    if (on) {
+      setMeasurement("distance", MEASURE_DEFAULT.distance);
+
+      return;
+    }
+
+    setDraft((current) => ({ ...current, measurement: undefined }));
+  }
+
   const [goalAmount, setGoalAmount] = useState(() => {
     if (draft.goal.type === "multiple") {
       return String(draft.goal.count);
@@ -698,6 +735,47 @@ export function HabitForm({
           />
         </Field>
 
+        {/* Walks recorded in Lumo Move fill this target and tick the habit off
+            for the day — e.g. "Walk 2 km" completes itself. */}
+        <Field>
+          <View style={styles.walkToggleRow}>
+            <View style={styles.walkToggleText}>
+              <FieldLabel>Count my walks</FieldLabel>
+              <AppText variant="caption" color={palette.subtle}>
+                Lumo Move walks fill a target and complete this habit.
+              </AppText>
+            </View>
+            <Toggle value={Boolean(draft.measurement)} onValueChange={toggleWalkCounting} accessibilityLabel="Count my walks" />
+          </View>
+        </Field>
+
+        {draft.measurement ? (
+          <>
+            <Field>
+              <FieldLabel>Count by</FieldLabel>
+              <FloatingDropdown
+                variant="input"
+                options={MEASURE_OPTIONS}
+                value={draft.measurement.kind}
+                onChange={(kind) => setMeasurement(kind, MEASURE_DEFAULT[kind])}
+                accessibilityLabel="Count walks by"
+                borderColor={fieldBorderColor}
+              />
+            </Field>
+            <Field>
+              <FieldLabel>
+                {draft.measurement.kind === "distance" ? "Target per day (km)" : draft.measurement.kind === "duration" ? "Target per day (minutes)" : "Target per day (steps)"}
+              </FieldLabel>
+              <LumoInput
+                value={walkTarget}
+                onChangeText={(text) => setMeasurement(draft.measurement!.kind, text)}
+                keyboardType={draft.measurement.kind === "distance" ? "decimal-pad" : "number-pad"}
+                style={[styles.flatInput, { backgroundColor: palette.card }]}
+              />
+            </Field>
+          </>
+        ) : null}
+
       </FormSection>
 
       <FormSection
@@ -785,6 +863,15 @@ export function HabitForm({
 }
 
 const styles = StyleSheet.create({
+  walkToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm
+  },
+  walkToggleText: {
+    flex: 1,
+    gap: 2
+  },
   content: {
     // Onboarding pads its screens by spacing.xl — the form follows it.
     paddingHorizontal: layout.screenPaddingX,

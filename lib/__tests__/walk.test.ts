@@ -11,7 +11,9 @@ import {
 	totalsSince,
 	type WalkPoint,
 	type WalkRecord,
+	habitsReachedByWalks,
 } from '../walk'
+import { completions, makeHabit } from './factories'
 import { formatDistance, formatSteps } from '../move/movement'
 import { averagePace as calculatePace, formatDuration, formatPace } from '../move/tracking/pace'
 
@@ -247,6 +249,32 @@ describe('the walk store', () => {
 
 		it('is zero over an empty history', () => {
 			expect(totalsSince([], T0)).toEqual({ walks: 0, activeMs: 0, distanceM: 0 })
+		})
+	})
+
+	describe('habits reached by walks', () => {
+		const day = '2026-08-11'
+		const dayStart = T0
+		const dayEnd = T0 + 24 * 60 * MIN
+		const walk = (minutes: number, distanceM: number): WalkRecord => ({
+			...finishedAfter(minutes, `w${minutes}`),
+			startedAt: dayStart + 60 * MIN,
+			distanceM,
+			habitIds: ['walk-2k'],
+		})
+		const measured = makeHabit({ id: 'walk-2k', measurement: { kind: 'distance', target: 2000 } })
+
+		it('names a habit once its target is met, and not before', () => {
+			expect(habitsReachedByWalks([walk(10, 1200)], [measured], day, dayStart, dayEnd)).toEqual([])
+			expect(habitsReachedByWalks([walk(10, 1200), walk(12, 900)], [measured], day, dayStart, dayEnd)).toEqual(['walk-2k'])
+		})
+
+		// Once only: a habit already done that day is never completed again.
+		it('skips a habit already done that day, and habits with no target', () => {
+			const done = makeHabit({ ...measured, completions: completions([day]) })
+			const plain = makeHabit({ id: 'plain' })
+
+			expect(habitsReachedByWalks([walk(30, 2500)], [done, plain], day, dayStart, dayEnd)).toEqual([])
 		})
 	})
 
