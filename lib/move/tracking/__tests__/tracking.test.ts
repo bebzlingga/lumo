@@ -825,7 +825,9 @@ describe('elevation', () => {
 
 	it('says nothing when the device reported no altitude', () => {
 		expect(elevationGain(climb([null, null, null]))).toBeNull()
-		expect(formatElevation(null)).toBe('0')
+		// No altitude at all is unknown, not flat.
+		expect(formatElevation(null)).toBe('—')
+		expect(formatElevation(0)).toBe('0 m')
 		expect(formatElevation(120)).toBe('120 m')
 	})
 })

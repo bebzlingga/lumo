@@ -273,9 +273,10 @@ export function WalkSummaryView({
           disabled={capturing}
           onPress={onDiscard}
           hitSlop={8}
-          style={({ pressed }) => [styles.discard, { opacity: capturing ? 0 : pressed ? 0.5 : 1 }]}
+          // A soft pill like Share's, smaller: bare muted text vanished over the art.
+          style={({ pressed }) => [styles.discard, { backgroundColor: alpha(palette.card, "B3"), opacity: capturing ? 0 : pressed ? 0.5 : 1 }]}
         >
-          <AppText variant="caption" color={tone.muted} style={tone.shadow}>
+          <AppText variant="caption" color={palette.subtle}>
             Discard
           </AppText>
         </Pressable>
@@ -379,8 +380,9 @@ const styles = StyleSheet.create({
     lineHeight: 20
   },
   discard: {
-    minHeight: 32,
+    minHeight: 30,
     justifyContent: "center",
-    paddingHorizontal: spacing.md
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill
   }
 });

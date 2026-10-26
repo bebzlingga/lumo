@@ -223,8 +223,9 @@ export function elevationGain(segments: ActivitySegment[]): number | null {
 }
 
 /** "120 m", or a bare "0" with no altitude to report — see `formatPace`. */
+/** "12 m"; "0 m" for a genuinely flat walk; "—" when no fix carried altitude at all. */
 export function formatElevation(metres: number | null): string {
-  return metres ? `${metres} m` : "0";
+  return metres === null ? "—" : `${metres} m`;
 }
 
 /** "14:22", or "1:14:22" once an activity passes the hour. */

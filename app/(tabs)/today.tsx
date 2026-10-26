@@ -281,7 +281,10 @@ export default function TodayScreen() {
 				<View style={styles.heroLower}>
 					<View style={styles.heroCopy}>
 						<AppText color={palette.ink} numberOfLines={2} style={styles.heroName}>
-							{firstName}! 💛
+							{firstName}!{' '}
+							{/* The serif has no emoji and draws its own missing-glyph box instead of
+							    falling back, so the heart is set in the system face. */}
+							<AppText style={styles.heroEmoji}>💛</AppText>
 						</AppText>
 						<AppText variant='bodySmall' color={alpha(palette.ink, 'CC')} style={styles.heroTagline}>
 							{taglineFor(selectedDateKey, period)}
@@ -469,6 +472,9 @@ const styles = StyleSheet.create({
 	// The screen's one display-size line. Wraps to a second line for a long
 	// nickname rather than shrinking — the column is only about half the screen
 	// wide, since Lumo owns the other half of every backdrop plate.
+	heroEmoji: {
+		fontFamily: 'System',
+	},
 	heroName: {
 		fontFamily: fontFamilies.serifBlack,
 		fontSize: 40,
